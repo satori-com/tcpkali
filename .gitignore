@@ -25,3 +25,5 @@ config.h
 
 Makefile
 Makefile.in
+
+tcpkali
