@@ -4,7 +4,6 @@
 #include <config.h>
 
 #include "tcpkali_dns.h"
-
-int start_engine(struct addresses);
+#include "tcpkali_engine.h"
 
 #endif  /* TCPKALI_H */

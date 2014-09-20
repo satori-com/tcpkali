@@ -30,7 +30,7 @@ struct loop_arguments {
     unsigned int address_offset;
     int control_pipe;
     int thread_no;
-    size_t total_data_transmitted;
+    size_t worker_data_transmitted;
     enum {
         THREAD_TERMINATING = 1
     } thread_flags;
@@ -47,10 +47,20 @@ struct connection {
 };
 
 /*
+ * Engine abstracts over workers.
+ */
+struct engine {
+    struct loop_arguments *loop_args;
+    pthread_t *threads;
+    int wr_pipe;
+    int workers;
+    double epoch;
+    size_t total_data_transmitted;
+};
+
+/*
  * Helper functions defined at the end of the file.
  */
-static long number_of_cpus();
-static int max_open_files();
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
 static void close_connection(struct connection *conn);
@@ -59,7 +69,7 @@ static void control_cb(EV_P_ ev_io *w, int revents);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 
-int start_engine(struct addresses addresses) {
+struct engine *engine_start(struct addresses addresses) {
     int fildes[2];
 
     int rc = pipe(fildes);
@@ -68,14 +78,19 @@ int start_engine(struct addresses addresses) {
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
 
-    pthread_t thread;
-
     long ncpus = number_of_cpus();
     assert(ncpus >= 1);
     fprintf(stderr, "Using %ld available CPUs\n", ncpus);
 
-    for(int n = 0; n < ncpus; n++) {
-        struct loop_arguments *loop_args = calloc(1, sizeof(*loop_args));
+    struct engine *eng = calloc(1, sizeof(*eng));
+    eng->loop_args = calloc(ncpus, sizeof(eng->loop_args[0]));
+    eng->threads = calloc(ncpus, sizeof(eng->threads[0]));
+    eng->workers = ncpus;
+    eng->wr_pipe = wr_pipe;
+    eng->epoch = ev_now(EV_DEFAULT);
+
+    for(int n = 0; n < eng->workers; n++) {
+        struct loop_arguments *loop_args = &eng->loop_args[n];
         loop_args->sample_data = "abc";
         loop_args->sample_data_size = 3;
         loop_args->addresses = addresses;
@@ -84,12 +99,62 @@ int start_engine(struct addresses addresses) {
         loop_args->address_offset = n;
         loop_args->thread_no = n;
 
-        int rc = pthread_create(&thread, 0,
+        int rc = pthread_create(&eng->threads[n], 0,
                                 single_engine_loop_thread, loop_args);
         assert(rc == 0);
     }
 
-    return wr_pipe;
+    /* Update epoch once more for precision. */
+    eng->epoch = ev_now(EV_DEFAULT);
+
+    return eng;
+}
+
+
+/*
+ * Send a signal to finish work and wait for all workers to terminate.
+ */
+void engine_terminate(struct engine *eng) {
+    /* Terminate all threads. */
+    for(int n = 0; n < eng->workers; n++) {
+        write(eng->wr_pipe, "T", 1);
+    }
+    for(int n = 0; n < eng->workers; n++) {
+        void *value;
+        pthread_join(eng->threads[n], &value);
+        eng->total_data_transmitted +=
+            eng->loop_args[n].worker_data_transmitted;
+    }
+    eng->workers = 0;
+    fprintf(stderr, "Total data transmitted: %ld\n",
+        (long)eng->total_data_transmitted);
+    fprintf(stderr, "Aggregate transmission bandwidth: %.3f Mbps\n",
+        8 * (eng->total_data_transmitted/(ev_now(EV_DEFAULT) - eng->epoch))
+            / 1000000.0
+    );
+}
+
+/*
+ * Get number of connections opened by all of the workers.
+ */
+int engine_connections(struct engine *eng) {
+    int connections = 0;
+    for(int n = 0; n < eng->workers; n++) {
+        connections += eng->loop_args[n].open_connections;
+    }
+    return connections;
+}
+
+void engine_initiate_new_connections(struct engine *eng, size_t n) {
+    static char buf[1024];
+    if(!buf[0]) {
+        memset(buf, 'c', sizeof(buf));
+    }
+    while(n > 0) {
+        int current_batch = n < sizeof(buf) ? n : sizeof(buf);
+        int wrote = write(eng->wr_pipe, buf, current_batch);
+        if(wrote > 0) n -= wrote;
+    }
 }
 
 static void *single_engine_loop_thread(void *argp) {
@@ -108,10 +173,10 @@ static void *single_engine_loop_thread(void *argp) {
 
     fprintf(stderr, "Exiting cpu thread %d\n"
             "  %d open_connections\n"
-            "  %ld total_data_transmitted\n",
+            "  %ld worker_data_transmitted\n",
         largs->thread_no,
         largs->open_connections,
-        largs->total_data_transmitted);
+        largs->worker_data_transmitted);
 
     return 0;
 }
@@ -129,7 +194,7 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
     case 'c':
         start_new_connection(EV_A);
         break;
-    case 'b':
+    case 'T':
         largs->thread_flags |= THREAD_TERMINATING;
         ev_io_stop(EV_A_ w);
         break;
@@ -180,7 +245,7 @@ static void start_new_connection(EV_P) {
     conn->remote_address = sa;
     conn->loop = EV_A;
     conn->remote_stats = remote_stats;
-    largs->open_connections++;
+    atomic_increment(&largs->open_connections);
 
     ev_io_init(&conn->watcher, connection_cb, sockfd, EV_WRITE);
     ev_io_start(EV_A_ &conn->watcher);
@@ -213,8 +278,8 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
     if(largs->thread_flags & THREAD_TERMINATING) {
-        largs->total_data_transmitted += conn->data_transmitted;
-        largs->open_connections--;
+        largs->worker_data_transmitted += conn->data_transmitted;
+        atomic_decrement(&largs->open_connections);
         close_connection(conn);
         return;
     }
@@ -231,7 +296,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 fprintf(stderr, "Connection closed by %s\n",
                     format_sockaddr(conn->remote_address, buf, sizeof(buf)));
                 conn->remote_stats->connection_failures++;
-                largs->total_data_transmitted += conn->data_transmitted;
+                largs->worker_data_transmitted += conn->data_transmitted;
                 largs->open_connections--;
                 close_connection(conn);
                 break;
@@ -269,7 +334,7 @@ static void close_connection(struct connection *conn) {
 /*
  * Determine the limit on open files.
  */
-static int max_open_files() {
+int max_open_files() {
     return sysconf(_SC_OPEN_MAX);
 }
 
@@ -277,7 +342,7 @@ static int max_open_files() {
 /*
  * Determine the amount of parallelism available in this system.
  */
-static long number_of_cpus() {
+long number_of_cpus() {
     long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 #ifdef   HAVE_SCHED_GETAFFINITY
