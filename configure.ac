@@ -16,6 +16,10 @@ AC_PROG_INSTALL
 
 AX_CHECK_COMPILE_FLAG([-W], [CFLAGS="$CFLAGS -W"])
 AX_CHECK_COMPILE_FLAG([-Wall], [CFLAGS="$CFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])
+
+AC_CHECK_HEADERS(sched.h)
+AC_CHECK_FUNCS(sched_getaffinity)
 
 m4_include([libev/libev.m4])
 
