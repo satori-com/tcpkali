@@ -14,14 +14,15 @@ AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 
+m4_include([libev/libev.m4])
+m4_include([m4/ax_check_compile_flag.m4])
+
 AX_CHECK_COMPILE_FLAG([-W], [CFLAGS="$CFLAGS -W"])
 AX_CHECK_COMPILE_FLAG([-Wall], [CFLAGS="$CFLAGS -Wall"])
 AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])
 
 AC_CHECK_HEADERS(sched.h)
 AC_CHECK_FUNCS(sched_getaffinity)
-
-m4_include([libev/libev.m4])
 
 AC_CONFIG_FILES([Makefile libev/Makefile])
 AC_OUTPUT
