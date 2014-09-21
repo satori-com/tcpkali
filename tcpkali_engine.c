@@ -83,6 +83,10 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
 
+    /* Make read end of the control pipe Non-blocking */
+    rc = fcntl(rd_pipe, F_SETFL, fcntl(rd_pipe, F_GETFL) | O_NONBLOCK);
+    assert(rc != -1);
+
     int n_workers = requested_workers;
     if(!n_workers) {
         long n_cpus = number_of_cpus();
@@ -306,22 +310,55 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
         ssize_t wrote = write(w->fd, position, available_length);
         if(wrote == -1) {
+            printf("abc: write %d = %d\n", w->fd, (int)wrote);
             char buf[INET6_ADDRSTRLEN+64];
             switch(errno) {
+            case EINTR:
+            case EAGAIN:
+                break;
             case EPIPE:
-                fprintf(stderr, "Connection closed by %s\n",
+            default:
+                fprintf(stderr, "Connection reset by %s\n",
                     format_sockaddr(conn->remote_address, buf, sizeof(buf)));
                 conn->remote_stats->connection_failures++;
                 largs->worker_data_transmitted += conn->data_transmitted;
                 largs->open_connections--;
                 close_connection(conn);
-                break;
+                return;
             }
         } else {
             conn->write_offset += wrote;
             conn->data_transmitted += wrote;
         }
     }
+
+    if(revents & EV_READ) {
+        char buf[65536];
+        for(;;) {
+            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            switch(rd) {
+            case -1:
+                switch(errno) {
+                case EAGAIN:
+                    return;
+                default:
+                    fprintf(stderr, "Connection half-closed by %s: %s\n",
+                        format_sockaddr(conn->remote_address, buf, sizeof(buf)),
+                        strerror(errno));
+                }
+                /* Fall through */
+            case 0:
+                fprintf(stderr, "Connection half-closed by %s\n",
+                    format_sockaddr(conn->remote_address, buf, sizeof(buf)));
+                conn->remote_stats->connection_failures++;
+                largs->worker_data_transmitted += conn->data_transmitted;
+                largs->open_connections--;
+                close_connection(conn);
+                return;
+            }
+        }
+    }
+
 }
 
 /*

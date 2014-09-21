@@ -261,7 +261,8 @@ read_in_file(const char *filename, char **data, size_t *size) {
  */
 static void
 usage(char *argv0) {
-    fprintf(stderr, "Usage: %s [OPTIONS] <host:port>\n", basename(argv0));
+    fprintf(stderr, "Usage: %s [OPTIONS] <host:port> [<host:port>...]\n",
+        basename(argv0));
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
