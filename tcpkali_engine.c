@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,15 +10,18 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <assert.h>
+
+#include <config.h>
+
 #ifdef  HAVE_SCHED_H
 #include <sched.h>
 #endif
-#include <assert.h>
-
-#include <ev.h>
 
 #include "tcpkali.h"
 #include "tcpkali_atomic.h"
+
+#include <ev.h>
 
 struct loop_arguments {
     struct addresses addresses;
@@ -38,12 +42,12 @@ struct loop_arguments {
 };
 
 struct connection {
+    ev_io watcher;
     off_t write_offset;
     size_t data_transmitted;
     struct sockaddr *remote_address;
     struct remote_stats *remote_stats;
     struct ev_loop *loop;
-    ev_io watcher;
 };
 
 /*
@@ -355,7 +359,7 @@ static void multiply_data(void **data, size_t *size) {
     } else {
         size_t n = 1 + 65536/(*size);
         size_t s = n * (*size);
-        void *p = malloc(s);
+        char *p = malloc(s);
         assert(p);
         for(size_t i = 0; i < n; i++) {
             memcpy(&p[i * (*size)], *data, *size);

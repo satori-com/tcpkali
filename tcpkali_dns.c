@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <getopt.h>
 #include <sysexits.h>
 #include <stdlib.h>
