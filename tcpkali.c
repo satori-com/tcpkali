@@ -10,6 +10,7 @@
 #include <netdb.h>  /* gethostbyname(3) */
 #include <libgen.h> /* basename(3) */
 #include <err.h>
+#include <errno.h>
 #include <assert.h>
 
 #include <ev.h>
@@ -24,7 +25,9 @@ static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
     { "connections", 0, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
-    { "duration", 1, 0, 't' }
+    { "duration", 1, 0, 't' },
+    { "message", 1, 0, 'm' },
+    { "message-file", 1, 0, 'f' }
 };
 
 /*
@@ -34,6 +37,7 @@ static void usage(char *argv0);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static void keep_connections_open(struct engine *eng, double connect_rate, int max_connections, double test_duration);
+static int read_in_file(const char *filename, char **data, size_t *size);
 
 /*
  * Parse command line options and kick off the engine.
@@ -43,6 +47,8 @@ int main(int argc, char **argv) {
     int max_connections = 1;
     double connect_rate = 10;
     double test_duration = 10;
+    char *message_data = 0;
+    size_t message_size = 0;
     struct multiplier k_multiplier[] = {
         { "k", 1000 }
     };
@@ -59,7 +65,7 @@ int main(int argc, char **argv) {
 
     while(1) {
         int c;
-        c = getopt_long(argc, argv, "hc:", cli_long_options, &opt_index);
+        c = getopt_long(argc, argv, "hc:m:f:", cli_long_options, &opt_index);
         if(c == -1)
             break;
         switch(c) {
@@ -76,6 +82,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Number of connections exceeds system limit on open files. Update `ulimit -n`.\n");
                 exit(EX_USAGE);
             }
+            break;
         case 'r':
             connect_rate = parse_with_multipliers(optarg,
                             k_multiplier,
@@ -84,6 +91,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expected positive --connect-rate=%s\n", optarg);
                 exit(EX_USAGE);
             }
+            break;
         case 't':
             test_duration = parse_with_multipliers(optarg,
                             s_multiplier,
@@ -92,6 +100,22 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expected positive --time=%s\n", optarg);
                 exit(EX_USAGE);
             }
+            break;
+        case 'f':
+            if(message_data) {
+                fprintf(stderr, "--message-file: Message is already specified.\n");
+                exit(EX_USAGE);
+            } else if(read_in_file(optarg, &message_data, &message_size) != 0) {
+                exit(EX_DATAERR);
+            }
+            break;
+        case 'm':
+            if(message_data) {
+                fprintf(stderr, "-m: Message is already specified.\n");
+                exit(EX_USAGE);
+            }
+            message_data = strdup(optarg);
+            message_size = strlen(optarg);
         }
     }
 
@@ -112,7 +136,7 @@ int main(int argc, char **argv) {
                                "\nDestination: ", "\n", addresses);
     }
 
-    struct engine *eng = engine_start(addresses);
+    struct engine *eng = engine_start(addresses, message_data, message_size);
 
     ev_now_update(EV_DEFAULT);
     struct pacefier rampup_pace;
@@ -147,7 +171,6 @@ static void keep_connections_open(struct engine *eng, double connect_rate, int m
     ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
 
-    double epoch_start = now;
     double epoch_end = now + test_duration;
     long timeout_us = 1000 * ceil(1000.0/connect_rate);
 
@@ -190,6 +213,33 @@ parse_with_multipliers(char *str, struct multiplier *ms, int n) {
     return value;
 }
 
+static int
+read_in_file(const char *filename, char **data, size_t *size) {
+    FILE *fp = fopen(filename, "rb");
+    if(!fp) {
+        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+        return -1;
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long off = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    if(!off) {
+        fprintf(stderr, "%s: Warning: file has no content\n", filename);
+    }
+
+    *data = malloc(off + 1);
+    size_t r = fread(*data, 1, off, fp);
+    assert(r == off);
+    (*data)[off] = '\0';    /* Just in case. */
+    *size = off;
+
+    fclose(fp);
+
+    return 0;
+}
+
 /*
  * Display the Usage screen.
  */
@@ -200,6 +250,8 @@ usage(char *argv0) {
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
     "  -c, --connections <N>       Number of channels to open to the destinations\n"
+    "  -m, --message <string>      Message to repeatedly send to the remote\n"
+    "  -f, --message-file <name>   Read message to send from a file\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --channel-bandwidth  <Bw>   Limit channel bandwidth (see multipliers below)\n"

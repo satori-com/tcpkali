@@ -6,7 +6,7 @@ int max_open_files();
 
 struct engine;
 
-struct engine *engine_start(struct addresses);
+struct engine *engine_start(struct addresses, void *data, size_t data_size);
 
 int engine_connections(struct engine *);
 void engine_initiate_new_connections(struct engine *, size_t n);

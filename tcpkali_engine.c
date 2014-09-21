@@ -68,8 +68,9 @@ static void connection_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
+static void multiply_data(void **data, size_t *size);
 
-struct engine *engine_start(struct addresses addresses) {
+struct engine *engine_start(struct addresses addresses, void *data, size_t data_size) {
     int fildes[2];
 
     int rc = pipe(fildes);
@@ -89,10 +90,16 @@ struct engine *engine_start(struct addresses addresses) {
     eng->wr_pipe = wr_pipe;
     eng->epoch = ev_now(EV_DEFAULT);
 
+    /*
+     * For efficiency, make sure we concatenate a few data items
+     * instead of sending short messages one by one.
+     */
+    multiply_data(&data, &data_size);
+
     for(int n = 0; n < eng->workers; n++) {
         struct loop_arguments *loop_args = &eng->loop_args[n];
-        loop_args->sample_data = "abc";
-        loop_args->sample_data_size = 3;
+        loop_args->sample_data = data;
+        loop_args->sample_data_size = data_size;
         loop_args->addresses = addresses;
         loop_args->remote_stats = calloc(addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->control_pipe = rd_pipe;
@@ -247,7 +254,9 @@ static void start_new_connection(EV_P) {
     conn->remote_stats = remote_stats;
     atomic_increment(&largs->open_connections);
 
-    ev_io_init(&conn->watcher, connection_cb, sockfd, EV_WRITE);
+    ev_io_init(&conn->watcher, connection_cb, sockfd,
+        EV_READ | (largs->sample_data_size ? EV_WRITE : 0));
+
     ev_io_start(EV_A_ &conn->watcher);
 }
 
@@ -329,6 +338,28 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 static void close_connection(struct connection *conn) {
     ev_io_stop(conn->loop, &conn->watcher);
     free(conn);
+}
+
+/*
+ * If the datum is less then 65k, make sure we repeat it several times
+ * so the total buffer exceeds 65k.
+ */
+static void multiply_data(void **data, size_t *size) {
+    if(!*size) {
+        /* Can't blow up empty buffer. */
+    } else if(*size >= 65536) {
+        /* Data is large enough to avoid blowing up. */
+    } else {
+        size_t n = 1 + 65536/(*size);
+        size_t s = n * (*size);
+        void *p = malloc(s);
+        assert(p);
+        for(size_t i = 0; i < n; i++) {
+            memcpy(&p[i * (*size)], *data, *size);
+        }
+        *data = p;
+        *size = s;
+    }
 }
 
 /*
