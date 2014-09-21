@@ -34,7 +34,8 @@ struct loop_arguments {
     unsigned int address_offset;
     int control_pipe;
     int thread_no;
-    size_t worker_data_transmitted;
+    size_t worker_data_sent;
+    size_t worker_data_received;
     enum {
         THREAD_TERMINATING = 1
     } thread_flags;
@@ -44,7 +45,8 @@ struct loop_arguments {
 struct connection {
     ev_io watcher;
     off_t write_offset;
-    size_t data_transmitted;
+    size_t data_sent;
+    size_t data_received;
     struct sockaddr *remote_address;
     struct remote_stats *remote_stats;
     struct ev_loop *loop;
@@ -57,22 +59,28 @@ struct engine {
     struct loop_arguments *loop_args;
     pthread_t *threads;
     int wr_pipe;
-    int workers;
+    int n_workers;
     double epoch;
-    size_t total_data_transmitted;
+    size_t total_data_sent;
+    size_t total_data_received;
 };
 
 /*
  * Helper functions defined at the end of the file.
  */
+enum connection_close_reason {
+    CCR_CLEAN,
+    CCR_REMOTE, /* Remote side closed connection */
+};
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
-static void close_connection(struct connection *conn);
+static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
+static char *express_bytes(size_t bytes, char *buf, size_t size);
 
 struct engine *engine_start(struct addresses addresses, int requested_workers, void *data, size_t data_size) {
     int fildes[2];
@@ -82,10 +90,6 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
 
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
-
-    /* Make read end of the control pipe Non-blocking */
-    rc = fcntl(rd_pipe, F_SETFL, fcntl(rd_pipe, F_GETFL) | O_NONBLOCK);
-    assert(rc != -1);
 
     int n_workers = requested_workers;
     if(!n_workers) {
@@ -98,7 +102,7 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loop_args = calloc(n_workers, sizeof(eng->loop_args[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
-    eng->workers = n_workers;
+    eng->n_workers = n_workers;
     eng->wr_pipe = wr_pipe;
     eng->epoch = ev_now(EV_DEFAULT);
 
@@ -108,7 +112,7 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
      */
     multiply_data(&data, &data_size);
 
-    for(int n = 0; n < eng->workers; n++) {
+    for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loop_args[n];
         loop_args->sample_data = data;
         loop_args->sample_data_size = data_size;
@@ -135,22 +139,41 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
  */
 void engine_terminate(struct engine *eng) {
     /* Terminate all threads. */
-    for(int n = 0; n < eng->workers; n++) {
+    for(int n = 0; n < eng->n_workers; n++) {
         write(eng->wr_pipe, "T", 1);
     }
-    for(int n = 0; n < eng->workers; n++) {
+    for(int n = 0; n < eng->n_workers; n++) {
         void *value;
         pthread_join(eng->threads[n], &value);
-        eng->total_data_transmitted +=
-            eng->loop_args[n].worker_data_transmitted;
+        eng->total_data_sent +=
+            eng->loop_args[n].worker_data_sent;
+        eng->total_data_received +=
+            eng->loop_args[n].worker_data_received;
     }
-    eng->workers = 0;
-    fprintf(stderr, "Total data transmitted: %ld\n",
-        (long)eng->total_data_transmitted);
-    fprintf(stderr, "Aggregate transmission bandwidth: %.3f Mbps\n",
-        8 * (eng->total_data_transmitted/(ev_now(EV_DEFAULT) - eng->epoch))
-            / 1000000.0
+    eng->n_workers = 0;
+    char buf[64];
+    fprintf(stderr, "Total data sent:     %s (%ld)\n",
+        express_bytes(eng->total_data_sent, buf, sizeof(buf)),
+        (long)eng->total_data_sent);
+    fprintf(stderr, "Total data received: %s (%ld)\n",
+        express_bytes(eng->total_data_received, buf, sizeof(buf)),
+        (long)eng->total_data_received);
+    fprintf(stderr, "Aggregate bandwidth: %.3f Mbps\n",
+        8 * ((eng->total_data_sent+eng->total_data_received)
+                /(ev_now(EV_DEFAULT) - eng->epoch))
+            / (1000000.0)
     );
+}
+
+static char *express_bytes(size_t bytes, char *buf, size_t size) {
+    if(bytes < 2048) {
+        snprintf(buf, size, "%ld bytes", (long)bytes);
+    } else if(bytes < 512 * 1024) {
+        snprintf(buf, size, "%.1f KiB", (bytes/1024.0));
+    } else {
+        snprintf(buf, size, "%.1f MiB", (bytes/(1024*1024.0)));
+    }
+    return buf;
 }
 
 /*
@@ -158,14 +181,14 @@ void engine_terminate(struct engine *eng) {
  */
 int engine_connections(struct engine *eng) {
     int connections = 0;
-    for(int n = 0; n < eng->workers; n++) {
+    for(int n = 0; n < eng->n_workers; n++) {
         connections += eng->loop_args[n].open_connections;
     }
     return connections;
 }
 
 void engine_initiate_new_connections(struct engine *eng, size_t n) {
-    static char buf[1024];
+    static char buf[1024];  /* This is thread-safe! */
     if(!buf[0]) {
         memset(buf, 'c', sizeof(buf));
     }
@@ -191,10 +214,12 @@ static void *single_engine_loop_thread(void *argp) {
 
     fprintf(stderr, "Exiting cpu thread %d\n"
             "  %d open_connections\n"
-            "  %ld worker_data_transmitted\n",
+            "  %ld worker_data_sent\n"
+            "  %ld worker_data_received\n",
         largs->thread_no,
-        largs->open_connections,
-        largs->worker_data_transmitted);
+        (int)largs->open_connections,
+        (long)largs->worker_data_sent,
+        (long)largs->worker_data_received);
 
     return 0;
 }
@@ -298,9 +323,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
     if(largs->thread_flags & THREAD_TERMINATING) {
-        largs->worker_data_transmitted += conn->data_transmitted;
-        atomic_decrement(&largs->open_connections);
-        close_connection(conn);
+        close_connection(largs, conn, CCR_CLEAN);
         return;
     }
 
@@ -310,7 +333,6 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
         ssize_t wrote = write(w->fd, position, available_length);
         if(wrote == -1) {
-            printf("abc: write %d = %d\n", w->fd, (int)wrote);
             char buf[INET6_ADDRSTRLEN+64];
             switch(errno) {
             case EINTR:
@@ -320,15 +342,12 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             default:
                 fprintf(stderr, "Connection reset by %s\n",
                     format_sockaddr(conn->remote_address, buf, sizeof(buf)));
-                conn->remote_stats->connection_failures++;
-                largs->worker_data_transmitted += conn->data_transmitted;
-                largs->open_connections--;
-                close_connection(conn);
+                close_connection(largs, conn, CCR_REMOTE);
                 return;
             }
         } else {
             conn->write_offset += wrote;
-            conn->data_transmitted += wrote;
+            conn->data_sent += wrote;
         }
     }
 
@@ -342,7 +361,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 case EAGAIN:
                     return;
                 default:
-                    fprintf(stderr, "Connection half-closed by %s: %s\n",
+                    fprintf(stderr, "Half-closing %s: %s\n",
                         format_sockaddr(conn->remote_address, buf, sizeof(buf)),
                         strerror(errno));
                 }
@@ -350,11 +369,11 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             case 0:
                 fprintf(stderr, "Connection half-closed by %s\n",
                     format_sockaddr(conn->remote_address, buf, sizeof(buf)));
-                conn->remote_stats->connection_failures++;
-                largs->worker_data_transmitted += conn->data_transmitted;
-                largs->open_connections--;
-                close_connection(conn);
+                close_connection(largs, conn, CCR_REMOTE);
                 return;
+            default:
+                conn->data_received += rd;
+                break;
             }
         }
     }
@@ -379,7 +398,12 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
     }
 }
 
-static void close_connection(struct connection *conn) {
+static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason) {
+    if(reason != CCR_CLEAN)
+        conn->remote_stats->connection_failures++;
+    largs->worker_data_sent += conn->data_sent;
+    largs->worker_data_received += conn->data_received;
+    atomic_decrement(&largs->open_connections);
     ev_io_stop(conn->loop, &conn->watcher);
     free(conn);
 }
