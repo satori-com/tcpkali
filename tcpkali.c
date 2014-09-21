@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -14,6 +15,7 @@
 #include <ev.h>
 
 #include "tcpkali.h"
+#include "tcpkali_pacefier.h"
 
 /*
  * Describe the command line options.
@@ -113,23 +115,25 @@ int main(int argc, char **argv) {
     struct engine *eng = engine_start(addresses);
 
     ev_now_update(EV_DEFAULT);
-    double previous_run_ts = ev_now(EV_DEFAULT);
-    engine_initiate_new_connections(eng,
-            (connect_rate / 1000) > 0 ? (connect_rate / 1000) : 1);
+    struct pacefier rampup_pace;
+    pacefier_init(&rampup_pace, ev_now(EV_DEFAULT) - 1.0/connect_rate);
+    /*
+     * It is a little bit better to batch the starts by issuing several
+     * start commands per small time tick. Ends up doing less write()
+     * operations per batch.
+     * Therefore, we round the timeout_us upwards to the nearest millisecond.
+     */
+    long timeout_us = 1000 * ceil(1000.0/connect_rate);
 
-    while(engine_connections(eng) < max_connections) {
-        usleep(1000);
+    do {
         ev_now_update(EV_DEFAULT);
         double now = ev_now(EV_DEFAULT);
-        double time_passed = now - previous_run_ts;
-        int to_start = time_passed * connect_rate;
-        if(to_start) {
-            engine_initiate_new_connections(eng, to_start);
-            previous_run_ts = now;
-        } else {
-            /* No need to start new connections within the current tick */
-        }
-    }
+        int to_start = pacefier_allow(&rampup_pace, connect_rate, now);
+        engine_initiate_new_connections(eng, to_start);
+        pacefier_emitted(&rampup_pace, connect_rate, to_start, now);
+        usleep(timeout_us);
+    } while(engine_connections(eng) < max_connections);
+
     fprintf(stderr, "Ramped up to %d connections\n", max_connections);
 
     keep_connections_open(eng, connect_rate, max_connections, test_duration);
@@ -140,26 +144,29 @@ int main(int argc, char **argv) {
 }
 
 static void keep_connections_open(struct engine *eng, double connect_rate, int max_connections, double test_duration) {
+    ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
+
     double epoch_start = now;
     double epoch_end = now + test_duration;
-    double previous_run_ts = epoch_start;
+    long timeout_us = 1000 * ceil(1000.0/connect_rate);
+
+    struct pacefier keepup_pace;
+    pacefier_init(&keepup_pace, now - 1.0/connect_rate);
     while(now < epoch_end) {
-        usleep(1000);
+        usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
         int conn_deficit = max_connections - engine_connections(eng);
-        if(conn_deficit <= 0) continue;
-
-        double time_passed = now - previous_run_ts;
-        int to_start = time_passed * connect_rate;
-        if(to_start) {
-            engine_initiate_new_connections(eng,
-                to_start < conn_deficit ? to_start : conn_deficit);
-            previous_run_ts = now;
-        } else {
-            /* No need to start new connections within the current tick */
+        if(conn_deficit <= 0) {
+            pacefier_init(&keepup_pace, now);
+            continue;
         }
+
+        int to_start = pacefier_allow(&keepup_pace, connect_rate, now);
+        engine_initiate_new_connections(eng,
+            to_start < conn_deficit ? to_start : conn_deficit);
+        pacefier_emitted(&keepup_pace, connect_rate, to_start, now);
     }
 }
 
