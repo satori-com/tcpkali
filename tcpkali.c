@@ -27,7 +27,8 @@ static struct option cli_long_options[] = {
     { "connect-rate", 1, 0, 'r' },
     { "duration", 1, 0, 't' },
     { "message", 1, 0, 'm' },
-    { "message-file", 1, 0, 'f' }
+    { "message-file", 1, 0, 'f' },
+    { "workers", 1, 0, 'w' }
 };
 
 /*
@@ -49,6 +50,7 @@ int main(int argc, char **argv) {
     double test_duration = 10;
     char *message_data = 0;
     size_t message_size = 0;
+    int requested_workers = 0;
     struct multiplier k_multiplier[] = {
         { "k", 1000 }
     };
@@ -116,6 +118,19 @@ int main(int argc, char **argv) {
             }
             message_data = strdup(optarg);
             message_size = strlen(optarg);
+            break;
+        case 'w':
+            requested_workers = atoi(optarg);
+            if(requested_workers <= 0) {
+                fprintf(stderr, "Expected --workers > 1\n");
+                exit(EX_USAGE);
+            }
+            if(requested_workers > 64) {
+                fprintf(stderr, "Value --workers=%d is unreasonably large\n",
+                    requested_workers);
+                exit(EX_USAGE);
+            }
+            break;
         }
     }
 
@@ -136,7 +151,8 @@ int main(int argc, char **argv) {
                                "\nDestination: ", "\n", addresses);
     }
 
-    struct engine *eng = engine_start(addresses, message_data, message_size);
+    struct engine *eng = engine_start(addresses, requested_workers,
+                                      message_data, message_size);
 
     ev_now_update(EV_DEFAULT);
     struct pacefier rampup_pace;
@@ -231,7 +247,7 @@ read_in_file(const char *filename, char **data, size_t *size) {
 
     *data = malloc(off + 1);
     size_t r = fread(*data, 1, off, fp);
-    assert(r == off);
+    assert((long)r == off);
     (*data)[off] = '\0';    /* Just in case. */
     *size = off;
 
@@ -253,6 +269,7 @@ usage(char *argv0) {
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
+    "  --workers <N=%ld>%s             Number of parallel threads to use\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --channel-bandwidth  <Bw>   Limit channel bandwidth (see multipliers below)\n"
     //"  --total-bandwidth  <Bw>     Limit total bandwidth (see multipliers below)\n"
@@ -260,6 +277,7 @@ usage(char *argv0) {
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, mbps (bits per second), kBps, mBps (megabytes per second)\n"
-    "  <T>:  s, m, h (seconds, minutes, hours)\n"
+    "  <T>:  s, m, h (seconds, minutes, hours)\n",
+    number_of_cpus(), number_of_cpus < 10 ? " " : ""
     );
 }

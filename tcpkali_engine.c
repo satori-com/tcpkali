@@ -70,7 +70,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
 
-struct engine *engine_start(struct addresses addresses, void *data, size_t data_size) {
+struct engine *engine_start(struct addresses addresses, int requested_workers, void *data, size_t data_size) {
     int fildes[2];
 
     int rc = pipe(fildes);
@@ -79,14 +79,18 @@ struct engine *engine_start(struct addresses addresses, void *data, size_t data_
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
 
-    long ncpus = number_of_cpus();
-    assert(ncpus >= 1);
-    fprintf(stderr, "Using %ld available CPUs\n", ncpus);
+    int n_workers = requested_workers;
+    if(!n_workers) {
+        long n_cpus = number_of_cpus();
+        assert(n_cpus >= 1);
+        fprintf(stderr, "Using %ld available CPUs\n", n_cpus);
+        n_workers = n_cpus;
+    }
 
     struct engine *eng = calloc(1, sizeof(*eng));
-    eng->loop_args = calloc(ncpus, sizeof(eng->loop_args[0]));
-    eng->threads = calloc(ncpus, sizeof(eng->threads[0]));
-    eng->workers = ncpus;
+    eng->loop_args = calloc(n_workers, sizeof(eng->loop_args[0]));
+    eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
+    eng->workers = n_workers;
     eng->wr_pipe = wr_pipe;
     eng->epoch = ev_now(EV_DEFAULT);
 
@@ -166,8 +170,7 @@ void engine_initiate_new_connections(struct engine *eng, size_t n) {
 
 static void *single_engine_loop_thread(void *argp) {
     struct loop_arguments *largs = (struct loop_arguments *)argp;
-    struct ev_loop *loop = ev_loop_new(
-        EVFLAG_SIGNALFD | ev_recommended_backends() | EVBACKEND_KQUEUE);
+    struct ev_loop *loop = ev_loop_new(EVFLAG_AUTO);
     ev_set_userdata(loop, largs);
 
     ev_io control_watcher;
