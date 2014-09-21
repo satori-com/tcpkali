@@ -358,9 +358,11 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 case EAGAIN:
                     return;
                 default:
-                    fprintf(stderr, "Half-closing %s: %s\n",
+                    fprintf(stderr, "Closing %s: %s\n",
                         format_sockaddr(conn->remote_address, buf, sizeof(buf)),
                         strerror(errno));
+                    close_connection(largs, conn, CCR_REMOTE);
+                    return;
                 }
                 /* Fall through */
             case 0:
@@ -386,6 +388,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             if(bytes == 0) {
                 double delay = (double)smallest_block_to_send
                                     /largs->channel_bandwidth_Bps;
+                if(delay > 1.0) delay = 1.0;
                 ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
                 ev_timer_init(&conn->bw_timer, conn_bw_timer, delay, 0.0);
                 ev_timer_start(EV_A_ &conn->bw_timer);

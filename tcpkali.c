@@ -38,7 +38,7 @@ static struct option cli_long_options[] = {
 static void usage(char *argv0);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
-static void keep_connections_open(struct engine *eng, double connect_rate, int max_connections, double test_duration);
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end);
 static int read_in_file(const char *filename, char **data, size_t *size);
 
 /*
@@ -172,9 +172,36 @@ int main(int argc, char **argv) {
                                       channel_bandwidth_Bps,
                                       message_data, message_size);
 
+
     ev_now_update(EV_DEFAULT);
-    struct pacefier rampup_pace;
-    pacefier_init(&rampup_pace, ev_now(EV_DEFAULT) - 1.0/connect_rate);
+    double epoch_end = ev_now(EV_DEFAULT) + test_duration;
+    if(open_connections_until_maxed_out(eng, connect_rate,
+                                        max_connections, epoch_end) == 0) {
+        fprintf(stderr, "Ramped up to %d connections\n", max_connections);
+    } else {
+        fprintf(stderr, "Could not create %d connection%s"
+                        " in allotted time (%0.1fs)\n",
+                        max_connections, max_connections==1?"":"s",
+                        test_duration);
+        exit(1);
+    }
+
+    /* Reset the test duration after ramp-up. */
+    for(epoch_end = ev_now(EV_DEFAULT) + test_duration;;) {
+        if(open_connections_until_maxed_out(eng, connect_rate,
+                                            max_connections, epoch_end) == -1)
+            break;
+    }
+
+    engine_terminate(eng);
+
+    return 0;
+}
+
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end) {
+    ev_now_update(EV_DEFAULT);
+    double now = ev_now(EV_DEFAULT);
+
     /*
      * It is a little bit better to batch the starts by issuing several
      * start commands per small time tick. Ends up doing less write()
@@ -183,41 +210,15 @@ int main(int argc, char **argv) {
      */
     long timeout_us = 1000 * ceil(1000.0/connect_rate);
 
-    do {
-        ev_now_update(EV_DEFAULT);
-        double now = ev_now(EV_DEFAULT);
-        size_t to_start = pacefier_allow(&rampup_pace, connect_rate, now);
-        engine_initiate_new_connections(eng, to_start);
-        pacefier_emitted(&rampup_pace, connect_rate, to_start, now);
-        usleep(timeout_us);
-    } while(engine_connections(eng) < max_connections);
-
-    fprintf(stderr, "Ramped up to %d connections\n", max_connections);
-
-    keep_connections_open(eng, connect_rate, max_connections, test_duration);
-
-    engine_terminate(eng);
-
-    return 0;
-}
-
-static void keep_connections_open(struct engine *eng, double connect_rate, int max_connections, double test_duration) {
-    ev_now_update(EV_DEFAULT);
-    double now = ev_now(EV_DEFAULT);
-
-    double epoch_end = now + test_duration;
-    long timeout_us = 1000 * ceil(1000.0/connect_rate);
-
     struct pacefier keepup_pace;
-    pacefier_init(&keepup_pace, now - 1.0/connect_rate);
+    pacefier_init(&keepup_pace, now);
     while(now < epoch_end) {
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
         ssize_t conn_deficit = max_connections - engine_connections(eng);
         if(conn_deficit <= 0) {
-            pacefier_init(&keepup_pace, now);
-            continue;
+            return 0;
         }
 
         size_t to_start = pacefier_allow(&keepup_pace, connect_rate, now);
@@ -225,6 +226,8 @@ static void keep_connections_open(struct engine *eng, double connect_rate, int m
             (ssize_t)to_start < conn_deficit ? to_start : conn_deficit);
         pacefier_emitted(&keepup_pace, connect_rate, to_start, now);
     }
+
+    return -1;
 }
 
 static double
