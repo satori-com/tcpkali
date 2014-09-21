@@ -269,7 +269,7 @@ usage(char *argv0) {
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
-    "  --workers <N=%ld>%s             Number of parallel threads to use\n"
+    "  --workers <N=%ld>%s            Number of parallel threads to use\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --channel-bandwidth  <Bw>   Limit channel bandwidth (see multipliers below)\n"
     //"  --total-bandwidth  <Bw>     Limit total bandwidth (see multipliers below)\n"
@@ -278,6 +278,6 @@ usage(char *argv0) {
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, mbps (bits per second), kBps, mBps (megabytes per second)\n"
     "  <T>:  s, m, h (seconds, minutes, hours)\n",
-    number_of_cpus(), number_of_cpus < 10 ? " " : ""
+    number_of_cpus(), number_of_cpus() < 10 ? " " : ""
     );
 }
