@@ -28,7 +28,8 @@ static struct option cli_long_options[] = {
     { "duration", 1, 0, 't' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
-    { "workers", 1, 0, 'w' }
+    { "workers", 1, 0, 'w' },
+    { "channel-bandwidth", 1, 0, 'b' }
 };
 
 /*
@@ -51,6 +52,7 @@ int main(int argc, char **argv) {
     char *message_data = 0;
     size_t message_size = 0;
     int requested_workers = 0;
+    int channel_bandwidth_Bps = 0;
     struct multiplier k_multiplier[] = {
         { "k", 1000 }
     };
@@ -63,6 +65,12 @@ int main(int argc, char **argv) {
         { "min", 60 },
         { "minute", 60 },
         { "minutes", 60 }
+    };
+    struct multiplier bw_multiplier[] = {
+        { "kBps", 1000 },
+        { "kbps", 1000/8 },
+        { "mBps", 1000000 },
+        { "mbps", 1000000/8 }
     };
 
     while(1) {
@@ -131,11 +139,20 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case 'b':
+            channel_bandwidth_Bps = parse_with_multipliers(optarg,
+                        bw_multiplier,
+                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
+            if(channel_bandwidth_Bps < 0) {
+                fprintf(stderr, "Expecting non-negative --channel-bandwidth\n");
+                exit(EX_USAGE);
+            }
+            break;
         }
     }
 
     if(optind == argc) {
-        fprintf(stderr, "Expecting target <host:port> as an argument. See --help.\n");
+        fprintf(stderr, "Expecting target <host:port> as an argument. See -h or --help.\n");
         exit(EX_USAGE);
     }
 
@@ -152,6 +169,7 @@ int main(int argc, char **argv) {
     }
 
     struct engine *eng = engine_start(addresses, requested_workers,
+                                      channel_bandwidth_Bps,
                                       message_data, message_size);
 
     ev_now_update(EV_DEFAULT);
@@ -168,7 +186,7 @@ int main(int argc, char **argv) {
     do {
         ev_now_update(EV_DEFAULT);
         double now = ev_now(EV_DEFAULT);
-        int to_start = pacefier_allow(&rampup_pace, connect_rate, now);
+        size_t to_start = pacefier_allow(&rampup_pace, connect_rate, now);
         engine_initiate_new_connections(eng, to_start);
         pacefier_emitted(&rampup_pace, connect_rate, to_start, now);
         usleep(timeout_us);
@@ -196,15 +214,15 @@ static void keep_connections_open(struct engine *eng, double connect_rate, int m
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
-        int conn_deficit = max_connections - engine_connections(eng);
+        ssize_t conn_deficit = max_connections - engine_connections(eng);
         if(conn_deficit <= 0) {
             pacefier_init(&keepup_pace, now);
             continue;
         }
 
-        int to_start = pacefier_allow(&keepup_pace, connect_rate, now);
+        size_t to_start = pacefier_allow(&keepup_pace, connect_rate, now);
         engine_initiate_new_connections(eng,
-            to_start < conn_deficit ? to_start : conn_deficit);
+            (ssize_t)to_start < conn_deficit ? to_start : conn_deficit);
         pacefier_emitted(&keepup_pace, connect_rate, to_start, now);
     }
 }
@@ -271,9 +289,9 @@ usage(char *argv0) {
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
     "  --workers <N=%ld>%s            Number of parallel threads to use\n"
+    "  --channel-bandwidth <Bw>    Limit single channel bandwidth\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
-    //"  --channel-bandwidth  <Bw>   Limit channel bandwidth (see multipliers below)\n"
-    //"  --total-bandwidth  <Bw>     Limit total bandwidth (see multipliers below)\n"
+    //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
     "  --duration <T=10s>          Load test for the specified amount of time\n"
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"

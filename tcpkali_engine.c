@@ -20,6 +20,7 @@
 
 #include "tcpkali.h"
 #include "tcpkali_atomic.h"
+#include "tcpkali_pacefier.h"
 
 #include <ev.h>
 
@@ -28,22 +29,27 @@ struct loop_arguments {
     const void *sample_data;
     size_t      sample_data_size;
     struct remote_stats {
-        long connection_attempts;
-        long connection_failures;
+        atomic_t connection_attempts;
+        atomic_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
     unsigned int address_offset;
     int control_pipe;
     int thread_no;
+    int channel_bandwidth_Bps;  /* Bytes per second */
     size_t worker_data_sent;
     size_t worker_data_received;
     enum {
         THREAD_TERMINATING = 1
     } thread_flags;
+    size_t worker_connection_attempts;
+    size_t worker_connection_failures;
     atomic_t open_connections;
 };
 
 struct connection {
     ev_io watcher;
+    ev_timer bw_timer;
+    struct pacefier bw_pace;
     off_t write_offset;
     size_t data_sent;
     size_t data_received;
@@ -82,7 +88,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 static void multiply_data(void **data, size_t *size);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 
-struct engine *engine_start(struct addresses addresses, int requested_workers, void *data, size_t data_size) {
+struct engine *engine_start(struct addresses addresses, int requested_workers, int channel_bandwidth_Bps, void *data, size_t data_size) {
     int fildes[2];
 
     int rc = pipe(fildes);
@@ -114,6 +120,7 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, v
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loop_args[n];
+        loop_args->channel_bandwidth_Bps = channel_bandwidth_Bps;
         loop_args->sample_data = data;
         loop_args->sample_data_size = data_size;
         loop_args->addresses = addresses;
@@ -214,10 +221,14 @@ static void *single_engine_loop_thread(void *argp) {
 
     fprintf(stderr, "Exiting cpu thread %d\n"
             "  %d open_connections\n"
+            "  %ld connection_attempts\n"
+            "  %ld connection_failures\n"
             "  %ld worker_data_sent\n"
             "  %ld worker_data_received\n",
         largs->thread_no,
         (int)largs->open_connections,
+        (long)largs->worker_connection_attempts,
+        (long)largs->worker_connection_failures,
         (long)largs->worker_data_sent,
         (long)largs->worker_data_received);
 
@@ -253,7 +264,8 @@ static void start_new_connection(EV_P) {
 
     struct sockaddr *sa = pick_remote_address(largs, &remote_stats);
 
-    remote_stats->connection_attempts++;
+    atomic_increment(&remote_stats->connection_attempts);
+    largs->worker_connection_attempts++;
 
     int sockfd = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
@@ -274,7 +286,8 @@ static void start_new_connection(EV_P) {
         case EINPROGRESS:
             break;
         default:
-            remote_stats->connection_failures++;
+            atomic_increment(&remote_stats->connection_failures);
+            largs->worker_connection_failures++;
             if(remote_stats->connection_failures == 1) {
                 fprintf(stderr, "Connection to %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)), strerror(errno));
@@ -285,6 +298,7 @@ static void start_new_connection(EV_P) {
     }
 
     struct connection *conn = calloc(1, sizeof(*conn));
+    pacefier_init(&conn->bw_pace, ev_now(EV_A));
     conn->remote_address = sa;
     conn->loop = EV_A;
     conn->remote_stats = remote_stats;
@@ -318,6 +332,13 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct
     return &largs->addresses.addrs[off];
 }
 
+static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
+    (void)EV_A;
+    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, bw_timer));
+
+    ev_io_set(&conn->watcher, conn->watcher.fd, EV_READ | EV_WRITE);
+}
+
 static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
@@ -325,30 +346,6 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     if(largs->thread_flags & THREAD_TERMINATING) {
         close_connection(largs, conn, CCR_CLEAN);
         return;
-    }
-
-    if(revents & EV_WRITE) {
-        const void *position;
-        size_t available_length;
-        largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
-        ssize_t wrote = write(w->fd, position, available_length);
-        if(wrote == -1) {
-            char buf[INET6_ADDRSTRLEN+64];
-            switch(errno) {
-            case EINTR:
-            case EAGAIN:
-                break;
-            case EPIPE:
-            default:
-                fprintf(stderr, "Connection reset by %s\n",
-                    format_sockaddr(conn->remote_address, buf, sizeof(buf)));
-                close_connection(largs, conn, CCR_REMOTE);
-                return;
-            }
-        } else {
-            conn->write_offset += wrote;
-            conn->data_sent += wrote;
-        }
     }
 
     if(revents & EV_READ) {
@@ -378,6 +375,51 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         }
     }
 
+    if(revents & EV_WRITE) {
+        const void *position;
+        size_t available_length;
+        largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
+        if(largs->channel_bandwidth_Bps) {
+            size_t bytes = pacefier_allow(&conn->bw_pace,
+                                   largs->channel_bandwidth_Bps, ev_now(EV_A));
+            const int smallest_block_to_send = 1460;    /* ~MTU */
+            if(bytes == 0) {
+                double delay = (double)smallest_block_to_send
+                                    /largs->channel_bandwidth_Bps;
+                ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
+                ev_timer_init(&conn->bw_timer, conn_bw_timer, delay, 0.0);
+                ev_timer_start(EV_A_ &conn->bw_timer);
+                return;
+            } else if((size_t)bytes < available_length
+                    && available_length > smallest_block_to_send) {
+                /* Do not send more than approx 1 MTU. */
+                available_length = smallest_block_to_send;
+            }
+        }
+        ssize_t wrote = write(w->fd, position, available_length);
+        if(wrote == -1) {
+            char buf[INET6_ADDRSTRLEN+64];
+            switch(errno) {
+            case EINTR:
+            case EAGAIN:
+                break;
+            case EPIPE:
+            default:
+                fprintf(stderr, "Connection reset by %s\n",
+                    format_sockaddr(conn->remote_address, buf, sizeof(buf)));
+                close_connection(largs, conn, CCR_REMOTE);
+                return;
+            }
+        } else {
+            conn->write_offset += wrote;
+            conn->data_sent += wrote;
+            if(largs->channel_bandwidth_Bps) {
+                pacefier_emitted(&conn->bw_pace, largs->channel_bandwidth_Bps,
+                                 wrote, ev_now(EV_A));
+            }
+        }
+    }
+
 }
 
 /*
@@ -399,8 +441,11 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 }
 
 static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason) {
-    if(reason != CCR_CLEAN)
-        conn->remote_stats->connection_failures++;
+    if(reason != CCR_CLEAN) {
+        atomic_increment(&conn->remote_stats->connection_failures);
+        largs->worker_connection_failures++;
+    }
+    ev_timer_stop(conn->loop, &conn->bw_timer);
     largs->worker_data_sent += conn->data_sent;
     largs->worker_data_received += conn->data_received;
     atomic_decrement(&largs->open_connections);

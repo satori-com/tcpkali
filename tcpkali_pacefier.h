@@ -18,22 +18,23 @@ pacefier_init(struct pacefier *p, double now) {
  * Get the number of events we can emit now, since we've advanced our time
  * forward a little.
  */
-static inline int
+static inline size_t
 pacefier_allow(struct pacefier *p, double events_per_second, double now) {
     double elapsed = now - p->previous_ts;
-    int emit_events = elapsed * events_per_second;  /* Implicit rounding */
-    return emit_events;
+    ssize_t emit_events = elapsed * events_per_second;  /* Implicit rounding */
+    if(emit_events > 0)
+        return emit_events;
+    else
+        return 0;
 }
 
 /*
  * Record the actually emitted events.
  */
 static inline void
-pacefier_emitted(struct pacefier *p, double events_per_second, int emitted, double now) {
+pacefier_emitted(struct pacefier *p, double events_per_second, size_t emitted, double now) {
     double elapsed = now - p->previous_ts;
     double emit_events = elapsed * events_per_second;
-    assert(emit_events >= emitted);
-
     /*
      * The number of allowed events is almost always less
      * than what's actually computed, due to rounding.
@@ -47,8 +48,15 @@ pacefier_emitted(struct pacefier *p, double events_per_second, int emitted, doub
      * Test: if at t1 we were allowed to emit EPS=5 events and emitted 4,
      * that means that at we should record t1-(5-4/5) instead of t1.
      */
-    
     p->previous_ts = now - (emit_events - emitted)/events_per_second;
+    /*
+     * If the process cannot keep up with the pace, it will result in
+     * previous_ts shifting in the past more and more with time.
+     * We don't allow more than 5 seconds skew to prevent too sudden
+     * bursts of events and to avoid overfilling the integers.
+     */
+    if((now - p->previous_ts) > 5)
+        p->previous_ts = now - 5;
 }
 
 
