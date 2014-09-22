@@ -17,6 +17,7 @@
 
 #include "tcpkali.h"
 #include "tcpkali_pacefier.h"
+#include "tcpkali_signals.h"
 
 /*
  * Describe the command line options.
@@ -38,7 +39,7 @@ static struct option cli_long_options[] = {
 static void usage(char *argv0);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end);
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, int *term_flag);
 static int read_in_file(const char *filename, void **data, size_t *size);
 
 /*
@@ -172,13 +173,24 @@ int main(int argc, char **argv) {
                                engine_params.addresses);
     }
 
+    /* Block term signals so they're not scheduled in the worker threads. */
+    block_term_signals();
+
     struct engine *eng = engine_start(engine_params);
 
+    /*
+     * Convert SIGINT into change of a flag.
+     * Has to be run after all other threads are run, otherwise
+     * a signal can be delivered to a wrong thread.
+     */
+    int term_flag = 0;
+    flagify_term_signals(&term_flag);
 
     ev_now_update(EV_DEFAULT);
     double epoch_end = ev_now(EV_DEFAULT) + test_duration;
     if(open_connections_until_maxed_out(eng, connect_rate,
-                                        max_connections, epoch_end) == 0) {
+                                        max_connections, epoch_end,
+                                        &term_flag) == 0) {
         fprintf(stderr, "Ramped up to %d connections\n", max_connections);
     } else {
         fprintf(stderr, "Could not create %d connection%s"
@@ -191,7 +203,8 @@ int main(int argc, char **argv) {
     /* Reset the test duration after ramp-up. */
     for(epoch_end = ev_now(EV_DEFAULT) + test_duration;;) {
         if(open_connections_until_maxed_out(eng, connect_rate,
-                                            max_connections, epoch_end) == -1)
+                                            max_connections, epoch_end,
+                                            &term_flag) == -1)
             break;
     }
 
@@ -200,7 +213,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end) {
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, int *term_flag) {
     ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
 
@@ -214,7 +227,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, now);
-    while(now < epoch_end) {
+    while(now < epoch_end && !*term_flag) {
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
