@@ -10,4 +10,4 @@ install-sh
 missing
 ltmain.sh
 *.tar.gz
-libstatsd/src/statsd-cli
+src/statsd-cli

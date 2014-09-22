@@ -3,7 +3,7 @@ SUBDIRS = libev libstatsd
 
 bin_PROGRAMS = tcpkali
 
-tcpkali_CPPFLAGS = -Ilibev
+tcpkali_CPPFLAGS = -Ilibev -Ilibstatsd/src
 tcpkali_CFLAGS = -std=gnu99
 tcpkali_LDFLAGS = -all-static
 tcpkali_SOURCES = \
@@ -11,4 +11,4 @@ tcpkali_SOURCES = \
                 tcpkali_engine.c tcpkali_engine.h   \
                 tcpkali_signals.c tcpkali_signals.h \
                 tcpkali.c tcpkali.h tcpkali_pacefier.h
-tcpkali_LDADD = libev/libev.la
+tcpkali_LDADD = libev/libev.la libstatsd/src/libstatsd.la

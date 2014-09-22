@@ -15,6 +15,7 @@
 #include <assert.h>
 
 #include <ev.h>
+#include <statsd.h>
 
 #include "tcpkali.h"
 #include "tcpkali_pacefier.h"
@@ -31,16 +32,28 @@ static struct option cli_long_options[] = {
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "workers", 1, 0, 'w' },
-    { "channel-bandwidth", 1, 0, 'b' }
+    { "channel-bandwidth", 1, 0, 'b' },
+    { "statsd-server", 1, 0,    256 + 's' },
+    { "statsd-port", 1, 0,      256 + 'p' },
+    { "statsd-namespace", 1, 0, 256 + 'n' }
+};
+
+struct tcpkali_config {
+    int max_connections;
+    double connect_rate;     /* New connects per second. */
+    double test_duration;    /* Seconds for the full test. */
+    char *statsd_server;
+    int   statsd_port;
+    char *statsd_namespace;
 };
 
 /*
  * Bunch of utility functions defined at the end of this file.
  */
-static void usage(char *argv0);
+static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, int *term_flag);
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, Statsd *statsd, int *term_flag);
 static int read_in_file(const char *filename, void **data, size_t *size);
 
 static struct multiplier k_multiplier[] = {
@@ -67,14 +80,13 @@ static struct multiplier bw_multiplier[] = {
  * Parse command line options and kick off the engine.
  */
 int main(int argc, char **argv) {
-    struct {
-        int max_connections;
-        double connect_rate;     /* New connects per second. */
-        double test_duration;    /* Seconds for the full test. */
-    } conf = {
+    struct tcpkali_config conf = {
         .max_connections = 1,
         .connect_rate = 10.0,
-        .test_duration = 10.0
+        .test_duration = 10.0,
+        .statsd_server = "127.0.0.1",
+        .statsd_port = 8125,
+        .statsd_namespace = "tcpkali"
     };
     struct engine_params engine_params;
     memset(&engine_params, 0, sizeof(engine_params));
@@ -86,7 +98,7 @@ int main(int argc, char **argv) {
             break;
         switch(c) {
         case 'h':
-            usage(argv[0]);
+            usage(argv[0], &conf);
             exit(EX_USAGE);
         case 'c':
             conf.max_connections = atoi(optarg);
@@ -189,6 +201,9 @@ int main(int argc, char **argv) {
                                engine_params.addresses);
     }
 
+    Statsd *statsd;
+    statsd_new(&statsd, conf.statsd_server, conf.statsd_port, conf.statsd_namespace, NULL);
+
     /* Block term signals so they're not scheduled in the worker threads. */
     block_term_signals();
 
@@ -205,7 +220,7 @@ int main(int argc, char **argv) {
     double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
     if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                         conf.max_connections, epoch_end,
-                                        &term_flag) == 0) {
+                                        statsd, &term_flag) == 0) {
         fprintf(stderr, "Ramped up to %d connections\n", conf.max_connections);
     } else {
         fprintf(stderr, "Could not create %d connection%s"
@@ -219,16 +234,19 @@ int main(int argc, char **argv) {
     for(epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            &term_flag) == -1)
+                                            statsd, &term_flag) == -1)
             break;
     }
 
     engine_terminate(eng);
 
+    statsd_gauge(statsd, "connections.total", 0, 1);
+    statsd_count(statsd, "connections.opened", 0, 1);
+
     return 0;
 }
 
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, int *term_flag) {
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, Statsd *statsd, int *term_flag) {
     ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
 
@@ -239,22 +257,37 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
      * Therefore, we round the timeout_us upwards to the nearest millisecond.
      */
     long timeout_us = 1000 * ceil(1000.0/connect_rate);
+    static double last_stats_sent;
 
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, now);
+
     while(now < epoch_end && !*term_flag) {
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
-        ssize_t conn_deficit = max_connections - engine_connections(eng);
+        size_t conns = engine_connections(eng);
+        ssize_t conn_deficit = max_connections - conns;
+
+        size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
+        size_t to_start = allowed;
+        if(conn_deficit <= 0) {
+            to_start = 0;
+        } if(to_start > (size_t)conn_deficit) {
+            to_start = conn_deficit;
+        }
+        engine_initiate_new_connections(eng, to_start);
+        pacefier_emitted(&keepup_pace, connect_rate, allowed, now);
+
+        if(now - last_stats_sent > 0.25) {
+            statsd_gauge(statsd, "connections.total", conns, 1);
+            statsd_count(statsd, "connections.opened", to_start, 1);
+            last_stats_sent = now;
+        }
+
         if(conn_deficit <= 0) {
             return 0;
         }
-
-        size_t to_start = pacefier_allow(&keepup_pace, connect_rate, now);
-        engine_initiate_new_connections(eng,
-            to_start < (size_t)conn_deficit ? to_start : (size_t)conn_deficit);
-        pacefier_emitted(&keepup_pace, connect_rate, to_start, now);
     }
 
     return -1;
@@ -311,7 +344,7 @@ read_in_file(const char *filename, void **data, size_t *size) {
  * Display the Usage screen.
  */
 static void
-usage(char *argv0) {
+usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr, "Usage: %s [OPTIONS] <host:port> [<host:port>...]\n",
         basename(argv0));
     fprintf(stderr,
@@ -323,6 +356,9 @@ usage(char *argv0) {
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --channel-bandwidth <Bw>    Limit single channel bandwidth\n"
     "  --workers <N=%ld>%s            Number of parallel threads to use\n"
+    "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
+    "  --statsd-port <port>        StatsD port to use (default is %d)\n"
+    "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
     "  --duration <T=10s>          Load test for the specified amount of time\n"
@@ -330,6 +366,8 @@ usage(char *argv0) {
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, mbps (bits per second), kBps, mBps (megabytes per second)\n"
     "  <T>:  s, m, h (seconds, minutes, hours)\n",
-    number_of_cpus(), number_of_cpus() < 10 ? " " : ""
+    number_of_cpus(), number_of_cpus() < 10 ? " " : "",
+    conf->statsd_port,
+    conf->statsd_namespace
     );
 }
