@@ -25,12 +25,12 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
     /*
      * Allocate a bunch of address structures.
      */
-    int n_addrs = 0;
-    int n_addrs_max = 64;
+    size_t n_addrs = 0;
+    size_t n_addrs_max = 64;
     struct sockaddr *addrs = malloc(n_addrs_max * sizeof(addrs[0]));
     assert(addrs);
 
-    for(int n = 0; n < nhostports; n++) {
+    for(size_t n = 0; n < nhostports; n++) {
         char *hostport = hostports[n];
         char *service_string = strchr(hostport, ':');
         if(service_string) {
@@ -80,7 +80,7 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
  * Display destination addresses with a given prefix, separator and suffix.
  */
 void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, struct addresses addresses) {
-    for(int n = 0; n < addresses.n_addrs; n++) {
+    for(size_t n = 0; n < addresses.n_addrs; n++) {
         if(n == 0) {
             fprintf(fp, "%s", prefix);
         } else {
