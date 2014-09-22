@@ -1,0 +1,68 @@
+.\" Manpage for statsd-cli command line utility
+.\" Contact j.m.slocum@gmail.com for corrections or typos.
+.TH man 1 "22 Jan 2013" "1.0" "statsd-cli man page"
+
+.SH NAME
+statsd-cli \- Send statistical data to a statsd server from the command line.
+
+.SH SYNOPSIS
+.B statsd-cli
+[\fIOPTION\fR]... stat
+
+.SH DESCRIPTION
+.PP
+Send a statistic to a statsd server from the command line.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+print the version number and help message
+.TP
+\fB\-s\fR, \fB\-\-server\fR
+specify the hostname or ip address of the statsd server,
+default is "localhost"
+.TP
+\fB\-p\fR, \fB\-\-port\fR
+specify the port number to send stats to, default is 8125
+.TP
+\fB\-n\fR, \fB\-\-namespace\fR
+set the namespace for the stats, the namespace is prepended to the front
+of the bucket
+.TP
+\fB\-b\fR, \fB\-\-bucket\fR
+set the bucket name for the stats
+.TP
+\fB\-t\fR, \fB\-\-type\fR
+specify the stat type being sent. valid types are
+\fBcount\fR, \fBset\fR, \fBgauge\fR, \fBtiming\fR
+.TP
+\fB\-r\fR, \fB\-\-rate\fR
+specify the sample rate for this stat
+
+.SH TYPES
+.TP
+\fBcount\fR
+This type is used for adding or removing values from the specified bucket. The
+value of the current count is sent to the back end by statsd each time statsd 
+flushes. The bucket is reset to zero after each flush. 
+.TP
+\fBset\fR
+This type is used for counting unique occurrences of events between flushes,
+using a set to store all occurring events.
+.TP
+\fBgauge\fR
+This type allows the value of a bucket to be set to an arbitrary value. A useful
+example of this is logging how many users are currently connected to a web server.
+.TP
+\fBtiming\fR
+This type can be used to record times in milliseconds that some task took.
+.SH EXAMPLES
+.TP
+statsd-cli -s statsd.example.com -n some.namespace -b times -t timing 350
+This would send a value of 350 milliseconds to the statsd server for some.namespace.times
+
+.SH AUTHORS
+Written by James M. Slocum [j.m.slocum@gmail.com]
+
+.SH COPYRIGHT
+Copyright \(co 2013 James M. Slocum
+.PP
+This software is made freely available under the MIT license

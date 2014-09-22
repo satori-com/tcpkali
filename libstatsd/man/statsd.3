@@ -1,0 +1,207 @@
+.\" Manpage for libstatd library
+.\" Contact j.m.slocum@gmail.com for corrections or typos.
+.TH man 3 "22 Jan 2013" "1.0" "libstatsd"
+
+.SH NAME
+libstatsd \- C programming interface for sending statistical data to a statsd server.
+
+.SH SYNOPSIS
+.nf
+.B #include <statsd.h>
+.sp
+.BI "int statsd_new(Statsd **" stats ", const char *" server ", int " port ","
+.BI "               const char *" namespace ", const char *" bucket );
+
+.BI "int statsd_init(Statsd *" statsd ", const char *" server ", int " port ","
+.BI "                const char *" nameSpace ", const char *" bucket );
+
+.BI "void statsd_free(Statsd *" statsd );
+
+.BI "void statsd_release(Statsd *" statsd );
+
+.BI "int statsd_increment(Statsd *" statsd ", const char *" bucket );
+
+.BI "int statsd_decrement(Statsd *" statsd ", const char *" bucket );
+
+.BI "int statsd_count(Statsd *" statsd ", const char *" bucket ", int " count ", double " sampleRate );
+
+.BI "int statsd_gauge(Statsd *" statsd ", const char *" bucket ", int " value ", double " sampleRate );
+
+.BI "int statsd_set(Statsd *" statsd ", const char *" bucket ", int " value ", double " sampleRate );
+
+.BI "int statsd_timing(Statsd *" statsd ", const char *" bucket ", int " timing ", double " sampleRate );
+
+.BI "int statsd_resetBatch(Statsd *" statsd );
+
+.BI "int statsd_addToBatch(Statsd *" statsd ", StatsType " type ", const char *" bucket ","
+.BI "                      int " value ", double " sampleRate );
+
+.BI "int statsd_sendBatch(Statsd *" statsd );
+
+.fi
+.SH DESCRIPTION
+The functions
+.BR statsd_new (),
+and
+.BR statsd_init ()
+are used to initialize the Statsd client object.
+.BR statsd_new ()
+will allocate the memory for the Statsd object dynamically using 
+.BR malloc ().
+.BR statsd_init ()
+can be used to initialize a statically allocated Statsd object, or to reinitialize 
+a previously malloc'd object. 
+.PP
+Once the Statsd client object has been initialized, you can begin reporting stats though 
+the 
+.BR statsd_count (),
+.BR statsd_gauge (),
+.BR statsd_set (),
+and
+.BR statd_timing ()
+functions. Also provided are two convenience functions for adjusting counts by a value
+of 1;
+.BR statsd_increment ()
+and
+.BR statsd_decrement ().
+.PP
+The stats reporting functions (except increment and decrement) all take 4 arguments.
+The increment and decrement functions only take the first two arguments in this
+list.
+.PP
+.TP
+\fIstatsd\fR
+The Statsd client object that was previously initialized via \fBstatsd_new\fR() or \
+\fBstatsd_init\fR().
+.TP
+\fIbucket\fR
+The bucket you want the stat to go into. This will override the bucket specified \
+duing initialization of the Statsd client object. If you want to use the default \
+bucket just pass NULL for this argument.
+.TP
+\fIvalue\fR
+The value that you want to send to the server. 
+.TP
+\fIsampleRate\fR
+The rate at which this statistic is sampled. If you are running a task 10 times, \
+but only sending 1 stat then the sample rate would be \fB.1\fR. A value less then \
+or equal to 0, or greater then or equal to 1 is ignored.
+.PP
+This library will also allow you to cue up stats and send them all at once using
+a batch call. There are three functions to help with batching. 
+.BR "statsd_addToBatch"(),
+.BR "statsd_sendBatch"(),
+and
+.BR "statsd_resetBatch"().
+.PP
+.BR "statsd_addToBatch"()
+takes 5 arguments.
+.BR "statsd_send"(),
+and
+.BR "statsd_reset"()
+only take the \fIstatsd\fB argument.
+.PP
+.TP
+\fIstatsd\fR
+The Statsd client object that was previously initialized via \fBstatsd_new\fR() or \
+\fBstatsd_init\fR().
+.TP
+\fItype\fR
+The type of stat you are adding to the batch. The valid options are \
+\fBSTATSD_COUNT\fR, \fBSTATSD_GAUGE\fR, \fBSTATSD_SET\fR, and \fBSTATSD_TIMING\fR.
+.TP
+\fIbucket\fR
+The bucket you want the stat to go into. This will override the bucket specified \
+duing initialization of the Statsd client object. If you want to use the default \
+bucket just pass NULL for this argument.
+.TP
+\fIvalue\fR
+The value that you want to send to the server. 
+.TP
+\fIsampleRate\fR
+The rate at which this statistic is sampled. If you are running a task 10 times, \
+but only sending 1 stat then the sample rate would be \fB.1\fR. A value less then \
+or equal to 0, or greater then or equal to 1 is ignored. The simplest way to \
+indicate you don't want a sample rate it to use the \fBNO_SAMPLE_RATE\fR macro for \
+this argument.
+
+.SH ERRORS
+The following values can be returned from the library functions
+.PP
+.B STATSD_SUCCESS
+\- The function completed successfully.
+.PP
+.B STATSD_SOCKET
+\- The socket could not be created during the initialization of the client object.
+.PP
+.B STATSD_NTOP
+\- The IP address of the server could not be converted into a readable form. \
+see
+.BR "inet_ntop"(3).
+.PP
+.B STATSD_MALLOC
+\- Out of memory. Memory allocation failed.
+.PP
+.B STATSD_BAD_SERVER_ADDRESS
+\- Unable to look up server name in DNS. see
+.BR "getaddrinfo"(3).
+.PP
+.B STATSD_UDP_SEND
+\- Unable to send data through the socket. see
+.BR "sendto"(2).
+.PP
+.B STATSD_NO_BATCH
+\- If you try to call 
+.BR "statsd_sendBatch"() 
+before you have added any data to the batch.
+.PP
+.B STATSD_BATCH_FULL
+\- If you try to add more stats to the batch then the mtu of udp packet \
+can handle. The default mtu limit is set to 512 bytes. you can override \
+this value at compile time by specifying a new value for \fBBATCH_MAX_SIZE\fR.
+.PP
+.B STATSD_BAD_STATS_TYPE
+\- The \fItype\fR field specified was invalid.
+
+.SH EXAMPLES
+This is a simple example that will send a timing stat to "statsd.example.com"
+on the defualt statsd port using the bucket "some.namespace.bucket".
+.nf
+.sp
+#include <stdlib.h>
+#include <stdio.h>
+#include <statsd.h>
+
+int main(int argc, char *argv[]) {
+   Statsd* stats = NULL;
+   int ret = statsd_new(&stats, "statsd.example.com", STATSD_PORT, 
+                        "some.namespace", "bucket");
+
+   if (ret != STATSD_SUCCESS){
+      fprintf(stderr, "Unable to create statsd object (%d)\\n", ret);
+      return 1;
+   }
+
+   ret = statsd_timing(stats, NULL, 350, NO_SAMPLE_RATE);
+   
+   if (ret != STATSD_SUCCESS){
+      fprintf(stderr, "Unable to send stat to server(%d)\\n", ret);
+      return 1;
+   }
+
+   statsd_free(stats);
+
+   return EXIT_SUCCESS;
+}
+.fi
+
+.SH SEE ALSO
+.BR "statsd-cli"(1)
+
+.SH AUTHORS
+Written by James M. Slocum [j.m.slocum@gmail.com]
+
+.SH COPYRIGHT
+Copyright \(co 2013 James M. Slocum
+.PP
+This software is made freely available under the MIT license
