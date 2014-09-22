@@ -240,9 +240,6 @@ int main(int argc, char **argv) {
 
     engine_terminate(eng);
 
-    statsd_gauge(statsd, "connections.total", 0, 1);
-    statsd_count(statsd, "connections.opened", 0, 1);
-
     return 0;
 }
 
