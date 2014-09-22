@@ -304,6 +304,9 @@ static void start_new_connection(EV_P) {
     ev_io_start(EV_A_ &conn->watcher);
 }
 
+/*
+ * Pick an address in a round-robin fashion, skipping certainly broken ones.
+ */
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats) {
 
     /*
