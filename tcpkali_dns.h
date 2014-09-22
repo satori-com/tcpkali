@@ -8,7 +8,7 @@
  */
 struct addresses {
     struct sockaddr *addrs;
-    int n_addrs;
+    size_t n_addrs;
 };
 
 /*

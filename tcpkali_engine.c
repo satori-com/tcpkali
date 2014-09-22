@@ -24,6 +24,17 @@
 
 #include <ev.h>
 
+struct connection {
+    ev_io watcher;
+    ev_timer bw_timer;
+    struct pacefier bw_pace;
+    off_t write_offset;
+    size_t data_sent;
+    size_t data_received;
+    uint16_t remote_index;  /* \x -> loop_arguments.params.addresses.addrs[x] */
+    struct ev_loop *loop;
+};
+
 struct loop_arguments {
     struct engine_params params;    /* A copy of engine parameters */
     unsigned int address_offset;    /* An offset into the params.addresses[] */
@@ -41,18 +52,6 @@ struct loop_arguments {
     size_t worker_connection_attempts;
     size_t worker_connection_failures;
     atomic_t open_connections;
-};
-
-struct connection {
-    ev_io watcher;
-    ev_timer bw_timer;
-    struct pacefier bw_pace;
-    off_t write_offset;
-    size_t data_sent;
-    size_t data_received;
-    struct sockaddr *remote_address;
-    struct remote_stats *remote_stats;
-    struct ev_loop *loop;
 };
 
 /*
@@ -80,7 +79,7 @@ static void start_new_connection(EV_P);
 static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
-static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats);
+static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
@@ -255,8 +254,10 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
 static void start_new_connection(EV_P) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct remote_stats *remote_stats;
+    size_t remote_index;
 
-    struct sockaddr *sa = pick_remote_address(largs, &remote_stats);
+    struct sockaddr *sa = pick_remote_address(largs, &remote_index);
+    remote_stats = &largs->remote_stats[remote_index];
 
     atomic_increment(&remote_stats->connection_attempts);
     largs->worker_connection_attempts++;
@@ -293,9 +294,8 @@ static void start_new_connection(EV_P) {
 
     struct connection *conn = calloc(1, sizeof(*conn));
     pacefier_init(&conn->bw_pace, ev_now(EV_A));
-    conn->remote_address = sa;
+    conn->remote_index = remote_index;
     conn->loop = EV_A;
-    conn->remote_stats = remote_stats;
     atomic_increment(&largs->open_connections);
 
     ev_io_init(&conn->watcher, connection_cb, sockfd,
@@ -307,14 +307,14 @@ static void start_new_connection(EV_P) {
 /*
  * Pick an address in a round-robin fashion, skipping certainly broken ones.
  */
-static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct remote_stats **remote_stats) {
+static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index) {
 
     /*
      * If it is known that a particular destination is broken, choose
      * the working one right away.
      */
-    int off = 0;
-    for(int attempts = 0; attempts < largs->params.addresses.n_addrs; attempts++) {
+    size_t off = 0;
+    for(size_t attempts = 0; attempts < largs->params.addresses.n_addrs; attempts++) {
         off = largs->address_offset++ % largs->params.addresses.n_addrs;
         struct remote_stats *rs = &largs->remote_stats[off];
         if(rs->connection_attempts > 10
@@ -325,7 +325,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct
         }
     }
 
-    *remote_stats = &largs->remote_stats[off];
+    *remote_index = off;
     return &largs->params.addresses.addrs[off];
 }
 
@@ -339,6 +339,7 @@ static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents
 static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+    struct sockaddr *remote = &largs->params.addresses.addrs[conn->remote_index];
 
     if(largs->thread_flags & THREAD_TERMINATING) {
         close_connection(largs, conn, CCR_CLEAN);
@@ -346,7 +347,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     }
 
     if(revents & EV_READ) {
-        char buf[65536];
+        char buf[16384];
         for(;;) {
             ssize_t rd = read(w->fd, buf, sizeof(buf));
             switch(rd) {
@@ -356,7 +357,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                     return;
                 default:
                     fprintf(stderr, "Closing %s: %s\n",
-                        format_sockaddr(conn->remote_address, buf, sizeof(buf)),
+                        format_sockaddr(remote, buf, sizeof(buf)),
                         strerror(errno));
                     close_connection(largs, conn, CCR_REMOTE);
                     return;
@@ -364,7 +365,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 /* Fall through */
             case 0:
                 fprintf(stderr, "Connection half-closed by %s\n",
-                    format_sockaddr(conn->remote_address, buf, sizeof(buf)));
+                    format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(largs, conn, CCR_REMOTE);
                 return;
             default:
@@ -405,7 +406,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             case EPIPE:
             default:
                 fprintf(stderr, "Connection reset by %s\n",
-                    format_sockaddr(conn->remote_address, buf, sizeof(buf)));
+                    format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(largs, conn, CCR_REMOTE);
                 return;
             }
@@ -438,7 +439,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 
 static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason) {
     if(reason != CCR_CLEAN) {
-        atomic_increment(&conn->remote_stats->connection_failures);
+        atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
         largs->worker_connection_failures++;
     }
     ev_timer_stop(conn->loop, &conn->bw_timer);
