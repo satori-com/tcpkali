@@ -6,7 +6,17 @@ int max_open_files();
 
 struct engine;
 
-struct engine *engine_start(struct addresses, int requested_workers, int channel_bandwidth_Bps, void *data, size_t data_size);
+struct engine_params {
+    struct addresses addresses;
+    size_t requested_workers;       /* Number of threads to start */
+    size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
+    /* Message data */
+    void *message_data;
+    size_t message_size;
+};
+
+struct engine *engine_start(struct engine_params);
+
 
 int engine_connections(struct engine *);
 void engine_initiate_new_connections(struct engine *, size_t n);

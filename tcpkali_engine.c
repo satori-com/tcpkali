@@ -25,17 +25,14 @@
 #include <ev.h>
 
 struct loop_arguments {
-    struct addresses addresses;
-    const void *sample_data;
-    size_t      sample_data_size;
+    struct engine_params params;    /* A copy of engine parameters */
+    unsigned int address_offset;    /* An offset into the params.addresses[] */
     struct remote_stats {
         atomic_t connection_attempts;
         atomic_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
-    unsigned int address_offset;
     int control_pipe;
     int thread_no;
-    int channel_bandwidth_Bps;  /* Bytes per second */
     size_t worker_data_sent;
     size_t worker_data_received;
     enum {
@@ -62,7 +59,7 @@ struct connection {
  * Engine abstracts over workers.
  */
 struct engine {
-    struct loop_arguments *loop_args;
+    struct loop_arguments *loops;
     pthread_t *threads;
     int wr_pipe;
     int n_workers;
@@ -88,7 +85,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 static void multiply_data(void **data, size_t *size);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 
-struct engine *engine_start(struct addresses addresses, int requested_workers, int channel_bandwidth_Bps, void *data, size_t data_size) {
+struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
     int rc = pipe(fildes);
@@ -97,7 +94,7 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, i
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
 
-    int n_workers = requested_workers;
+    int n_workers = params.requested_workers;
     if(!n_workers) {
         long n_cpus = number_of_cpus();
         assert(n_cpus >= 1);
@@ -105,26 +102,23 @@ struct engine *engine_start(struct addresses addresses, int requested_workers, i
         n_workers = n_cpus;
     }
 
+    /*
+     * For efficiency, make sure we concatenate a few data items
+     * instead of sending short messages one by one.
+     */
+    multiply_data(&params.message_data, &params.message_size);
+
     struct engine *eng = calloc(1, sizeof(*eng));
-    eng->loop_args = calloc(n_workers, sizeof(eng->loop_args[0]));
+    eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
     eng->wr_pipe = wr_pipe;
     eng->epoch = ev_now(EV_DEFAULT);
 
-    /*
-     * For efficiency, make sure we concatenate a few data items
-     * instead of sending short messages one by one.
-     */
-    multiply_data(&data, &data_size);
-
     for(int n = 0; n < eng->n_workers; n++) {
-        struct loop_arguments *loop_args = &eng->loop_args[n];
-        loop_args->channel_bandwidth_Bps = channel_bandwidth_Bps;
-        loop_args->sample_data = data;
-        loop_args->sample_data_size = data_size;
-        loop_args->addresses = addresses;
-        loop_args->remote_stats = calloc(addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
+        struct loop_arguments *loop_args = &eng->loops[n];
+        loop_args->params = params;
+        loop_args->remote_stats = calloc(params.addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->control_pipe = rd_pipe;
         loop_args->address_offset = n;
         loop_args->thread_no = n;
@@ -153,9 +147,9 @@ void engine_terminate(struct engine *eng) {
         void *value;
         pthread_join(eng->threads[n], &value);
         eng->total_data_sent +=
-            eng->loop_args[n].worker_data_sent;
+            eng->loops[n].worker_data_sent;
         eng->total_data_received +=
-            eng->loop_args[n].worker_data_received;
+            eng->loops[n].worker_data_received;
     }
     eng->n_workers = 0;
     char buf[64];
@@ -189,7 +183,7 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 int engine_connections(struct engine *eng) {
     int connections = 0;
     for(int n = 0; n < eng->n_workers; n++) {
-        connections += eng->loop_args[n].open_connections;
+        connections += eng->loops[n].open_connections;
     }
     return connections;
 }
@@ -305,7 +299,7 @@ static void start_new_connection(EV_P) {
     atomic_increment(&largs->open_connections);
 
     ev_io_init(&conn->watcher, connection_cb, sockfd,
-        EV_READ | (largs->sample_data_size ? EV_WRITE : 0));
+        EV_READ | (largs->params.message_size ? EV_WRITE : 0));
 
     ev_io_start(EV_A_ &conn->watcher);
 }
@@ -317,8 +311,8 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct
      * the working one right away.
      */
     int off = 0;
-    for(int attempts = 0; attempts < largs->addresses.n_addrs; attempts++) {
-        off = largs->address_offset++ % largs->addresses.n_addrs;
+    for(int attempts = 0; attempts < largs->params.addresses.n_addrs; attempts++) {
+        off = largs->address_offset++ % largs->params.addresses.n_addrs;
         struct remote_stats *rs = &largs->remote_stats[off];
         if(rs->connection_attempts > 10
             && rs->connection_failures == rs->connection_attempts) {
@@ -329,7 +323,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, struct
     }
 
     *remote_stats = &largs->remote_stats[off];
-    return &largs->addresses.addrs[off];
+    return &largs->params.addresses.addrs[off];
 }
 
 static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
@@ -381,13 +375,12 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         const void *position;
         size_t available_length;
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
-        if(largs->channel_bandwidth_Bps) {
-            size_t bytes = pacefier_allow(&conn->bw_pace,
-                                   largs->channel_bandwidth_Bps, ev_now(EV_A));
+        size_t bw = largs->params.channel_bandwidth_Bps;
+        if(bw != 0) {
+            size_t bytes = pacefier_allow(&conn->bw_pace, bw, ev_now(EV_A));
             const int smallest_block_to_send = 1460;    /* ~MTU */
             if(bytes == 0) {
-                double delay = (double)smallest_block_to_send
-                                    /largs->channel_bandwidth_Bps;
+                double delay = (double)smallest_block_to_send/bw;
                 if(delay > 1.0) delay = 1.0;
                 ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
                 ev_timer_init(&conn->bw_timer, conn_bw_timer, delay, 0.0);
@@ -416,10 +409,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         } else {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
-            if(largs->channel_bandwidth_Bps) {
-                pacefier_emitted(&conn->bw_pace, largs->channel_bandwidth_Bps,
-                                 wrote, ev_now(EV_A));
-            }
+            if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, ev_now(EV_A));
         }
     }
 
@@ -431,13 +421,13 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
  */
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length) {
 
-    size_t size = largs->sample_data_size;
+    size_t size = largs->params.message_size;
     size_t available = size - *current_offset;
     if(available) {
-        *position = largs->sample_data + *current_offset;
+        *position = largs->params.message_data + *current_offset;
         *available_length = available;
     } else {
-        *position = largs->sample_data;
+        *position = largs->params.message_data;
         *available_length = size;
         *current_offset = 0;
     }

@@ -39,7 +39,7 @@ static void usage(char *argv0);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end);
-static int read_in_file(const char *filename, char **data, size_t *size);
+static int read_in_file(const char *filename, void **data, size_t *size);
 
 /*
  * Parse command line options and kick off the engine.
@@ -47,12 +47,9 @@ static int read_in_file(const char *filename, char **data, size_t *size);
 int main(int argc, char **argv) {
     int opt_index;
     int max_connections = 1;
-    double connect_rate = 10;
-    double test_duration = 10;
-    char *message_data = 0;
-    size_t message_size = 0;
-    int requested_workers = 0;
-    int channel_bandwidth_Bps = 0;
+    double connect_rate = 10.0;     /* New connects per second. */
+    double test_duration = 10.0;    /* Seconds for the full test. */
+    struct engine_params engine_params = { };
     struct multiplier k_multiplier[] = {
         { "k", 1000 }
     };
@@ -112,42 +109,48 @@ int main(int argc, char **argv) {
             }
             break;
         case 'f':
-            if(message_data) {
+            if(engine_params.message_data) {
                 fprintf(stderr, "--message-file: Message is already specified.\n");
                 exit(EX_USAGE);
-            } else if(read_in_file(optarg, &message_data, &message_size) != 0) {
+            } else if(read_in_file(optarg, &engine_params.message_data,
+                                           &engine_params.message_size) != 0) {
                 exit(EX_DATAERR);
             }
             break;
-        case 'm':
-            if(message_data) {
+        case 'm': {
+            if(engine_params.message_data) {
                 fprintf(stderr, "-m: Message is already specified.\n");
                 exit(EX_USAGE);
             }
-            message_data = strdup(optarg);
-            message_size = strlen(optarg);
+            engine_params.message_data = strdup(optarg);
+            engine_params.message_size = strlen(optarg);
             break;
-        case 'w':
-            requested_workers = atoi(optarg);
-            if(requested_workers <= 0) {
+            }
+        case 'w': {
+            int n = atoi(optarg);
+            if(n <= 0) {
                 fprintf(stderr, "Expected --workers > 1\n");
                 exit(EX_USAGE);
             }
-            if(requested_workers > 64) {
+            if(n > 64) {
                 fprintf(stderr, "Value --workers=%d is unreasonably large\n",
-                    requested_workers);
+                    n);
                 exit(EX_USAGE);
             }
+            engine_params.requested_workers = n;
             break;
-        case 'b':
-            channel_bandwidth_Bps = parse_with_multipliers(optarg,
+            }
+        case 'b': {
+            int Bps = parse_with_multipliers(optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
-            if(channel_bandwidth_Bps < 0) {
-                fprintf(stderr, "Expecting non-negative --channel-bandwidth\n");
+            if(Bps < 0) {
+                fprintf(stderr, "Expecting positive --channel-bandwidth\n");
                 exit(EX_USAGE);
             }
+            engine_params.channel_bandwidth_Bps = Bps;
             break;
+            }
         }
     }
 
@@ -159,18 +162,17 @@ int main(int argc, char **argv) {
     /*
      * Pick multiple destinations from the command line, resolve them.
      */
-    struct addresses addresses;
-    addresses = resolve_remote_addresses(&argv[optind], argc-optind);
-    if(addresses.n_addrs == 0) {
+    engine_params.addresses = resolve_remote_addresses(&argv[optind],
+                                                       argc - optind);
+    if(engine_params.addresses.n_addrs == 0) {
         errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)\n");
     } else {
         fprint_addresses(stderr, "Destination: ",
-                               "\nDestination: ", "\n", addresses);
+                               "\nDestination: ", "\n",
+                               engine_params.addresses);
     }
 
-    struct engine *eng = engine_start(addresses, requested_workers,
-                                      channel_bandwidth_Bps,
-                                      message_data, message_size);
+    struct engine *eng = engine_start(engine_params);
 
 
     ev_now_update(EV_DEFAULT);
@@ -251,7 +253,7 @@ parse_with_multipliers(char *str, struct multiplier *ms, int n) {
 }
 
 static int
-read_in_file(const char *filename, char **data, size_t *size) {
+read_in_file(const char *filename, void **data, size_t *size) {
     FILE *fp = fopen(filename, "rb");
     if(!fp) {
         fprintf(stderr, "%s: %s\n", filename, strerror(errno));
@@ -269,7 +271,7 @@ read_in_file(const char *filename, char **data, size_t *size) {
     *data = malloc(off + 1);
     size_t r = fread(*data, 1, off, fp);
     assert((long)r == off);
-    (*data)[off] = '\0';    /* Just in case. */
+    ((char *)*data)[off] = '\0';    /* Just in case. */
     *size = off;
 
     fclose(fp);
