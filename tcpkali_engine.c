@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <assert.h>
+#include <sys/queue.h>
 
 #include <config.h>
 
@@ -33,6 +34,7 @@ struct connection {
     size_t data_received;
     uint16_t remote_index;  /* \x -> loop_arguments.params.addresses.addrs[x] */
     struct ev_loop *loop;
+    LIST_ENTRY(connection) hook;
 };
 
 struct loop_arguments {
@@ -46,9 +48,7 @@ struct loop_arguments {
     int thread_no;
     size_t worker_data_sent;
     size_t worker_data_received;
-    enum {
-        THREAD_TERMINATING = 1
-    } thread_flags;
+    LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
     size_t worker_connection_attempts;
     size_t worker_connection_failures;
     atomic_t open_connections;
@@ -77,6 +77,7 @@ enum connection_close_reason {
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
 static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason);
+static void close_all_connections(struct loop_arguments *largs, enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
@@ -116,6 +117,7 @@ struct engine *engine_start(struct engine_params params) {
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loops[n];
+        LIST_INIT(&loop_args->open_conns);
         loop_args->params = params;
         loop_args->remote_stats = calloc(params.addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->control_pipe = rd_pipe;
@@ -242,7 +244,7 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
         start_new_connection(EV_A);
         break;
     case 'T':
-        largs->thread_flags |= THREAD_TERMINATING;
+        close_all_connections(largs, CCR_CLEAN);
         ev_io_stop(EV_A_ w);
         break;
     default:
@@ -293,6 +295,7 @@ static void start_new_connection(EV_P) {
     }
 
     struct connection *conn = calloc(1, sizeof(*conn));
+    LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
     pacefier_init(&conn->bw_pace, ev_now(EV_A));
     conn->remote_index = remote_index;
     conn->loop = EV_A;
@@ -340,11 +343,6 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
     struct sockaddr *remote = &largs->params.addresses.addrs[conn->remote_index];
-
-    if(largs->thread_flags & THREAD_TERMINATING) {
-        close_connection(largs, conn, CCR_CLEAN);
-        return;
-    }
 
     if(revents & EV_READ) {
         char buf[16384];
@@ -437,6 +435,18 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
     }
 }
 
+/*
+ * Ungracefully close all connections and report accumulated stats
+ * back to the central loop structure.
+ */
+static void close_all_connections(struct loop_arguments *largs, enum connection_close_reason reason) {
+    struct connection *conn;
+    struct connection *tmpconn;
+    LIST_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
+        close_connection(largs, conn, reason);
+    }
+}
+
 static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason) {
     if(reason != CCR_CLEAN) {
         atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
@@ -447,6 +457,7 @@ static void close_connection(struct loop_arguments *largs, struct connection *co
     largs->worker_data_received += conn->data_received;
     atomic_decrement(&largs->open_connections);
     ev_io_stop(conn->loop, &conn->watcher);
+    LIST_REMOVE(conn, hook);
     free(conn);
 }
 
