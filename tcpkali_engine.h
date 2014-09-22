@@ -19,6 +19,9 @@ struct engine *engine_start(struct engine_params);
 
 
 int engine_connections(struct engine *);
+void engine_traffic(struct engine *, size_t *sent, size_t *received);
+
+
 void engine_initiate_new_connections(struct engine *, size_t n);
 
 void engine_terminate(struct engine *);

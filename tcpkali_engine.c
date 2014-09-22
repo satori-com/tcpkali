@@ -51,14 +51,15 @@ struct loop_arguments {
         atomic_t connection_attempts;
         atomic_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
+    ev_timer stats_timer;
     int control_pipe;
     int thread_no;
-    size_t worker_data_sent;
-    size_t worker_data_received;
+    atomic64_t worker_data_sent;
+    atomic64_t worker_data_received;
+    atomic_t open_connections;
     LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
     size_t worker_connection_attempts;
     size_t worker_connection_failures;
-    atomic_t open_connections;
 };
 
 /*
@@ -142,7 +143,6 @@ struct engine *engine_start(struct engine_params params) {
     return eng;
 }
 
-
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
@@ -196,6 +196,15 @@ int engine_connections(struct engine *eng) {
     return connections;
 }
 
+void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
+    *sent = 0;
+    *received = 0;
+    for(int n = 0; n < eng->n_workers; n++) {
+        *sent += eng->loops[n].worker_data_sent;
+        *received += eng->loops[n].worker_data_received;
+    }
+}
+
 void engine_initiate_new_connections(struct engine *eng, size_t n) {
     static char buf[1024];  /* This is thread-safe! */
     if(!buf[0]) {
@@ -208,6 +217,22 @@ void engine_initiate_new_connections(struct engine *eng, size_t n) {
     }
 }
 
+static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+
+    /*
+     * Move the connections' stats data out into the atomically managed
+     * thread-specific aggregate counters.
+     */
+    struct connection *conn;
+    LIST_FOREACH(conn, &largs->open_conns, hook) {
+        atomic_add(&largs->worker_data_sent, conn->data_sent);
+        atomic_add(&largs->worker_data_received, conn->data_received);
+        conn->data_sent = 0;
+        conn->data_received = 0;
+    }
+}
+
 static void *single_engine_loop_thread(void *argp) {
     struct loop_arguments *largs = (struct loop_arguments *)argp;
     struct ev_loop *loop = ev_loop_new(EVFLAG_AUTO);
@@ -215,6 +240,9 @@ static void *single_engine_loop_thread(void *argp) {
 
     ev_io control_watcher;
     signal(SIGPIPE, SIG_IGN);
+
+    ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
+    ev_timer_start(EV_A_ &largs->stats_timer);
 
     ev_io_init(&control_watcher, control_cb, largs->control_pipe, EV_READ);
     ev_io_start(loop, &control_watcher);
@@ -252,6 +280,7 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
         break;
     case 'T':
         close_all_connections(largs, CCR_CLEAN);
+        ev_timer_stop(EV_A_ &largs->stats_timer);
         ev_io_stop(EV_A_ w);
         break;
     default:
@@ -460,8 +489,8 @@ static void close_connection(struct loop_arguments *largs, struct connection *co
         largs->worker_connection_failures++;
     }
     ev_timer_stop(conn->loop, &conn->bw_timer);
-    largs->worker_data_sent += conn->data_sent;
-    largs->worker_data_received += conn->data_received;
+    atomic_add(&largs->worker_data_sent, conn->data_sent);
+    atomic_add(&largs->worker_data_received, conn->data_received);
     atomic_decrement(&largs->open_connections);
     ev_io_stop(conn->loop, &conn->watcher);
     LIST_REMOVE(conn, hook);

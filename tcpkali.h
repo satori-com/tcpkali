@@ -3,6 +3,8 @@
 
 #include <config.h>
 
+#define UNUSED  __attribute__((unused))
+
 #include "tcpkali_dns.h"
 #include "tcpkali_engine.h"
 
