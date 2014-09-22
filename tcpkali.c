@@ -163,6 +163,14 @@ int main(int argc, char **argv) {
         }
     }
 
+    /*
+     * Avoid spawning more threads than connections.
+     */
+    if(engine_params.requested_workers == 0
+        && conf.max_connections < number_of_cpus()) {
+        engine_params.requested_workers = conf.max_connections;
+    }
+
     if(optind == argc) {
         fprintf(stderr, "Expecting target <host:port> as an argument. See -h or --help.\n");
         exit(EX_USAGE);
@@ -310,11 +318,11 @@ usage(char *argv0) {
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
     "  -c, --connections <N>       Number of channels to open to the destinations\n"
+    "  --connect-rate <R=100>      Number of new connections per second\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    "  --connect-rate <R=100>      Number of new connections per second\n"
-    "  --workers <N=%ld>%s            Number of parallel threads to use\n"
     "  --channel-bandwidth <Bw>    Limit single channel bandwidth\n"
+    "  --workers <N=%ld>%s            Number of parallel threads to use\n"
     //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
     "  --duration <T=10s>          Load test for the specified amount of time\n"
