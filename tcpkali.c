@@ -43,39 +43,45 @@ static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, int *term_flag);
 static int read_in_file(const char *filename, void **data, size_t *size);
 
+static struct multiplier k_multiplier[] = {
+    { "k", 1000 }
+};
+static struct multiplier s_multiplier[] = {
+    { "ms", 0.001 },
+    { "s", 1 },
+    { "second", 1 },
+    { "seconds", 1 },
+    { "m", 60 },
+    { "min", 60 },
+    { "minute", 60 },
+    { "minutes", 60 }
+};
+static struct multiplier bw_multiplier[] = {
+    { "kBps", 1000 },
+    { "kbps", 1000/8 },
+    { "mBps", 1000000 },
+    { "mbps", 1000000/8 }
+};
+
 /*
  * Parse command line options and kick off the engine.
  */
 int main(int argc, char **argv) {
-    int opt_index;
-    int max_connections = 1;
-    double connect_rate = 10.0;     /* New connects per second. */
-    double test_duration = 10.0;    /* Seconds for the full test. */
+    struct {
+        int max_connections;
+        double connect_rate;     /* New connects per second. */
+        double test_duration;    /* Seconds for the full test. */
+    } conf = {
+        .max_connections = 1,
+        .connect_rate = 10.0,
+        .test_duration = 10.0
+    };
     struct engine_params engine_params;
-    struct multiplier k_multiplier[] = {
-        { "k", 1000 }
-    };
-    struct multiplier s_multiplier[] = {
-        { "ms", 0.001 },
-        { "s", 1 },
-        { "second", 1 },
-        { "seconds", 1 },
-        { "m", 60 },
-        { "min", 60 },
-        { "minute", 60 },
-        { "minutes", 60 }
-    };
-    struct multiplier bw_multiplier[] = {
-        { "kBps", 1000 },
-        { "kbps", 1000/8 },
-        { "mBps", 1000000 },
-        { "mbps", 1000000/8 }
-    };
     memset(&engine_params, 0, sizeof(engine_params));
 
     while(1) {
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:", cli_long_options, &opt_index);
+        c = getopt_long(argc, argv, "hc:m:f:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -83,30 +89,30 @@ int main(int argc, char **argv) {
             usage(argv[0]);
             exit(EX_USAGE);
         case 'c':
-            max_connections = atoi(optarg);
-            if(max_connections < 0) {
+            conf.max_connections = atoi(optarg);
+            if(conf.max_connections < 0) {
                 fprintf(stderr, "Expecting --connections > 0\n");
                 exit(EX_USAGE);
-            } else if(max_connections + 10 + number_of_cpus()
+            } else if(conf.max_connections + 10 + number_of_cpus()
                         > max_open_files()) {
                 fprintf(stderr, "Number of connections exceeds system limit on open files. Update `ulimit -n`.\n");
                 exit(EX_USAGE);
             }
             break;
         case 'r':
-            connect_rate = parse_with_multipliers(optarg,
+            conf.connect_rate = parse_with_multipliers(optarg,
                             k_multiplier,
                             sizeof(k_multiplier)/sizeof(k_multiplier[0]));
-            if(connect_rate <= 0) {
+            if(conf.connect_rate <= 0) {
                 fprintf(stderr, "Expected positive --connect-rate=%s\n", optarg);
                 exit(EX_USAGE);
             }
             break;
         case 't':
-            test_duration = parse_with_multipliers(optarg,
+            conf.test_duration = parse_with_multipliers(optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
-            if(test_duration <= 0) {
+            if(conf.test_duration <= 0) {
                 fprintf(stderr, "Expected positive --time=%s\n", optarg);
                 exit(EX_USAGE);
             }
@@ -188,24 +194,23 @@ int main(int argc, char **argv) {
     int term_flag = 0;
     flagify_term_signals(&term_flag);
 
-    ev_now_update(EV_DEFAULT);
-    double epoch_end = ev_now(EV_DEFAULT) + test_duration;
-    if(open_connections_until_maxed_out(eng, connect_rate,
-                                        max_connections, epoch_end,
+    double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
+    if(open_connections_until_maxed_out(eng, conf.connect_rate,
+                                        conf.max_connections, epoch_end,
                                         &term_flag) == 0) {
-        fprintf(stderr, "Ramped up to %d connections\n", max_connections);
+        fprintf(stderr, "Ramped up to %d connections\n", conf.max_connections);
     } else {
         fprintf(stderr, "Could not create %d connection%s"
                         " in allotted time (%0.1fs)\n",
-                        max_connections, max_connections==1?"":"s",
-                        test_duration);
+                        conf.max_connections, conf.max_connections==1?"":"s",
+                        conf.test_duration);
         exit(1);
     }
 
     /* Reset the test duration after ramp-up. */
-    for(epoch_end = ev_now(EV_DEFAULT) + test_duration;;) {
-        if(open_connections_until_maxed_out(eng, connect_rate,
-                                            max_connections, epoch_end,
+    for(epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
+        if(open_connections_until_maxed_out(eng, conf.connect_rate,
+                                            conf.max_connections, epoch_end,
                                             &term_flag) == -1)
             break;
     }

@@ -1,5 +1,5 @@
 
-SUBDIRS = libev
+SUBDIRS = libev libstatsd
 
 bin_PROGRAMS = tcpkali
 
