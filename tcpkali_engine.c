@@ -25,6 +25,13 @@
 
 #include <ev.h>
 
+#ifndef LIST_FOREACH_SAFE
+#define LIST_FOREACH_SAFE(var, head, field, tvar)             \
+    for ((var) = LIST_FIRST((head));                          \
+            (var) && ((tvar) = LIST_NEXT((var), field), 1);   \
+            (var) = (tvar))
+#endif
+
 struct connection {
     ev_io watcher;
     ev_timer bw_timer;
@@ -380,7 +387,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         size_t bw = largs->params.channel_bandwidth_Bps;
         if(bw != 0) {
             size_t bytes = pacefier_allow(&conn->bw_pace, bw, ev_now(EV_A));
-            const int smallest_block_to_send = 1460;    /* ~MTU */
+            const size_t smallest_block_to_send = 1460;    /* ~MTU */
             if(bytes == 0) {
                 double delay = (double)smallest_block_to_send/bw;
                 if(delay > 1.0) delay = 1.0;

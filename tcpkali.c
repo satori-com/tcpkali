@@ -1,6 +1,7 @@
 #include <getopt.h>
 #include <sysexits.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -50,7 +51,7 @@ int main(int argc, char **argv) {
     int max_connections = 1;
     double connect_rate = 10.0;     /* New connects per second. */
     double test_duration = 10.0;    /* Seconds for the full test. */
-    struct engine_params engine_params = { };
+    struct engine_params engine_params;
     struct multiplier k_multiplier[] = {
         { "k", 1000 }
     };
@@ -70,6 +71,7 @@ int main(int argc, char **argv) {
         { "mBps", 1000000 },
         { "mbps", 1000000/8 }
     };
+    memset(&engine_params, 0, sizeof(engine_params));
 
     while(1) {
         int c;
@@ -238,7 +240,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 
         size_t to_start = pacefier_allow(&keepup_pace, connect_rate, now);
         engine_initiate_new_connections(eng,
-            (ssize_t)to_start < conn_deficit ? to_start : conn_deficit);
+            to_start < (size_t)conn_deficit ? to_start : (size_t)conn_deficit);
         pacefier_emitted(&keepup_pace, connect_rate, to_start, now);
     }
 
