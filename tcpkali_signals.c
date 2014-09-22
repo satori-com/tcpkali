@@ -5,7 +5,6 @@
 
 static int *flagvar;
 static void signal_handler(int __attribute__((unused)) sig) {
-    signal(sig, SIG_DFL);
     fprintf(stderr, "Ctrl+C pressed, finishing up...\n");
     *flagvar = 1;
 }
@@ -28,9 +27,8 @@ flagify_term_signals(int *flag) {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_mask = set;
-    act.sa_flags = 0;
+    act.sa_flags = SA_RESETHAND | SA_RESTART;
     act.sa_handler = signal_handler;
-    sigemptyset(&act.sa_flags);
     flagvar = flag;
     sigaction(SIGINT, &act, 0);
 }
