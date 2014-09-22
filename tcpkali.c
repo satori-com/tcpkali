@@ -51,8 +51,6 @@ struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
     size_t initial_data_sent;
     size_t initial_data_received;
-    size_t current_data_sent;
-    size_t current_data_received;
 };
 
 /*
@@ -243,8 +241,6 @@ int main(int argc, char **argv) {
     };
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
-    checkpoint.current_data_sent = checkpoint.initial_data_sent;
-    checkpoint.current_data_received = checkpoint.initial_data_received;
 
     int print_stats = isatty(1);
     if(print_stats) {
@@ -310,10 +306,6 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 
             if(checkpoint) {
                 engine_traffic(eng, &sent, &rcvd);
-                size_t delta_sent = sent - checkpoint->current_data_sent;
-                size_t delta_rcvd = rcvd - checkpoint->current_data_received;
-                checkpoint->current_data_sent = sent;
-                checkpoint->current_data_received = rcvd;
                 double bandwidth = ((8 * (sent + rcvd)) / (now - checkpoint->epoch_start)) / 1000;
 
                 statsd_gauge(statsd, "traffic.kbps.total", bandwidth, 1);
