@@ -17,11 +17,12 @@ struct addresses {
  */
 struct addresses resolve_remote_addresses(char **hostports, int n);
 
-
 /*
  * Print the IP addresses into the specified stdio channel.
  */
 void fprint_addresses(FILE *, char *prefix, char *separator, char *suffix, struct addresses);
+
+void address_add(struct addresses *, struct sockaddr *sa);
 
 /*
  * Return the string representing the socket address.

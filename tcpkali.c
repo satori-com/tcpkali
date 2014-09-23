@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>  /* gethostbyname(3) */
 #include <libgen.h> /* basename(3) */
+#include <ifaddrs.h>
 #include <err.h>
 #include <errno.h>
 #include <assert.h>
@@ -35,7 +36,8 @@ static struct option cli_long_options[] = {
     { "channel-bandwidth", 1, 0, 'b' },
     { "statsd-server", 1, 0,    256 + 's' },
     { "statsd-port", 1, 0,      256 + 'p' },
-    { "statsd-namespace", 1, 0, 256 + 'n' }
+    { "statsd-namespace", 1, 0, 256 + 'n' },
+    { "listen-port", 1, 0, 'l' }
 };
 
 struct tcpkali_config {
@@ -45,6 +47,7 @@ struct tcpkali_config {
     char *statsd_server;
     int   statsd_port;
     char *statsd_namespace;
+    int   listen_port;      /* Port on which to listen. */
 };
 
 struct stats_checkpoint {
@@ -61,6 +64,7 @@ struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
 static int read_in_file(const char *filename, void **data, size_t *size);
+struct addresses enumerate_usable_addresses(int listen_port);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -92,14 +96,15 @@ int main(int argc, char **argv) {
         .test_duration = 10.0,
         .statsd_server = "127.0.0.1",
         .statsd_port = 8125,
-        .statsd_namespace = "tcpkali"
+        .statsd_namespace = "tcpkali",
+        .listen_port = 0
     };
     struct engine_params engine_params;
     memset(&engine_params, 0, sizeof(engine_params));
 
     while(1) {
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:m:f:l:w:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -178,6 +183,26 @@ int main(int argc, char **argv) {
             engine_params.channel_bandwidth_Bps = Bps;
             break;
             }
+        case 255+'s':
+            conf.statsd_server = strdup(optarg);
+            break;
+        case 255+'n':
+            conf.statsd_namespace = strdup(optarg);
+            break;
+        case 255+'p':
+            conf.statsd_port = atoi(optarg);
+            if(conf.statsd_port <= 0 || conf.statsd_port >= 65535) {
+                fprintf(stderr, "Port value --statsd-port is out of range\n");
+                exit(EX_USAGE);
+            }
+            break;
+        case 'l':
+            conf.listen_port = atoi(optarg);
+            if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
+                fprintf(stderr, "Port value --listen_port is out of range\n");
+                exit(EX_USAGE);
+            }
+            break;
         }
     }
 
@@ -185,27 +210,35 @@ int main(int argc, char **argv) {
      * Avoid spawning more threads than connections.
      */
     if(engine_params.requested_workers == 0
-        && conf.max_connections < number_of_cpus()) {
+        && conf.max_connections < number_of_cpus()
+        && conf.listen_port == 0) {
         engine_params.requested_workers = conf.max_connections;
     }
 
-    if(optind == argc) {
-        fprintf(stderr, "Expecting target <host:port> as an argument. See -h or --help.\n");
+    if(optind == argc && conf.listen_port == 0) {
+        fprintf(stderr, "Expecting target <host:port> or --listen-port. See -h or --help.\n");
         exit(EX_USAGE);
     }
 
     /*
      * Pick multiple destinations from the command line, resolve them.
      */
-    engine_params.addresses = resolve_remote_addresses(&argv[optind],
-                                                       argc - optind);
-    if(engine_params.addresses.n_addrs == 0) {
-        errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)\n");
+    if(argc - optind > 0) {
+        engine_params.remote_addresses
+            = resolve_remote_addresses(&argv[optind], argc - optind);
+        if(engine_params.remote_addresses.n_addrs == 0) {
+            errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)");
+        } else {
+            fprint_addresses(stderr, "Destination: ",
+                                   "\nDestination: ", "\n",
+                                   engine_params.remote_addresses);
+        }
     } else {
-        fprint_addresses(stderr, "Destination: ",
-                               "\nDestination: ", "\n",
-                               engine_params.addresses);
+        conf.max_connections = 0;
     }
+    if(conf.listen_port > 0)
+        engine_params.listen_addresses =
+            enumerate_usable_addresses(conf.listen_port);
 
     Statsd *statsd;
     statsd_new(&statsd, conf.statsd_server, conf.statsd_port, conf.statsd_namespace, NULL);
@@ -223,17 +256,23 @@ int main(int argc, char **argv) {
     int term_flag = 0;
     flagify_term_signals(&term_flag);
 
-    double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
-    if(open_connections_until_maxed_out(eng, conf.connect_rate,
-                                        conf.max_connections, epoch_end,
-                                        NULL, statsd, &term_flag, 0) == 0) {
-        fprintf(stderr, "Ramped up to %d connections\n", conf.max_connections);
-    } else {
-        fprintf(stderr, "Could not create %d connection%s"
-                        " in allotted time (%0.1fs)\n",
-                        conf.max_connections, conf.max_connections==1?"":"s",
-                        conf.test_duration);
-        exit(1);
+    /*
+     * Ramp up to the specified number of connections by opening them at a
+     * specifed --connect-rate.
+     */
+    if(conf.max_connections) {
+        double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
+        if(open_connections_until_maxed_out(eng, conf.connect_rate,
+                                            conf.max_connections, epoch_end,
+                                            NULL, statsd, &term_flag, 0) == 0) {
+            fprintf(stderr, "Ramped up to %d connections\n", conf.max_connections);
+        } else {
+            fprintf(stderr, "Could not create %d connection%s"
+                            " in allotted time (%0.1fs)\n",
+                            conf.max_connections, conf.max_connections==1?"":"s",
+                            conf.test_duration);
+            exit(1);
+        }
     }
 
     struct stats_checkpoint checkpoint = {
@@ -248,7 +287,7 @@ int main(int argc, char **argv) {
     }
 
     /* Reset the test duration after ramp-up. */
-    for(epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
+    for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
                                             &checkpoint,
@@ -312,7 +351,8 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 statsd_count(statsd, "traffic.data.sent", sent - checkpoint->initial_data_sent, 1);
                 statsd_count(statsd, "traffic.data.rcvd", rcvd - checkpoint->initial_data_received, 1);
                 if(print_stats) {
-                    printf("  Traffic %.3f Mbps      \r", bandwidth / 1000);
+                    printf("  Traffic %.3f Mbps (conns %ld)     \r",
+                        bandwidth / 1000, (long)conns);
                 }
             }
         }
@@ -372,6 +412,42 @@ read_in_file(const char *filename, void **data, size_t *size) {
     return 0;
 }
 
+struct addresses enumerate_usable_addresses(int listen_port) {
+    struct ifaddrs *ifaddr, *ifa;
+    struct addresses addresses = { 0, 0 };
+
+    if(getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+    for(ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if(ifa->ifa_addr == NULL)
+                   continue;
+
+        switch(ifa->ifa_addr->sa_family) {
+        case AF_INET:
+            ((struct sockaddr_in *)ifa->ifa_addr)->sin_port = htons(listen_port);
+            address_add(&addresses, ifa->ifa_addr);
+            break;
+        case AF_INET6:
+            ((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_port = htons(listen_port);
+            address_add(&addresses, ifa->ifa_addr);
+            break;
+        default:
+            continue;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+
+    fprint_addresses(stderr, "Listen on: ",
+                               "\nListen on: ", "\n",
+                               addresses);
+
+    return addresses;
+}
+
 /*
  * Display the Usage screen.
  */
@@ -387,7 +463,8 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --channel-bandwidth <Bw>    Limit single channel bandwidth\n"
-    "  --workers <N=%ld>%s            Number of parallel threads to use\n"
+    "  -l, --listen-port <port>        Listen on the specified port\n"
+    "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"

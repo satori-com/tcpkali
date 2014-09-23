@@ -7,7 +7,8 @@ int max_open_files();
 struct engine;
 
 struct engine_params {
-    struct addresses addresses;
+    struct addresses remote_addresses;
+    struct addresses listen_addresses;
     size_t requested_workers;       /* Number of threads to start */
     size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
     /* Message data */

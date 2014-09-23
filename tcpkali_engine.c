@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <sys/queue.h>
+#include <sysexits.h>
 
 #include <config.h>
 
@@ -39,14 +40,18 @@ struct connection {
     off_t write_offset;
     size_t data_sent;
     size_t data_received;
-    uint16_t remote_index;  /* \x -> loop_arguments.params.addresses.addrs[x] */
-    struct ev_loop *loop;
+    enum type {
+        CONN_NORMAL,
+        CONN_ACCEPTOR,
+        CONN_DEVNULL
+    } conn_type:8;
+    int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     LIST_ENTRY(connection) hook;
 };
 
 struct loop_arguments {
     struct engine_params params;    /* A copy of engine parameters */
-    unsigned int address_offset;    /* An offset into the params.addresses[] */
+    unsigned int address_offset;    /* An offset into the params.remote_addresses[] */
     struct remote_stats {
         atomic_t connection_attempts;
         atomic_t connection_failures;
@@ -60,6 +65,7 @@ struct loop_arguments {
     LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
     size_t worker_connection_attempts;
     size_t worker_connection_failures;
+    size_t worker_connections_accepted;
 };
 
 /*
@@ -84,10 +90,12 @@ enum connection_close_reason {
 };
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
-static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason);
-static void close_all_connections(struct loop_arguments *largs, enum connection_close_reason reason);
+static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason);
+static void close_all_connections(EV_P_ enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
+static void devnull_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
+static void accept_cb(EV_P_ ev_io *w, int revents);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
@@ -127,7 +135,7 @@ struct engine *engine_start(struct engine_params params) {
         struct loop_arguments *loop_args = &eng->loops[n];
         LIST_INIT(&loop_args->open_conns);
         loop_args->params = params;
-        loop_args->remote_stats = calloc(params.addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
+        loop_args->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->control_pipe = rd_pipe;
         loop_args->address_offset = n;
         loop_args->thread_no = n;
@@ -241,6 +249,47 @@ static void *single_engine_loop_thread(void *argp) {
     ev_io control_watcher;
     signal(SIGPIPE, SIG_IGN);
 
+    /*
+     * Open all listening sockets, if they are specified.
+     */
+    if(largs->params.listen_addresses.n_addrs) {
+        int opened_listening_sockets = 0;
+        for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
+            struct sockaddr *sa = &largs->params.listen_addresses.addrs[n];
+            int lsock = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
+            assert(lsock != -1);
+            int rc = fcntl(lsock, F_SETFL, fcntl(lsock, F_GETFL) | O_NONBLOCK);
+            assert(rc != -1);
+            int on = ~0;
+            rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
+            assert(rc != -1);
+            rc = bind(lsock, sa, sizeof(*sa));
+            if(rc == -1) {
+                if(errno == EINVAL) {
+                    continue;
+                } else {
+                    exit(EX_UNAVAILABLE);
+                }
+            }
+            assert(rc == 0);
+            rc = listen(lsock, 256);
+            assert(rc == 0);
+            opened_listening_sockets++;
+
+            struct connection *conn = calloc(1, sizeof(*conn));
+            LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
+            pacefier_init(&conn->bw_pace, ev_now(EV_A));
+            conn->conn_type = CONN_ACCEPTOR;
+            ev_io_init(&conn->watcher, accept_cb, lsock, EV_READ);
+            ev_io_start(EV_A_ &conn->watcher);
+        }
+        if(!opened_listening_sockets) {
+            fprintf(stderr, "Could not listen on any local sockets!\n");
+            exit(EX_UNAVAILABLE);
+        }
+    }
+
+
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
     ev_timer_start(EV_A_ &largs->stats_timer);
 
@@ -253,12 +302,14 @@ static void *single_engine_loop_thread(void *argp) {
             "  %d open_connections\n"
             "  %ld connection_attempts\n"
             "  %ld connection_failures\n"
+            "  %ld connections_accepted\n"
             "  %ld worker_data_sent\n"
             "  %ld worker_data_received\n",
         largs->thread_no,
         (int)largs->open_connections,
         (long)largs->worker_connection_attempts,
         (long)largs->worker_connection_failures,
+        (long)largs->worker_connections_accepted,
         (long)largs->worker_data_sent,
         (long)largs->worker_data_received);
 
@@ -279,9 +330,10 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
         start_new_connection(EV_A);
         break;
     case 'T':
-        close_all_connections(largs, CCR_CLEAN);
+        close_all_connections(EV_A_ CCR_CLEAN);
         ev_timer_stop(EV_A_ &largs->stats_timer);
         ev_io_stop(EV_A_ w);
+        ev_break(EV_A_ EVBREAK_ALL);
         break;
     default:
         fprintf(stderr, "Unknown operation '%c' from a control channel %d\n",
@@ -311,6 +363,9 @@ static void start_new_connection(EV_P) {
     }
     int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
     assert(rc != -1);
+    int on = ~0;
+    rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+    assert(rc != -1);
 
     rc = connect(sockfd, sa, sizeof(*sa));
     if(rc == -1) {
@@ -334,7 +389,6 @@ static void start_new_connection(EV_P) {
     LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
     pacefier_init(&conn->bw_pace, ev_now(EV_A));
     conn->remote_index = remote_index;
-    conn->loop = EV_A;
     atomic_increment(&largs->open_connections);
 
     ev_io_init(&conn->watcher, connection_cb, sockfd,
@@ -353,8 +407,8 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
      * the working one right away.
      */
     size_t off = 0;
-    for(size_t attempts = 0; attempts < largs->params.addresses.n_addrs; attempts++) {
-        off = largs->address_offset++ % largs->params.addresses.n_addrs;
+    for(size_t attempts = 0; attempts < largs->params.remote_addresses.n_addrs; attempts++) {
+        off = largs->address_offset++ % largs->params.remote_addresses.n_addrs;
         struct remote_stats *rs = &largs->remote_stats[off];
         if(rs->connection_attempts > 10
             && rs->connection_failures == rs->connection_attempts) {
@@ -365,7 +419,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     }
 
     *remote_index = off;
-    return &largs->params.addresses.addrs[off];
+    return &largs->params.remote_addresses.addrs[off];
 }
 
 static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
@@ -375,10 +429,57 @@ static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents
     ev_io_set(&conn->watcher, conn->watcher.fd, EV_READ | EV_WRITE);
 }
 
+static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    int sockfd = accept(w->fd, 0, 0);
+    if(sockfd == -1)
+        return;
+
+    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+    assert(rc != -1);
+
+    largs->worker_connections_accepted++;
+
+    struct connection *conn = calloc(1, sizeof(*conn));
+    LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
+    conn->conn_type = CONN_DEVNULL;
+
+    ev_io_init(&conn->watcher, devnull_cb, sockfd, EV_READ);
+    ev_io_start(EV_A_ &conn->watcher);
+}
+
+static void devnull_cb(EV_P_ ev_io *w, int revents) {
+    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+
+    if(revents & EV_READ) {
+        char buf[16384];
+        for(;;) {
+            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            switch(rd) {
+            case -1:
+                switch(errno) {
+                case EAGAIN:
+                    return;
+                default:
+                    close_connection(EV_A_ conn, CCR_REMOTE);
+                    return;
+                }
+                /* Fall through */
+            case 0:
+                close_connection(EV_A_ conn, CCR_REMOTE);
+                return;
+            default:
+                conn->data_received += rd;
+                break;
+            }
+        }
+    }
+}
+
 static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
-    struct sockaddr *remote = &largs->params.addresses.addrs[conn->remote_index];
+    struct sockaddr *remote = &largs->params.remote_addresses.addrs[conn->remote_index];
 
     if(revents & EV_READ) {
         char buf[16384];
@@ -393,14 +494,14 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                     fprintf(stderr, "Closing %s: %s\n",
                         format_sockaddr(remote, buf, sizeof(buf)),
                         strerror(errno));
-                    close_connection(largs, conn, CCR_REMOTE);
+                    close_connection(EV_A_ conn, CCR_REMOTE);
                     return;
                 }
                 /* Fall through */
             case 0:
                 fprintf(stderr, "Connection half-closed by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
-                close_connection(largs, conn, CCR_REMOTE);
+                close_connection(EV_A_ conn, CCR_REMOTE);
                 return;
             default:
                 conn->data_received += rd;
@@ -441,7 +542,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             default:
                 fprintf(stderr, "Connection reset by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
-                close_connection(largs, conn, CCR_REMOTE);
+                close_connection(EV_A_ conn, CCR_REMOTE);
                 return;
             }
         } else {
@@ -475,24 +576,28 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
  * Ungracefully close all connections and report accumulated stats
  * back to the central loop structure.
  */
-static void close_all_connections(struct loop_arguments *largs, enum connection_close_reason reason) {
+static void close_all_connections(EV_P_ enum connection_close_reason reason) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn;
     struct connection *tmpconn;
     LIST_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
-        close_connection(largs, conn, reason);
+        close_connection(EV_A_ conn, reason);
     }
 }
 
-static void close_connection(struct loop_arguments *largs, struct connection *conn, enum connection_close_reason reason) {
+static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
     if(reason != CCR_CLEAN) {
-        atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
+        if(conn->conn_type == CONN_NORMAL)
+            atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
         largs->worker_connection_failures++;
     }
-    ev_timer_stop(conn->loop, &conn->bw_timer);
+    ev_timer_stop(EV_A_ &conn->bw_timer);
     atomic_add(&largs->worker_data_sent, conn->data_sent);
     atomic_add(&largs->worker_data_received, conn->data_received);
-    atomic_decrement(&largs->open_connections);
-    ev_io_stop(conn->loop, &conn->watcher);
+    if(conn->conn_type == CONN_NORMAL)
+        atomic_decrement(&largs->open_connections);
+    ev_io_stop(EV_A_ &conn->watcher);
     LIST_REMOVE(conn, hook);
     free(conn);
 }

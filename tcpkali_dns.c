@@ -14,6 +14,15 @@
 
 #include "tcpkali.h"
 
+void address_add(struct addresses *aseq, struct sockaddr *sa) {
+    /* Reallocate a bigger list and continue. Don't laugh. */
+    aseq->addrs = realloc(aseq->addrs,
+                          (aseq->n_addrs + 1) * sizeof(aseq->addrs[0]));
+    assert(aseq->addrs);
+    aseq->addrs[aseq->n_addrs] = *sa;
+    aseq->n_addrs++;
+}
+
 /*
  * Convert the given host:port strings into a sequence of all
  * socket addresses corresponding to the ip:port combinations.
@@ -25,12 +34,9 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
     /*
      * Allocate a bunch of address structures.
      */
-    size_t n_addrs = 0;
-    size_t n_addrs_max = 64;
-    struct sockaddr *addrs = malloc(n_addrs_max * sizeof(addrs[0]));
-    assert(addrs);
+    struct addresses addresses = { 0, 0 };
 
-    for(size_t n = 0; n < nhostports; n++) {
+    for(int n = 0; n < nhostports; n++) {
         char *hostport = hostports[n];
         char *service_string = strchr(hostport, ':');
         if(service_string) {
@@ -57,20 +63,12 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
 
         /* Move all of the addresses into the separate storage */
         for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
-            if(n_addrs >= n_addrs_max) {
-                /* Reallocate a bigger list and continue. */
-                n_addrs_max *= 1.5;
-                addrs = realloc(addrs, n_addrs_max * sizeof(addrs[0]));
-                assert(addrs);
-            }
-            addrs[n_addrs] = *tmp->ai_addr;
-            n_addrs++;
+            address_add(&addresses, tmp->ai_addr);
+
         }
 
         freeaddrinfo(res);
     }
-
-    struct addresses addresses = { .addrs = addrs, .n_addrs = n_addrs };
 
     return addresses;
 }
