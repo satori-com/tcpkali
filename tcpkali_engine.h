@@ -19,7 +19,10 @@ struct engine_params {
 struct engine *engine_start(struct engine_params);
 
 
-int engine_connections(struct engine *);
+/*
+ * Report the number of opened connections by categories.
+ */
+void engine_connections(struct engine *, size_t *incoming, size_t *outgoing);
 void engine_traffic(struct engine *, size_t *sent, size_t *received);
 
 

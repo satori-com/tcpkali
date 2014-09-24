@@ -41,9 +41,9 @@ struct connection {
     size_t data_sent;
     size_t data_received;
     enum type {
-        CONN_NORMAL,
+        CONN_OUTGOING,
+        CONN_INCOMING,
         CONN_ACCEPTOR,
-        CONN_DEVNULL
     } conn_type:8;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     LIST_ENTRY(connection) hook;
@@ -61,7 +61,8 @@ struct loop_arguments {
     int thread_no;
     atomic64_t worker_data_sent;
     atomic64_t worker_data_received;
-    atomic_t open_connections;
+    atomic_t incoming_connections;
+    atomic_t outgoing_connections;
     LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
     size_t worker_connection_attempts;
     size_t worker_connection_failures;
@@ -196,12 +197,15 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 /*
  * Get number of connections opened by all of the workers.
  */
-int engine_connections(struct engine *eng) {
-    int connections = 0;
+void engine_connections(struct engine *eng, size_t *incoming, size_t *outgoing) {
+    size_t c_in = 0;
+    size_t c_out = 0;
     for(int n = 0; n < eng->n_workers; n++) {
-        connections += eng->loops[n].open_connections;
+        c_in  += eng->loops[n].incoming_connections;
+        c_out += eng->loops[n].outgoing_connections;
     }
-    return connections;
+    *incoming = c_in;
+    *outgoing = c_out;
 }
 
 void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
@@ -299,14 +303,15 @@ static void *single_engine_loop_thread(void *argp) {
     ev_run(loop, 0);
 
     fprintf(stderr, "Exiting cpu thread %d\n"
-            "  %d open_connections\n"
+            "  %d/%d open connections\n"
             "  %ld connection_attempts\n"
             "  %ld connection_failures\n"
             "  %ld connections_accepted\n"
             "  %ld worker_data_sent\n"
             "  %ld worker_data_received\n",
         largs->thread_no,
-        (int)largs->open_connections,
+        (int)largs->incoming_connections,
+        (int)largs->outgoing_connections,
         (long)largs->worker_connection_attempts,
         (long)largs->worker_connection_failures,
         (long)largs->worker_connections_accepted,
@@ -389,7 +394,7 @@ static void start_new_connection(EV_P) {
     LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
     pacefier_init(&conn->bw_pace, ev_now(EV_A));
     conn->remote_index = remote_index;
-    atomic_increment(&largs->open_connections);
+    atomic_increment(&largs->outgoing_connections);
 
     ev_io_init(&conn->watcher, connection_cb, sockfd,
         EV_READ | (largs->params.message_size ? EV_WRITE : 0));
@@ -442,7 +447,8 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
 
     struct connection *conn = calloc(1, sizeof(*conn));
     LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
-    conn->conn_type = CONN_DEVNULL;
+    conn->conn_type = CONN_ACCEPTOR;
+    atomic_increment(&largs->incoming_connections);
 
     ev_io_init(&conn->watcher, devnull_cb, sockfd, EV_READ);
     ev_io_start(EV_A_ &conn->watcher);
@@ -588,15 +594,29 @@ static void close_all_connections(EV_P_ enum connection_close_reason reason) {
 static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     if(reason != CCR_CLEAN) {
-        if(conn->conn_type == CONN_NORMAL)
+        switch(conn->conn_type) {
+        case CONN_OUTGOING:
             atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
+        case CONN_INCOMING:
+        case CONN_ACCEPTOR:
+            /* Do not affect counters. */
+            break;
+        }
         largs->worker_connection_failures++;
     }
     ev_timer_stop(EV_A_ &conn->bw_timer);
     atomic_add(&largs->worker_data_sent, conn->data_sent);
     atomic_add(&largs->worker_data_received, conn->data_received);
-    if(conn->conn_type == CONN_NORMAL)
-        atomic_decrement(&largs->open_connections);
+    switch(conn->conn_type) {
+    case CONN_INCOMING:
+        atomic_decrement(&largs->incoming_connections);
+        break;
+    case CONN_OUTGOING:
+        atomic_decrement(&largs->outgoing_connections);
+        break;
+    case CONN_ACCEPTOR:
+        break;
+    }
     ev_io_stop(EV_A_ &conn->watcher);
     LIST_REMOVE(conn, hook);
     free(conn);

@@ -25,6 +25,7 @@
 /*
  * Describe the command line options.
  */
+#define CLI_STATSD_OFFSET   256
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
     { "connections", 0, 0, 'c' },
@@ -34,21 +35,32 @@ static struct option cli_long_options[] = {
     { "message-file", 1, 0, 'f' },
     { "workers", 1, 0, 'w' },
     { "channel-bandwidth", 1, 0, 'b' },
-    { "statsd-server", 1, 0,    256 + 's' },
-    { "statsd-port", 1, 0,      256 + 'p' },
-    { "statsd-namespace", 1, 0, 256 + 'n' },
+    { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
+    { "statsd-server", 1, 0,    CLI_STATSD_OFFSET + 's' },
+    { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
+    { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
     { "listen-port", 1, 0, 'l' }
 };
 
-struct tcpkali_config {
+static struct tcpkali_config {
     int max_connections;
     double connect_rate;     /* New connects per second. */
     double test_duration;    /* Seconds for the full test. */
+    int   statsd_enable;
     char *statsd_server;
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
-};
+} default_config = {
+        .max_connections = 1,
+        .connect_rate = 10.0,
+        .test_duration = 10.0,
+        .statsd_enable = 0,
+        .statsd_server = "127.0.0.1",
+        .statsd_port = 8125,
+        .statsd_namespace = "tcpkali",
+        .listen_port = 0
+    };
 
 struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
@@ -65,6 +77,7 @@ static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
 static int read_in_file(const char *filename, void **data, size_t *size);
 struct addresses enumerate_usable_addresses(int listen_port);
+static void print_connections_line(int conns, int max_conns);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -80,9 +93,11 @@ static struct multiplier s_multiplier[] = {
     { "minutes", 60 }
 };
 static struct multiplier bw_multiplier[] = {
-    { "kBps", 1000 },
+    { "bps", 1.0/8 },
     { "kbps", 1000/8 },
     { "Mbps", 1000000/8 },
+    { "Bps", 1 },
+    { "kBps", 1000 },
     { "MBps", 1000000 }
 };
 
@@ -90,15 +105,7 @@ static struct multiplier bw_multiplier[] = {
  * Parse command line options and kick off the engine.
  */
 int main(int argc, char **argv) {
-    struct tcpkali_config conf = {
-        .max_connections = 1,
-        .connect_rate = 10.0,
-        .test_duration = 10.0,
-        .statsd_server = "127.0.0.1",
-        .statsd_port = 8125,
-        .statsd_namespace = "tcpkali",
-        .listen_port = 0
-    };
+    struct tcpkali_config conf = default_config;
     struct engine_params engine_params;
     memset(&engine_params, 0, sizeof(engine_params));
 
@@ -109,7 +116,7 @@ int main(int argc, char **argv) {
             break;
         switch(c) {
         case 'h':
-            usage(argv[0], &conf);
+            usage(argv[0], &default_config);
             exit(EX_USAGE);
         case 'c':
             conf.max_connections = atoi(optarg);
@@ -176,20 +183,23 @@ int main(int argc, char **argv) {
             int Bps = parse_with_multipliers(optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
-            if(Bps < 0) {
-                fprintf(stderr, "Expecting positive --channel-bandwidth\n");
+            if(Bps <= 0) {
+                fprintf(stderr, "Expecting --channel-bandwidth > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_bandwidth_Bps = Bps;
             break;
             }
-        case 255+'s':
+        case CLI_STATSD_OFFSET + 'e':
+            conf.statsd_enable = 1;
+            break;
+        case CLI_STATSD_OFFSET+'s':
             conf.statsd_server = strdup(optarg);
             break;
-        case 255+'n':
+        case CLI_STATSD_OFFSET+'n':
             conf.statsd_namespace = strdup(optarg);
             break;
-        case 255+'p':
+        case CLI_STATSD_OFFSET+'p':
             conf.statsd_port = atoi(optarg);
             if(conf.statsd_port <= 0 || conf.statsd_port >= 65535) {
                 fprintf(stderr, "Port value --statsd-port is out of range\n");
@@ -203,6 +213,9 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        default:
+            usage(argv[0], &default_config);
+            exit(EX_USAGE);
         }
     }
 
@@ -217,6 +230,7 @@ int main(int argc, char **argv) {
 
     if(optind == argc && conf.listen_port == 0) {
         fprintf(stderr, "Expecting target <host:port> or --listen-port. See -h or --help.\n");
+        usage(argv[0], &default_config);
         exit(EX_USAGE);
     }
 
@@ -241,7 +255,13 @@ int main(int argc, char **argv) {
             enumerate_usable_addresses(conf.listen_port);
 
     Statsd *statsd;
-    statsd_new(&statsd, conf.statsd_server, conf.statsd_port, conf.statsd_namespace, NULL);
+    if(conf.statsd_enable) {
+        statsd_new(&statsd, conf.statsd_server,
+                            conf.statsd_port,
+                            conf.statsd_namespace, NULL);
+    } else {
+        statsd = 0;
+    }
 
     /* Block term signals so they're not scheduled in the worker threads. */
     block_term_signals();
@@ -256,6 +276,11 @@ int main(int argc, char **argv) {
     int term_flag = 0;
     flagify_term_signals(&term_flag);
 
+    int print_stats = isatty(1);
+    if(print_stats) {
+        setvbuf(stdout, 0, _IONBF, 0);
+    }
+
     /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
@@ -264,8 +289,11 @@ int main(int argc, char **argv) {
         double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            NULL, statsd, &term_flag, 0) == 0) {
-            fprintf(stderr, "Ramped up to %d connections\n", conf.max_connections);
+                                            NULL, statsd, &term_flag,
+                                            print_stats) == 0) {
+            char *clear_line = print_stats ? "\033[K" : "";
+            printf("%sRamped up to %d connections.\n",
+                clear_line, conf.max_connections);
         } else {
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%0.1fs)\n",
@@ -280,11 +308,6 @@ int main(int argc, char **argv) {
     };
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
-
-    int print_stats = isatty(1);
-    if(print_stats) {
-        setvbuf(stdout, 0, _IONBF, 0);
-    }
 
     /* Reset the test duration after ramp-up. */
     for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
@@ -324,8 +347,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
-        size_t conns = engine_connections(eng);
-        ssize_t conn_deficit = max_connections - conns;
+        size_t conns_in, conns_out;
+        engine_connections(eng, &conns_in, &conns_out);
+        ssize_t conn_deficit = max_connections - conns_out;
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
         size_t to_start = allowed;
@@ -339,21 +363,34 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 
         if(now - last_stats_sent > 0.25) {
             size_t sent, rcvd;
-            statsd_gauge(statsd, "connections.total", conns, 1);
-            statsd_count(statsd, "connections.opened", to_start, 1);
+            if(statsd) {
+                statsd_gauge(statsd, "connections.total.in", conns_in, 1);
+                statsd_gauge(statsd, "connections.total.out", conns_out, 1);
+                statsd_count(statsd, "connections.opened", to_start, 1);
+            }
             last_stats_sent = now;
 
             if(checkpoint) {
                 engine_traffic(eng, &sent, &rcvd);
-                double bandwidth = ((8 * (sent + rcvd)) / (now - checkpoint->epoch_start)) / 1000;
-
-                statsd_gauge(statsd, "traffic.kbps.total", bandwidth, 1);
-                statsd_count(statsd, "traffic.data.sent", sent - checkpoint->initial_data_sent, 1);
-                statsd_count(statsd, "traffic.data.rcvd", rcvd - checkpoint->initial_data_received, 1);
-                if(print_stats) {
-                    printf("  Traffic %.3f Mbps (conns %ld)     \r",
-                        bandwidth / 1000, (long)conns);
+                double bps_in = (8 * rcvd) / (now - checkpoint->epoch_start);
+                double bps_out = (8 * sent) / (now - checkpoint->epoch_start);
+                if(statsd) {
+                    statsd_gauge(statsd, "traffic.bitrate.total",
+                                            bps_in+bps_out, 1);
+                    statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
+                    statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
+                    statsd_count(statsd, "traffic.data.sent",
+                                    sent - checkpoint->initial_data_sent, 1);
+                    statsd_count(statsd, "traffic.data.rcvd",
+                                    rcvd - checkpoint->initial_data_received,1);
                 }
+                if(print_stats) {
+                    printf("  Traffic %.3f Mbps (conns in %ld out %ld/%d)     \r",
+                        (bps_in+bps_out) / (1000000),
+                        (long)conns_in, (long)conns_out, max_connections);
+                }
+            } else if(print_stats) {
+                print_connections_line(conns_out, max_connections);
             }
         }
 
@@ -363,6 +400,22 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     }
 
     return -1;
+}
+
+static void
+print_connections_line(int conns, int max_conns) {
+    char buf[80];
+    buf[0] = '|';
+    const int ribbon_width = 60;
+    int at = 1 + ((ribbon_width - 2) * conns) / max_conns;
+    for(int i = 1; i < ribbon_width; i++) {
+        if (i  < at)     buf[i] = '=';
+        else if(i  > at) buf[i] = '-';
+        else if(i == at) buf[i] = '>';
+    }
+    snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
+        "| %d of %d", conns, max_conns);
+    printf("%s  \r", buf);
 }
 
 static double
@@ -376,6 +429,7 @@ parse_with_multipliers(char *str, struct multiplier *ms, int n) {
         if(strcmp(endptr, ms->prefix) == 0) {
             value *= ms->mult;
             endptr += strlen(endptr);
+            break;
         }
     }
     if(*endptr) {
@@ -458,24 +512,26 @@ usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
-    "  -c, --connections <N>       Number of channels to open to the destinations\n"
+    "  -c, --connections <N>       Number of connections to open to the destinations\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    "  --channel-bandwidth <Bw>    Limit single channel bandwidth\n"
+    //"  --message-rate <R>          Messages per second per connection to send\n"
+    "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
     "  -l, --listen-port <port>        Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
+    "  --duration <T=10s>          Load test for the specified amount of time\n"
+    "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
-    //"  --message-rate <N>          Generate N messages per second per channel\n"
     //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
-    "  --duration <T=10s>          Load test for the specified amount of time\n"
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (megabytes per second)\n"
     "  <T>:  s, m, h (seconds, minutes, hours)\n",
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",
+    conf->statsd_enable ? "enabled" : "disabled",
     conf->statsd_port,
     conf->statsd_namespace
     );
