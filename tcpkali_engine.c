@@ -322,7 +322,7 @@ static void *single_engine_loop_thread(void *argp) {
     connections_flush_stats(EV_A);
 
     fprintf(stderr, "Exiting worker %d\n"
-            "  %d/%d open connections\n"
+            "  %d↓, %d↑ open connections\n"
             "  %ld connection_attempts\n"
             "  %ld connection_failures\n"
             "  %ld connections_accepted\n"
