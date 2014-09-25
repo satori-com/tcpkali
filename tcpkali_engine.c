@@ -40,6 +40,10 @@ struct connection {
     off_t write_offset;
     size_t data_sent;
     size_t data_received;
+    enum state {
+        CSTATE_CONNECTED,
+        CSTATE_CONNECTING,
+    } conn_state:8;
     enum type {
         CONN_OUTGOING,
         CONN_INCOMING,
@@ -65,9 +69,10 @@ struct loop_arguments {
     atomic_t incoming_connections;
     atomic_t outgoing_connections;
     LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
-    size_t worker_connection_attempts;
-    size_t worker_connection_failures;
-    size_t worker_connections_accepted;
+    unsigned long worker_connections_initiated;
+    unsigned long worker_connections_accepted;
+    unsigned long worker_connection_failures;
+    unsigned long worker_connection_timeouts;
 };
 
 /*
@@ -87,7 +92,9 @@ struct engine {
  * Helper functions defined at the end of the file.
  */
 enum connection_close_reason {
-    CCR_CLEAN,
+    CCR_CLEAN,  /* No failure */
+    CCR_LIFETIME, /* Channel lifetime limit (no failure) */
+    CCR_TIMEOUT, /* Connection timeout */
     CCR_REMOTE, /* Remote side closed connection */
 };
 static void *single_engine_loop_thread(void *argp);
@@ -100,6 +107,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents);
 static void devnull_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static void accept_cb(EV_P_ ev_io *w, int revents);
+static void conn_timer(EV_P_ ev_timer *w, int revents); /* Timeout timer */
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
@@ -181,9 +189,10 @@ void engine_terminate(struct engine *eng) {
     fprintf(stderr, "Total data received: %s (%ld bytes)\n",
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
-    fprintf(stderr, "Aggregate bandwidth: %.3f Mbps\n",
-        8 * ((eng->total_data_sent+eng->total_data_received)
-                /(ev_now(EV_DEFAULT) - eng->epoch))
+    fprintf(stderr, "Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
+        8 * ((eng->total_data_received) /(ev_now(EV_DEFAULT) - eng->epoch))
+            / 1000000.0,
+        8 * ((eng->total_data_sent) /(ev_now(EV_DEFAULT) - eng->epoch))
             / 1000000.0);
     long conns = conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
@@ -323,19 +332,21 @@ static void *single_engine_loop_thread(void *argp) {
 
     fprintf(stderr, "Exiting worker %d\n"
             "  %d↓, %d↑ open connections\n"
-            "  %ld connection_attempts\n"
-            "  %ld connection_failures\n"
-            "  %ld connections_accepted\n"
-            "  %ld worker_data_sent\n"
-            "  %ld worker_data_received\n",
+            "  %lu connections_initiated\n"
+            "  %lu connections_accepted\n"
+            "  %lu connection_failures\n"
+            "  ↳ %lu connection_timeouts\n"
+            "  %lu worker_data_sent\n"
+            "  %lu worker_data_received\n",
         largs->thread_no,
         (int)largs->incoming_connections,
         (int)largs->outgoing_connections,
-        (long)largs->worker_connection_attempts,
-        (long)largs->worker_connection_failures,
-        (long)largs->worker_connections_accepted,
-        (long)largs->worker_data_sent,
-        (long)largs->worker_data_received);
+        largs->worker_connections_initiated,
+        largs->worker_connections_accepted,
+        largs->worker_connection_failures,
+        largs->worker_connection_timeouts,
+        (unsigned long)largs->worker_data_sent,
+        (unsigned long)largs->worker_data_received);
 
     close_all_connections(EV_A_ CCR_CLEAN);
 
@@ -373,7 +384,7 @@ static void start_new_connection(EV_P) {
     remote_stats = &largs->remote_stats[remote_index];
 
     atomic_increment(&remote_stats->connection_attempts);
-    largs->worker_connection_attempts++;
+    largs->worker_connections_initiated++;
 
     int sockfd = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
@@ -414,8 +425,17 @@ static void start_new_connection(EV_P) {
     conn->remote_index = remote_index;
     atomic_increment(&largs->outgoing_connections);
 
+    if(largs->params.connect_timeout > 0) {
+        conn->conn_state = CSTATE_CONNECTING;
+        ev_timer_init(&conn->bw_timer, conn_timer,
+                      largs->params.connect_timeout, 0.0);
+        ev_timer_start(EV_A_ &conn->bw_timer);
+    }
+
+    int want_write = (largs->params.message_size
+                        || largs->params.connect_timeout > 0);
     ev_io_init(&conn->watcher, connection_cb, sockfd,
-        EV_READ | (largs->params.message_size ? EV_WRITE : 0));
+        EV_READ | (want_write ? EV_WRITE : 0));
 
     ev_io_start(EV_A_ &conn->watcher);
 }
@@ -445,11 +465,19 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     return &largs->params.remote_addresses.addrs[off];
 }
 
-static void conn_bw_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
-    (void)EV_A;
+static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, bw_timer));
 
-    ev_io_set(&conn->watcher, conn->watcher.fd, EV_READ | EV_WRITE);
+    switch(conn->conn_state) {
+    case CSTATE_CONNECTED:
+        ev_io_set(&conn->watcher, conn->watcher.fd,
+            EV_READ | (largs->params.message_size ? EV_WRITE : 0));
+        break;
+    case CSTATE_CONNECTING:
+        close_connection(EV_A_ conn, CCR_TIMEOUT);
+        break;
+    }
 }
 
 static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
@@ -503,6 +531,19 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
     struct sockaddr *remote = &largs->params.remote_addresses.addrs[conn->remote_index];
 
+    if(conn->conn_state == CSTATE_CONNECTING) {
+        conn->conn_state = CSTATE_CONNECTED;
+        /*
+         * We were asked to produce the WRITE event
+         * only to detect successful connection.
+         * If there's nothing to write, we remove the write interest.
+         */
+        if(largs->params.message_size == 0) {
+            ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
+            revents &= ~EV_WRITE;   /* Don't actually write in this loop */
+        }
+    }
+
     if(revents & EV_READ) {
         char buf[16384];
         for(;;) {
@@ -545,7 +586,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 if(delay > 1.0) delay = 1.0;
                 else if(delay < 0.001) delay = 0.001;
                 ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
-                ev_timer_init(&conn->bw_timer, conn_bw_timer, delay, 0.0);
+                ev_timer_init(&conn->bw_timer, conn_timer, delay, 0.0);
                 ev_timer_start(EV_A_ &conn->bw_timer);
                 return;
             } else if((size_t)bytes < available_length
@@ -617,11 +658,21 @@ static void connections_flush_stats(EV_P) {
     }
 }
 
+/*
+ * Close connection and update connection and data transfer counters.
+ */
 static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason) {
+    char buf[256];
     struct loop_arguments *largs = ev_userdata(EV_A);
-    if(reason != CCR_CLEAN) {
+    switch(reason) {
+    case CCR_LIFETIME:
+    case CCR_CLEAN:
+        break;
+    case CCR_REMOTE:
         switch(conn->conn_type) {
         case CONN_OUTGOING:
+            /* Make sure we don't go to this address eventually
+             * because it is broken. */
             atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
         case CONN_INCOMING:
         case CONN_ACCEPTOR:
@@ -629,6 +680,16 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
             break;
         }
         largs->worker_connection_failures++;
+        break;
+    case CCR_TIMEOUT:
+        assert(conn->conn_type == CONN_OUTGOING);
+        errno = ETIMEDOUT;
+        fprintf(stderr, "Connection to %s is not done: %s\n",
+                format_sockaddr(&largs->params.remote_addresses.addrs[conn->remote_index], buf, sizeof(buf)),
+                strerror(errno));
+        largs->worker_connection_failures++;
+        largs->worker_connection_timeouts++;
+        break;
     }
     ev_timer_stop(EV_A_ &conn->bw_timer);
     ev_io_stop(EV_A_ &conn->watcher);

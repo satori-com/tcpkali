@@ -26,6 +26,8 @@
  * Describe the command line options.
  */
 #define CLI_STATSD_OFFSET   256
+#define CLI_CHAN_OFFSET  512
+#define CLI_CONN_OFFSET  1024
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
     { "connections", 0, 0, 'c' },
@@ -40,6 +42,8 @@ static struct option cli_long_options[] = {
     { "statsd-server", 1, 0,    CLI_STATSD_OFFSET + 's' },
     { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
     { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
+    { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
+    { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "listen-port", 1, 0, 'l' }
 };
 
@@ -55,7 +59,7 @@ static struct tcpkali_config {
     int   message_rate;     /* Messages per second per channel */
 } default_config = {
         .max_connections = 1,
-        .connect_rate = 10.0,
+        .connect_rate = 100.0,
         .test_duration = 10.0,
         .statsd_enable = 0,
         .statsd_server = "127.0.0.1",
@@ -227,6 +231,26 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case CLI_CONN_OFFSET + 't':
+            engine_params.connect_timeout = parse_with_multipliers(optarg,
+                            s_multiplier,
+                            sizeof(s_multiplier)/sizeof(s_multiplier[0]));
+            if(engine_params.connect_timeout <= 0.0) {
+                fprintf(stderr, "Expected positive --connect-timeout=%s\n",
+                    optarg);
+                exit(EX_USAGE);
+            }
+            break;
+        case CLI_CHAN_OFFSET + 't':
+            engine_params.channel_lifetime = parse_with_multipliers(optarg,
+                            s_multiplier,
+                            sizeof(s_multiplier)/sizeof(s_multiplier[0]));
+            if(engine_params.channel_lifetime <= 0.0) {
+                fprintf(stderr, "Expected positive --channel-lifetime=%s\n",
+                    optarg);
+                exit(EX_USAGE);
+            }
+            break;
         default:
             usage(argv[0], &default_config);
             exit(EX_USAGE);
@@ -241,6 +265,10 @@ int main(int argc, char **argv) {
         && conf.listen_port == 0) {
         engine_params.requested_workers = conf.max_connections;
     }
+
+    /* Default connection timeout is 1 seconds */
+    if(engine_params.connect_timeout == 0.0)
+        engine_params.connect_timeout = 1.0;
 
     /*
      * Make sure we're consistent with the message rate and channel bandwidth.
@@ -576,12 +604,13 @@ usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
-    "  -c, --connections <N=%d>       Number of connections to open to the destinations\n"
-    "  --connect-rate <R=100>      Number of new connections per second\n"
+    "  -c, --connections <N=%d>       Number of connections to keep open to the destinations\n"
+    "  --connect-rate <R=%.0f>      Limit number new connections per second\n"
+    "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
+    "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --message-rate <R>          Messages per second per connection to send\n"
-    "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
     "  -l, --listen-port <port>        Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  --duration <T=10s>          Load test for the specified amount of time\n"
@@ -592,9 +621,10 @@ usage(char *argv0, struct tcpkali_config *conf) {
     //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
-    "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (megabytes per second)\n"
-    "  <T>:  s, m, h (seconds, minutes, hours)\n",
+    "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
+    "  <T>:  ms, s, m, h (milliseconds, seconds, minutes, hours)\n",
     conf->max_connections,
+    conf->connect_rate,
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",
     conf->statsd_enable ? "enabled" : "disabled",
     conf->statsd_port,
