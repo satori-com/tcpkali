@@ -448,8 +448,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                                     rcvd - checkpoint->initial_data_received,1);
                 }
                 if(print_stats) {
-                    printf("  Traffic %.3f Mbps (conns in %ld; out %ld/%d)     \r",
-                        (bps_in+bps_out) / (1000000),
+                    printf("  Traffic %.3f↓, %.3f↑ Mbps (conns in %ld; out %ld/%d)     \r",
+                        bps_in / 1000000,
+                        bps_out / 1000000,
                         (long)conns_in, (long)conns_out, max_connections);
                 }
             } else if(print_stats) {
