@@ -59,6 +59,7 @@ struct loop_arguments {
     ev_timer stats_timer;
     int control_pipe;
     int thread_no;
+    /* The following atomic members are accessed outside of worker thread */
     atomic64_t worker_data_sent;
     atomic64_t worker_data_received;
     atomic_t incoming_connections;
@@ -92,6 +93,8 @@ enum connection_close_reason {
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
 static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason);
+static void connections_flush_stats(EV_P);
+static void connection_flush_stats(EV_P_ struct connection *conn);
 static void close_all_connections(EV_P_ enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
 static void devnull_cb(EV_P_ ev_io *w, int revents);
@@ -124,6 +127,8 @@ struct engine *engine_start(struct engine_params params) {
      * instead of sending short messages one by one.
      */
     multiply_data(&params.message_data, &params.message_size);
+    if(params.minimal_write_size == 0)
+        params.minimal_write_size = 1460; /* ~MTU */
 
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
@@ -146,9 +151,6 @@ struct engine *engine_start(struct engine_params params) {
         assert(rc == 0);
     }
 
-    /* Update epoch once more for precision. */
-    eng->epoch = ev_now(EV_DEFAULT);
-
     return eng;
 }
 
@@ -156,6 +158,9 @@ struct engine *engine_start(struct engine_params params) {
  * Send a signal to finish work and wait for all workers to terminate.
  */
 void engine_terminate(struct engine *eng) {
+    size_t conn_in, conn_out;
+    engine_connections(eng, &conn_in, &conn_out);
+
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
         write(eng->wr_pipe, "T", 1);
@@ -170,16 +175,23 @@ void engine_terminate(struct engine *eng) {
     }
     eng->n_workers = 0;
     char buf[64];
-    fprintf(stderr, "Total data sent:     %s (%ld)\n",
+    fprintf(stderr, "Total data sent:     %s (%ld bytes)\n",
         express_bytes(eng->total_data_sent, buf, sizeof(buf)),
         (long)eng->total_data_sent);
-    fprintf(stderr, "Total data received: %s (%ld)\n",
+    fprintf(stderr, "Total data received: %s (%ld bytes)\n",
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
     fprintf(stderr, "Aggregate bandwidth: %.3f Mbps\n",
         8 * ((eng->total_data_sent+eng->total_data_received)
                 /(ev_now(EV_DEFAULT) - eng->epoch))
-            / (1000000.0)
+            / 1000000.0);
+    long conns = conn_in + conn_out;
+    if(!conns) conns = 1; /* Assume a single channel. */
+    fprintf(stderr, "Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
+        8 * (((eng->total_data_sent+eng->total_data_received)
+                /(ev_now(EV_DEFAULT) - eng->epoch))/conns) / 1000000.0,
+        ((eng->total_data_sent+eng->total_data_received)
+                /(ev_now(EV_DEFAULT) - eng->epoch))/conns/1000.0
     );
 }
 
@@ -269,9 +281,14 @@ static void *single_engine_loop_thread(void *argp) {
             assert(rc != -1);
             rc = bind(lsock, sa, sizeof(*sa));
             if(rc == -1) {
+                char buf[256];
+                fprintf(stderr, "Bind %s is not done: %s\n",
+                        format_sockaddr(sa, buf, sizeof(buf)),
+                        strerror(errno));
                 if(errno == EINVAL) {
                     continue;
                 } else {
+                    printf("unavailable\n\n");
                     exit(EX_UNAVAILABLE);
                 }
             }
@@ -284,7 +301,7 @@ static void *single_engine_loop_thread(void *argp) {
             LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
             pacefier_init(&conn->bw_pace, ev_now(EV_A));
             conn->conn_type = CONN_ACCEPTOR;
-            ev_io_init(&conn->watcher, accept_cb, lsock, EV_READ);
+            ev_io_init(&conn->watcher, accept_cb, lsock, EV_READ | EV_WRITE);
             ev_io_start(EV_A_ &conn->watcher);
         }
         if(!opened_listening_sockets) {
@@ -296,13 +313,15 @@ static void *single_engine_loop_thread(void *argp) {
 
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
     ev_timer_start(EV_A_ &largs->stats_timer);
-
     ev_io_init(&control_watcher, control_cb, largs->control_pipe, EV_READ);
     ev_io_start(loop, &control_watcher);
-
     ev_run(loop, 0);
+    ev_timer_stop(EV_A_ &largs->stats_timer);
+    ev_io_stop(EV_A_ &control_watcher);
 
-    fprintf(stderr, "Exiting cpu thread %d\n"
+    connections_flush_stats(EV_A);
+
+    fprintf(stderr, "Exiting worker %d\n"
             "  %d/%d open connections\n"
             "  %ld connection_attempts\n"
             "  %ld connection_failures\n"
@@ -317,6 +336,8 @@ static void *single_engine_loop_thread(void *argp) {
         (long)largs->worker_connections_accepted,
         (long)largs->worker_data_sent,
         (long)largs->worker_data_received);
+
+    close_all_connections(EV_A_ CCR_CLEAN);
 
     return 0;
 }
@@ -335,9 +356,6 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
         start_new_connection(EV_A);
         break;
     case 'T':
-        close_all_connections(EV_A_ CCR_CLEAN);
-        ev_timer_stop(EV_A_ &largs->stats_timer);
-        ev_io_stop(EV_A_ w);
         ev_break(EV_A_ EVBREAK_ALL);
         break;
     default:
@@ -439,16 +457,14 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     int sockfd = accept(w->fd, 0, 0);
     if(sockfd == -1)
         return;
-
-    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
-    assert(rc != -1);
-
-    largs->worker_connections_accepted++;
+    int rc = O_NONBLOCK & fcntl(sockfd, F_GETFL);
+    assert(rc);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
     conn->conn_type = CONN_ACCEPTOR;
     atomic_increment(&largs->incoming_connections);
+    largs->worker_connections_accepted++;
 
     ev_io_init(&conn->watcher, devnull_cb, sockfd, EV_READ);
     ev_io_start(EV_A_ &conn->watcher);
@@ -523,10 +539,11 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         size_t bw = largs->params.channel_bandwidth_Bps;
         if(bw != 0) {
             size_t bytes = pacefier_allow(&conn->bw_pace, bw, ev_now(EV_A));
-            const size_t smallest_block_to_send = 1460;    /* ~MTU */
+            size_t smallest_block_to_send = largs->params.minimal_write_size;
             if(bytes == 0) {
                 double delay = (double)smallest_block_to_send/bw;
                 if(delay > 1.0) delay = 1.0;
+                else if(delay < 0.001) delay = 0.001;
                 ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
                 ev_timer_init(&conn->bw_timer, conn_bw_timer, delay, 0.0);
                 ev_timer_start(EV_A_ &conn->bw_timer);
@@ -591,6 +608,15 @@ static void close_all_connections(EV_P_ enum connection_close_reason reason) {
     }
 }
 
+static void connections_flush_stats(EV_P) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    struct connection *conn;
+    struct connection *tmpconn;
+    LIST_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
+        connection_flush_stats(EV_A_ conn);
+    }
+}
+
 static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     if(reason != CCR_CLEAN) {
@@ -605,8 +631,13 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
         largs->worker_connection_failures++;
     }
     ev_timer_stop(EV_A_ &conn->bw_timer);
-    atomic_add(&largs->worker_data_sent, conn->data_sent);
-    atomic_add(&largs->worker_data_received, conn->data_received);
+    ev_io_stop(EV_A_ &conn->watcher);
+
+    close(conn->watcher.fd);
+    conn->watcher.fd = -1;
+
+    connection_flush_stats(EV_A_ conn);
+
     switch(conn->conn_type) {
     case CONN_INCOMING:
         atomic_decrement(&largs->incoming_connections);
@@ -617,9 +648,16 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     case CONN_ACCEPTOR:
         break;
     }
-    ev_io_stop(EV_A_ &conn->watcher);
     LIST_REMOVE(conn, hook);
     free(conn);
+}
+
+static void connection_flush_stats(EV_P_ struct connection *conn) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    atomic_add(&largs->worker_data_sent, conn->data_sent);
+    atomic_add(&largs->worker_data_received, conn->data_received);
+    conn->data_sent = 0;
+    conn->data_received = 0;
 }
 
 /*

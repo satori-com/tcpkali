@@ -11,6 +11,7 @@ struct engine_params {
     struct addresses listen_addresses;
     size_t requested_workers;       /* Number of threads to start */
     size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
+    size_t minimal_write_size;
     /* Message data */
     void *message_data;
     size_t message_size;

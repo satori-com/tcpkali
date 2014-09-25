@@ -33,6 +33,7 @@ static struct option cli_long_options[] = {
     { "duration", 1, 0, 't' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
+    { "message-rate", 1, 0, 'M' },
     { "workers", 1, 0, 'w' },
     { "channel-bandwidth", 1, 0, 'b' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
@@ -51,6 +52,7 @@ static struct tcpkali_config {
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
+    int   message_rate;     /* Messages per second per channel */
 } default_config = {
         .max_connections = 1,
         .connect_rate = 10.0,
@@ -59,7 +61,8 @@ static struct tcpkali_config {
         .statsd_server = "127.0.0.1",
         .statsd_port = 8125,
         .statsd_namespace = "tcpkali",
-        .listen_port = 0
+        .listen_port = 0,
+        .message_rate = 0
     };
 
 struct stats_checkpoint {
@@ -190,6 +193,17 @@ int main(int argc, char **argv) {
             engine_params.channel_bandwidth_Bps = Bps;
             break;
             }
+        case 'M': {
+            int rate = parse_with_multipliers(optarg,
+                        k_multiplier,
+                        sizeof(k_multiplier)/sizeof(k_multiplier[0]));
+            if(rate <= 0) {
+                fprintf(stderr, "Expecting --message-rate > 0\n");
+                exit(EX_USAGE);
+            }
+            conf.message_rate = rate;
+            break;
+            }
         case CLI_STATSD_OFFSET + 'e':
             conf.statsd_enable = 1;
             break;
@@ -226,6 +240,32 @@ int main(int argc, char **argv) {
         && conf.max_connections < number_of_cpus()
         && conf.listen_port == 0) {
         engine_params.requested_workers = conf.max_connections;
+    }
+
+    /*
+     * Make sure we're consistent with the message rate and channel bandwidth.
+     */
+    if(conf.message_rate) {
+        size_t msize = engine_params.message_size;
+        if(msize == 0) {
+            fprintf(stderr, "--message-rate parameter has no sense "
+                            "without --message or --message-file\n");
+            exit(EX_USAGE);
+        }
+        size_t message_bandwidth = (msize * conf.message_rate) / 1;
+        if(engine_params.channel_bandwidth_Bps &&
+           engine_params.channel_bandwidth_Bps != message_bandwidth) {
+            fprintf(stderr, "--channel-bandwidth=%ld is %s than --message-rate=%ld * %ld (message size)\n",
+                (long)engine_params.channel_bandwidth_Bps,
+                (engine_params.channel_bandwidth_Bps > message_bandwidth)
+                    ? "more" : "less",
+                (long)conf.message_rate,
+                (long)msize);
+            exit(EX_USAGE);
+        }
+        engine_params.channel_bandwidth_Bps = message_bandwidth;
+        /* Write in msize blocks unless they're large, then use default. */
+        engine_params.minimal_write_size = msize < 1460 ? msize : 0;
     }
 
     if(optind == argc && conf.listen_port == 0) {
@@ -280,6 +320,7 @@ int main(int argc, char **argv) {
     if(print_stats) {
         setvbuf(stdout, 0, _IONBF, 0);
     }
+    char *clear_line = print_stats ? "\033[K" : "";
 
     /*
      * Ramp up to the specified number of connections by opening them at a
@@ -291,9 +332,8 @@ int main(int argc, char **argv) {
                                             conf.max_connections, epoch_end,
                                             NULL, statsd, &term_flag,
                                             print_stats) == 0) {
-            char *clear_line = print_stats ? "\033[K" : "";
-            printf("%sRamped up to %d connections.\n",
-                clear_line, conf.max_connections);
+            printf("%s", clear_line);
+            printf("Ramped up to %d connections.\n", conf.max_connections);
         } else {
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%0.1fs)\n",
@@ -319,6 +359,7 @@ int main(int argc, char **argv) {
             break;
     }
 
+    printf("%s", clear_line);
     engine_terminate(eng);
 
     return 0;
@@ -385,7 +426,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                                     rcvd - checkpoint->initial_data_received,1);
                 }
                 if(print_stats) {
-                    printf("  Traffic %.3f Mbps (conns in %ld out %ld/%d)     \r",
+                    printf("  Traffic %.3f Mbps (conns in %ld; out %ld/%d)     \r",
                         (bps_in+bps_out) / (1000000),
                         (long)conns_in, (long)conns_out, max_connections);
                 }
@@ -512,11 +553,11 @@ usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
-    "  -c, --connections <N>       Number of connections to open to the destinations\n"
+    "  -c, --connections <N=%d>       Number of connections to open to the destinations\n"
     "  --connect-rate <R=100>      Number of new connections per second\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    //"  --message-rate <R>          Messages per second per connection to send\n"
+    "  --message-rate <R>          Messages per second per connection to send\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
     "  -l, --listen-port <port>        Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
@@ -530,6 +571,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (megabytes per second)\n"
     "  <T>:  s, m, h (seconds, minutes, hours)\n",
+    conf->max_connections,
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",
     conf->statsd_enable ? "enabled" : "disabled",
     conf->statsd_port,
