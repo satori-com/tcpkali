@@ -457,8 +457,8 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     int sockfd = accept(w->fd, 0, 0);
     if(sockfd == -1)
         return;
-    int rc = O_NONBLOCK & fcntl(sockfd, F_GETFL);
-    assert(rc);
+    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+    assert(rc != -1);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
