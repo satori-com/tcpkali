@@ -275,6 +275,28 @@ int main(int argc, char **argv) {
     }
 
     /*
+     * Check if the number of connections can be opened in time.
+     */
+    if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
+        if(conf.max_connections/conf.connect_rate > conf.test_duration) {
+            fprintf(stderr, "%d connections can not be opened at a rate %.1f,"
+                            " within test duration %.f.\n"
+                            "Decrease --connect-rate or increse --duration.\n",
+                conf.max_connections,
+                conf.connect_rate,
+                conf.test_duration);
+            exit(EX_USAGE);
+        } else {
+            fprintf(stderr, "WARNING: %d connections might not be opened at a rate %.1f,"
+                            " within test duration %.f.\n"
+                            "Decrease --connect-rate or increse --duration.\n",
+                conf.max_connections,
+                conf.connect_rate,
+                conf.test_duration);
+        }
+    }
+
+    /*
      * Pick multiple destinations from the command line, resolve them.
      */
     if(argc - optind > 0) {
