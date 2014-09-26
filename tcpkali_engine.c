@@ -115,6 +115,7 @@ static void accept_cb(EV_P_ ev_io *w, int revents);
 static void conn_timer(EV_P_ ev_timer *w, int revents); /* Timeout timer */
 static void channel_lifetime(EV_P_ ev_timer *w, int revents);
 static void setup_channel_lifetime_timer(EV_P_ double first_timeout);
+static void update_io_interest(EV_P_ struct connection *conn, int events);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
@@ -342,7 +343,6 @@ static void *single_engine_loop_thread(void *argp) {
                 if(errno == EINVAL) {
                     continue;
                 } else {
-                    printf("unavailable\n\n");
                     exit(EX_UNAVAILABLE);
                 }
             }
@@ -496,7 +496,7 @@ static void start_new_connection(EV_P) {
     }
 
     int want_write = (largs->params.message_size
-                        || largs->params.connect_timeout > 0);
+                        || largs->params.connect_timeout > 0.0);
     ev_io_init(&conn->watcher, connection_cb, sockfd,
         EV_READ | (want_write ? EV_WRITE : 0));
 
@@ -534,10 +534,11 @@ static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
-        ev_io_set(&conn->watcher, conn->watcher.fd,
+        update_io_interest(EV_A_ conn,
             EV_READ | (largs->params.message_size ? EV_WRITE : 0));
         break;
     case CSTATE_CONNECTING:
+        /* Timed out in the connection establishment phase. */
         close_connection(EV_A_ conn, CCR_TIMEOUT);
         return;
     }
@@ -551,6 +552,7 @@ static void setup_channel_lifetime_timer(EV_P_ double first_timeout) {
 
 static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
+
     int sockfd = accept(w->fd, 0, 0);
     if(sockfd == -1)
         return;
@@ -605,6 +607,12 @@ static void devnull_cb(EV_P_ ev_io *w, int revents) {
     }
 }
 
+static void update_io_interest(EV_P_ struct connection *conn, int events) {
+    ev_io_stop(EV_A_ &conn->watcher);
+    ev_io_set(&conn->watcher, conn->watcher.fd, events);
+    ev_io_start(EV_A_ &conn->watcher);
+}
+
 static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
@@ -618,8 +626,9 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
          * only to detect successful connection.
          * If there's nothing to write, we remove the write interest.
          */
+        ev_timer_stop(EV_A_ &conn->timer);
         if(largs->params.message_size == 0) {
-            ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
+            update_io_interest(EV_A_ conn, EV_READ);  /* Disable write */
             revents &= ~EV_WRITE;   /* Don't actually write in this loop */
         }
     }
@@ -665,7 +674,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 double delay = (double)smallest_block_to_send/bw;
                 if(delay > 1.0) delay = 1.0;
                 else if(delay < 0.001) delay = 0.001;
-                ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
+                update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
                 ev_timer_init(&conn->timer, conn_timer, delay, 0.0);
                 ev_timer_start(EV_A_ &conn->timer);
                 return;
