@@ -415,8 +415,9 @@ int main(int argc, char **argv) {
             printf("Ramped up to %d connections.\n", conf.max_connections);
         } else {
             fprintf(stderr, "Could not create %d connection%s"
-                            " in allotted time (%0.1fs)\n",
-                            conf.max_connections, conf.max_connections==1?"":"s",
+                            " in allotted time (%.1fs)\n",
+                            conf.max_connections,
+                            conf.max_connections==1?"":"s",
                             conf.test_duration);
             exit(1);
         }

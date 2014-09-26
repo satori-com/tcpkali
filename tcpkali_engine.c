@@ -194,23 +194,23 @@ void engine_terminate(struct engine *eng) {
     double epoch = eng->loops[0].params.epoch;   /* same in all threads. */
     double now = ev_now(EV_DEFAULT);
     char buf[64];
-    fprintf(stderr, "Total data sent:     %s (%ld bytes)\n",
+    printf(stderr, "Total data sent:     %s (%ld bytes)\n",
         express_bytes(eng->total_data_sent, buf, sizeof(buf)),
         (long)eng->total_data_sent);
-    fprintf(stderr, "Total data received: %s (%ld bytes)\n",
+    printf(stderr, "Total data received: %s (%ld bytes)\n",
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
-    fprintf(stderr, "Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * ((eng->total_data_received) /(now - epoch)) / 1000000.0,
-        8 * ((eng->total_data_sent) /(now - epoch)) / 1000000.0);
     long conns = conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
-    fprintf(stderr, "Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
+    printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
         8 * (((eng->total_data_sent+eng->total_data_received)
                 /(now - epoch))/conns) / 1000000.0,
         ((eng->total_data_sent+eng->total_data_received)
                 /(now - epoch))/conns/1000.0
     );
+    printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
+        8 * ((eng->total_data_received) /(now - epoch)) / 1000000.0,
+        8 * ((eng->total_data_sent) /(now - epoch)) / 1000000.0);
 }
 
 static char *express_bytes(size_t bytes, char *buf, size_t size) {
