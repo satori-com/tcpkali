@@ -30,7 +30,7 @@ void engine_connections(struct engine *, size_t *incoming, size_t *outgoing, siz
 void engine_traffic(struct engine *, size_t *sent, size_t *received);
 
 
-void engine_initiate_new_connections(struct engine *, size_t n);
+size_t engine_initiate_new_connections(struct engine *, size_t n);
 
 void engine_terminate(struct engine *);
 

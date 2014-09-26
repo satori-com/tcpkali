@@ -248,16 +248,26 @@ void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
     }
 }
 
-void engine_initiate_new_connections(struct engine *eng, size_t n) {
+size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
     static char buf[1024];  /* This is thread-safe! */
     if(!buf[0]) {
         memset(buf, 'c', sizeof(buf));
     }
-    while(n > 0) {
-        int current_batch = n < sizeof(buf) ? n : sizeof(buf);
+    int fd = eng->wr_pipe;
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    size_t n = 0;
+    while(n < n_req) {
+        int current_batch = (n_req-n) < sizeof(buf) ? (n_req-n) : sizeof(buf);
         int wrote = write(eng->wr_pipe, buf, current_batch);
-        if(wrote > 0) n -= wrote;
+        if(wrote == -1) {
+            if(errno == EAGAIN)
+                break;
+            assert(wrote != -1);
+        }
+        if(wrote > 0) n += wrote;
     }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+    return n;
 }
 
 static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {

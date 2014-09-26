@@ -84,7 +84,7 @@ static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
 static int read_in_file(const char *filename, void **data, size_t *size);
 struct addresses enumerate_usable_addresses(int listen_port);
-static void print_connections_line(int conns, int max_conns);
+static void print_connections_line(int conns, int max_conns, int conns_counter);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -483,7 +483,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                         (long)conns_counter);
                 }
             } else if(print_stats) {
-                print_connections_line(conns_out, max_connections);
+                print_connections_line(conns_out, max_connections, conns_counter);
             }
         }
 
@@ -496,10 +496,10 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 }
 
 static void
-print_connections_line(int conns, int max_conns) {
+print_connections_line(int conns, int max_conns, int conns_counter) {
     char buf[80];
     buf[0] = '|';
-    const int ribbon_width = 60;
+    const int ribbon_width = 50;
     int at = 1 + ((ribbon_width - 2) * conns) / max_conns;
     for(int i = 1; i < ribbon_width; i++) {
         if (i  < at)     buf[i] = '=';
@@ -507,7 +507,7 @@ print_connections_line(int conns, int max_conns) {
         else if(i == at) buf[i] = '>';
     }
     snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
-        "| %d of %d", conns, max_conns);
+        "| %d of %d (%d)", conns, max_conns, conns_counter);
     printf("%s  \r", buf);
 }
 
