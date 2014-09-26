@@ -14,6 +14,7 @@ struct engine_params {
     size_t minimal_write_size;
     double connect_timeout;
     double channel_lifetime;
+    double epoch;
     /* Message data */
     void *message_data;
     size_t message_size;
@@ -25,7 +26,7 @@ struct engine *engine_start(struct engine_params);
 /*
  * Report the number of opened connections by categories.
  */
-void engine_connections(struct engine *, size_t *incoming, size_t *outgoing);
+void engine_connections(struct engine *, size_t *incoming, size_t *outgoing, size_t *counter);
 void engine_traffic(struct engine *, size_t *sent, size_t *received);
 
 

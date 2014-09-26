@@ -26,20 +26,24 @@
 
 #include <ev.h>
 
-#ifndef LIST_FOREACH_SAFE
-#define LIST_FOREACH_SAFE(var, head, field, tvar)             \
-    for ((var) = LIST_FIRST((head));                          \
-            (var) && ((tvar) = LIST_NEXT((var), field), 1);   \
+#ifndef TAILQ_FOREACH_SAFE
+#define TAILQ_FOREACH_SAFE(var, head, field, tvar)             \
+    for ((var) = TAILQ_FIRST((head));                          \
+            (var) && ((tvar) = TAILQ_NEXT((var), field), 1);   \
             (var) = (tvar))
 #endif
 
+/*
+ * A single connection is described by this structure (about 150 bytes).
+ */
 struct connection {
     ev_io watcher;
-    ev_timer bw_timer;
+    ev_timer timer;
     struct pacefier bw_pace;
     off_t write_offset;
     size_t data_sent;
     size_t data_received;
+    float channel_eol_point;    /* End of life time, since epoch */
     enum state {
         CSTATE_CONNECTED,
         CSTATE_CONNECTING,
@@ -50,7 +54,7 @@ struct connection {
         CONN_ACCEPTOR,
     } conn_type:8;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
-    LIST_ENTRY(connection) hook;
+    TAILQ_ENTRY(connection) hook;
 };
 
 struct loop_arguments {
@@ -61,6 +65,7 @@ struct loop_arguments {
         atomic_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
     ev_timer stats_timer;
+    ev_timer channel_lifetime_timer;
     int control_pipe;
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
@@ -68,7 +73,8 @@ struct loop_arguments {
     atomic64_t worker_data_received;
     atomic_t incoming_connections;
     atomic_t outgoing_connections;
-    LIST_HEAD( , connection) open_conns;  /* Thread-local connections */
+    atomic_t connections_counter;
+    TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
     unsigned long worker_connections_initiated;
     unsigned long worker_connections_accepted;
     unsigned long worker_connection_failures;
@@ -83,7 +89,6 @@ struct engine {
     pthread_t *threads;
     int wr_pipe;
     int n_workers;
-    double epoch;
     size_t total_data_sent;
     size_t total_data_received;
 };
@@ -108,6 +113,8 @@ static void devnull_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static void accept_cb(EV_P_ ev_io *w, int revents);
 static void conn_timer(EV_P_ ev_timer *w, int revents); /* Timeout timer */
+static void channel_lifetime(EV_P_ ev_timer *w, int revents);
+static void setup_channel_lifetime_timer(EV_P_ double first_timeout);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(void **data, size_t *size);
@@ -137,17 +144,17 @@ struct engine *engine_start(struct engine_params params) {
     multiply_data(&params.message_data, &params.message_size);
     if(params.minimal_write_size == 0)
         params.minimal_write_size = 1460; /* ~MTU */
+    params.epoch = ev_now(EV_DEFAULT);  /* Single epoch for all threads */
 
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
     eng->wr_pipe = wr_pipe;
-    eng->epoch = ev_now(EV_DEFAULT);
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loops[n];
-        LIST_INIT(&loop_args->open_conns);
+        TAILQ_INIT(&loop_args->open_conns);
         loop_args->params = params;
         loop_args->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->control_pipe = rd_pipe;
@@ -166,8 +173,8 @@ struct engine *engine_start(struct engine_params params) {
  * Send a signal to finish work and wait for all workers to terminate.
  */
 void engine_terminate(struct engine *eng) {
-    size_t conn_in, conn_out;
-    engine_connections(eng, &conn_in, &conn_out);
+    size_t conn_in, conn_out, conn_counter;
+    engine_connections(eng, &conn_in, &conn_out, &conn_counter);
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
@@ -182,6 +189,8 @@ void engine_terminate(struct engine *eng) {
             eng->loops[n].worker_data_received;
     }
     eng->n_workers = 0;
+    double epoch = eng->loops[0].params.epoch;   /* same in all threads. */
+    double now = ev_now(EV_DEFAULT);
     char buf[64];
     fprintf(stderr, "Total data sent:     %s (%ld bytes)\n",
         express_bytes(eng->total_data_sent, buf, sizeof(buf)),
@@ -190,17 +199,15 @@ void engine_terminate(struct engine *eng) {
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
     fprintf(stderr, "Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * ((eng->total_data_received) /(ev_now(EV_DEFAULT) - eng->epoch))
-            / 1000000.0,
-        8 * ((eng->total_data_sent) /(ev_now(EV_DEFAULT) - eng->epoch))
-            / 1000000.0);
+        8 * ((eng->total_data_received) /(now - epoch)) / 1000000.0,
+        8 * ((eng->total_data_sent) /(now - epoch)) / 1000000.0);
     long conns = conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     fprintf(stderr, "Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
         8 * (((eng->total_data_sent+eng->total_data_received)
-                /(ev_now(EV_DEFAULT) - eng->epoch))/conns) / 1000000.0,
+                /(now - epoch))/conns) / 1000000.0,
         ((eng->total_data_sent+eng->total_data_received)
-                /(ev_now(EV_DEFAULT) - eng->epoch))/conns/1000.0
+                /(now - epoch))/conns/1000.0
     );
 }
 
@@ -218,15 +225,18 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 /*
  * Get number of connections opened by all of the workers.
  */
-void engine_connections(struct engine *eng, size_t *incoming, size_t *outgoing) {
+void engine_connections(struct engine *eng, size_t *incoming, size_t *outgoing, size_t *counter) {
     size_t c_in = 0;
     size_t c_out = 0;
+    size_t c_count = 0;
     for(int n = 0; n < eng->n_workers; n++) {
-        c_in  += eng->loops[n].incoming_connections;
-        c_out += eng->loops[n].outgoing_connections;
+        c_in    += eng->loops[n].incoming_connections;
+        c_out   += eng->loops[n].outgoing_connections;
+        c_count += eng->loops[n].connections_counter;
     }
     *incoming = c_in;
     *outgoing = c_out;
+    *counter = c_count;
 }
 
 void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
@@ -250,6 +260,31 @@ void engine_initiate_new_connections(struct engine *eng, size_t n) {
     }
 }
 
+static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    struct connection *conn;
+    struct connection *tmpconn;
+
+    assert(largs->params.channel_lifetime);
+    double delta = ev_now(EV_A) - largs->params.epoch;
+    TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
+        if(conn->channel_eol_point <= delta) {
+            close_connection(EV_A_ conn, CCR_CLEAN);
+        } else {
+            /*
+             * Channels are added to the tail of the queue and have the same
+             * Expiration timeout. This channel and the others after it
+             * are not yet expired. Restart timeout so we'll get to it
+             * and the one after it when the time is really due.
+             */
+            setup_channel_lifetime_timer(EV_A_
+                    (conn->channel_eol_point - delta));
+            break;
+        }
+    }
+
+}
+
 static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
 
@@ -258,7 +293,7 @@ static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
      * thread-specific aggregate counters.
      */
     struct connection *conn;
-    LIST_FOREACH(conn, &largs->open_conns, hook) {
+    TAILQ_FOREACH(conn, &largs->open_conns, hook) {
         atomic_add(&largs->worker_data_sent, conn->data_sent);
         atomic_add(&largs->worker_data_received, conn->data_received);
         conn->data_sent = 0;
@@ -307,9 +342,9 @@ static void *single_engine_loop_thread(void *argp) {
             opened_listening_sockets++;
 
             struct connection *conn = calloc(1, sizeof(*conn));
-            LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
-            pacefier_init(&conn->bw_pace, ev_now(EV_A));
             conn->conn_type = CONN_ACCEPTOR;
+            /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
+            pacefier_init(&conn->bw_pace, ev_now(EV_A));
             ev_io_init(&conn->watcher, accept_cb, lsock, EV_READ | EV_WRITE);
             ev_io_start(EV_A_ &conn->watcher);
         }
@@ -319,6 +354,11 @@ static void *single_engine_loop_thread(void *argp) {
         }
     }
 
+
+    if(largs->params.channel_lifetime > 0.0) {
+        ev_timer_init(&largs->channel_lifetime_timer, channel_lifetime, 1, 0);
+        ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
+    }
 
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
     ev_timer_start(EV_A_ &largs->stats_timer);
@@ -331,16 +371,18 @@ static void *single_engine_loop_thread(void *argp) {
     connections_flush_stats(EV_A);
 
     fprintf(stderr, "Exiting worker %d\n"
-            "  %d↓, %d↑ open connections\n"
-            "  %lu connections_initiated\n"
-            "  %lu connections_accepted\n"
+            "  %u↓, %u↑ open connections\n"
+            "  %u connections_counter \n"
+            "  ↳ %lu connections_initiated\n"
+            "  ↳ %lu connections_accepted\n"
             "  %lu connection_failures\n"
             "  ↳ %lu connection_timeouts\n"
             "  %lu worker_data_sent\n"
             "  %lu worker_data_received\n",
         largs->thread_no,
-        (int)largs->incoming_connections,
-        (int)largs->outgoing_connections,
+        largs->incoming_connections,
+        largs->outgoing_connections,
+        largs->connections_counter,
         largs->worker_connections_initiated,
         largs->worker_connections_accepted,
         largs->worker_connection_failures,
@@ -383,6 +425,7 @@ static void start_new_connection(EV_P) {
     struct sockaddr *sa = pick_remote_address(largs, &remote_index);
     remote_stats = &largs->remote_stats[remote_index];
 
+    atomic_increment(&largs->connections_counter);
     atomic_increment(&remote_stats->connection_attempts);
     largs->worker_connections_initiated++;
 
@@ -419,17 +462,27 @@ static void start_new_connection(EV_P) {
         }
     }
 
-    struct connection *conn = calloc(1, sizeof(*conn));
-    LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
-    pacefier_init(&conn->bw_pace, ev_now(EV_A));
-    conn->remote_index = remote_index;
+    double now = ev_now(EV_A);
     atomic_increment(&largs->outgoing_connections);
 
-    if(largs->params.connect_timeout > 0) {
+    struct connection *conn = calloc(1, sizeof(*conn));
+    conn->conn_type = CONN_OUTGOING;
+    if(largs->params.channel_lifetime > 0.0) {
+        if(TAILQ_FIRST(&largs->open_conns) == NULL) {
+            setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
+        }
+        conn->channel_eol_point =
+            (now - largs->params.epoch) + largs->params.channel_lifetime;
+    }
+    TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
+    pacefier_init(&conn->bw_pace, now);
+    conn->remote_index = remote_index;
+
+    if(largs->params.connect_timeout > 0.0) {
         conn->conn_state = CSTATE_CONNECTING;
-        ev_timer_init(&conn->bw_timer, conn_timer,
+        ev_timer_init(&conn->timer, conn_timer,
                       largs->params.connect_timeout, 0.0);
-        ev_timer_start(EV_A_ &conn->bw_timer);
+        ev_timer_start(EV_A_ &conn->timer);
     }
 
     int want_write = (largs->params.message_size
@@ -467,7 +520,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
 
 static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, bw_timer));
+    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, timer));
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
@@ -476,8 +529,14 @@ static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
         break;
     case CSTATE_CONNECTING:
         close_connection(EV_A_ conn, CCR_TIMEOUT);
-        break;
+        return;
     }
+}
+
+static void setup_channel_lifetime_timer(EV_P_ double first_timeout) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    ev_timer_set(&largs->channel_lifetime_timer, first_timeout, 0);
+    ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
 }
 
 static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
@@ -488,10 +547,20 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
     assert(rc != -1);
 
-    struct connection *conn = calloc(1, sizeof(*conn));
-    LIST_INSERT_HEAD(&largs->open_conns, conn, hook);
-    conn->conn_type = CONN_ACCEPTOR;
+    atomic_increment(&largs->connections_counter);
     atomic_increment(&largs->incoming_connections);
+
+    struct connection *conn = calloc(1, sizeof(*conn));
+    conn->conn_type = CONN_INCOMING;
+    if(largs->params.channel_lifetime > 0.0) {
+        if(TAILQ_FIRST(&largs->open_conns) == NULL) {
+            setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
+        }
+        double now = ev_now(EV_A);
+        conn->channel_eol_point =
+            (now - largs->params.epoch) + largs->params.channel_lifetime;
+    }
+    TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
     largs->worker_connections_accepted++;
 
     ev_io_init(&conn->watcher, devnull_cb, sockfd, EV_READ);
@@ -533,6 +602,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         conn->conn_state = CSTATE_CONNECTED;
+        ev_timer_stop(EV_A_ &conn->timer);
         /*
          * We were asked to produce the WRITE event
          * only to detect successful connection.
@@ -586,8 +656,8 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 if(delay > 1.0) delay = 1.0;
                 else if(delay < 0.001) delay = 0.001;
                 ev_io_set(&conn->watcher, w->fd, EV_READ);  /* Disable write */
-                ev_timer_init(&conn->bw_timer, conn_timer, delay, 0.0);
-                ev_timer_start(EV_A_ &conn->bw_timer);
+                ev_timer_init(&conn->timer, conn_timer, delay, 0.0);
+                ev_timer_start(EV_A_ &conn->timer);
                 return;
             } else if((size_t)bytes < available_length
                     && available_length > smallest_block_to_send) {
@@ -644,7 +714,7 @@ static void close_all_connections(EV_P_ enum connection_close_reason reason) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn;
     struct connection *tmpconn;
-    LIST_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
+    TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
         close_connection(EV_A_ conn, reason);
     }
 }
@@ -653,7 +723,7 @@ static void connections_flush_stats(EV_P) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn;
     struct connection *tmpconn;
-    LIST_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
+    TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
         connection_flush_stats(EV_A_ conn);
     }
 }
@@ -691,7 +761,7 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
         largs->worker_connection_timeouts++;
         break;
     }
-    ev_timer_stop(EV_A_ &conn->bw_timer);
+    ev_timer_stop(EV_A_ &conn->timer);
     ev_io_stop(EV_A_ &conn->watcher);
 
     close(conn->watcher.fd);
@@ -709,7 +779,7 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     case CONN_ACCEPTOR:
         break;
     }
-    LIST_REMOVE(conn, hook);
+    TAILQ_REMOVE(&largs->open_conns, conn, hook);
     free(conn);
 }
 
