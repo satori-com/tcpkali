@@ -830,7 +830,7 @@ static void multiply_data(struct engine_params *params) {
     } else if(msg_size >= 65536) {
         /* Data is large enough to avoid blowing up. */
     } else {
-        size_t n = ceil((128*1024.0)/msg_size); /* Optimum is ~size(L2)/2 */
+        size_t n = ceil((64*1024.0)/msg_size); /* Optimum is size(L2)/k */
         size_t s = n * msg_size;
         size_t hdr_off = params->data_header_size;
         char *p = realloc(params->data, hdr_off + s + 1);
