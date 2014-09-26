@@ -16,8 +16,9 @@ struct engine_params {
     double channel_lifetime;
     double epoch;
     /* Message data */
-    void *message_data;
-    size_t message_size;
+    void *data;
+    size_t data_header_size;   /* Part of message_data to send once */
+    size_t data_size;
 };
 
 struct engine *engine_start(struct engine_params);

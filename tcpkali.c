@@ -36,6 +36,7 @@ static struct option cli_long_options[] = {
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'M' },
+    { "message-first", 1, 0, '1' },
     { "workers", 1, 0, 'w' },
     { "channel-bandwidth", 1, 0, 'b' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
@@ -57,6 +58,10 @@ static struct tcpkali_config {
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
     int   message_rate;     /* Messages per second per channel */
+    char  *first_message_data;
+    size_t first_message_size;
+    char  *message_data;
+    size_t message_size;
 } default_config = {
         .max_connections = 1,
         .connect_rate = 100.0,
@@ -82,7 +87,7 @@ static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
-static int read_in_file(const char *filename, void **data, size_t *size);
+static int read_in_file(const char *filename, char **data, size_t *size);
 struct addresses enumerate_usable_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 
@@ -155,21 +160,30 @@ int main(int argc, char **argv) {
             }
             break;
         case 'f':
-            if(engine_params.message_data) {
+            if(conf.message_data) {
                 fprintf(stderr, "--message-file: Message is already specified.\n");
                 exit(EX_USAGE);
-            } else if(read_in_file(optarg, &engine_params.message_data,
-                                           &engine_params.message_size) != 0) {
+            } else if(read_in_file(optarg, &conf.message_data,
+                                           &conf.message_size) != 0) {
                 exit(EX_DATAERR);
             }
             break;
         case 'm': {
-            if(engine_params.message_data) {
+            if(conf.message_data) {
                 fprintf(stderr, "-m: Message is already specified.\n");
                 exit(EX_USAGE);
             }
-            engine_params.message_data = strdup(optarg);
-            engine_params.message_size = strlen(optarg);
+            conf.message_data = strdup(optarg);
+            conf.message_size = strlen(optarg);
+            break;
+            }
+        case '1': {
+            if(conf.first_message_data) {
+                fprintf(stderr, "-m: Message is already specified.\n");
+                exit(EX_USAGE);
+            }
+            conf.first_message_data = strdup(optarg);
+            conf.first_message_size = strlen(optarg);
             break;
             }
         case 'w': {
@@ -270,11 +284,26 @@ int main(int argc, char **argv) {
     if(engine_params.connect_timeout == 0.0)
         engine_params.connect_timeout = 1.0;
 
+    if(conf.message_size || conf.first_message_size) {
+        char *p;
+        size_t s;
+        s = conf.message_size + conf.first_message_size;
+        p = malloc(s + 1);
+        assert(p);
+        memcpy(p + 0, conf.first_message_data, conf.first_message_size);
+        memcpy(p + conf.first_message_size,
+                    conf.message_data, conf.message_size);
+        p[s] = '\0';
+        engine_params.data = p;
+        engine_params.data_header_size = conf.first_message_size;
+        engine_params.data_size = s;
+    }
+
     /*
      * Make sure we're consistent with the message rate and channel bandwidth.
      */
     if(conf.message_rate) {
-        size_t msize = engine_params.message_size;
+        size_t msize = conf.message_size;
         if(msize == 0) {
             fprintf(stderr, "--message-rate parameter has no sense "
                             "without --message or --message-file\n");
@@ -533,7 +562,7 @@ parse_with_multipliers(char *str, struct multiplier *ms, int n) {
 }
 
 static int
-read_in_file(const char *filename, void **data, size_t *size) {
+read_in_file(const char *filename, char **data, size_t *size) {
     FILE *fp = fopen(filename, "rb");
     if(!fp) {
         fprintf(stderr, "%s: %s\n", filename, strerror(errno));
@@ -551,7 +580,7 @@ read_in_file(const char *filename, void **data, size_t *size) {
     *data = malloc(off + 1);
     size_t r = fread(*data, 1, off, fp);
     assert((long)r == off);
-    ((char *)*data)[off] = '\0';    /* Just in case. */
+    data[off] = '\0';    /* Just in case. */
     *size = off;
 
     fclose(fp);
@@ -610,6 +639,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Limit the single connection, close after T s.\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
+    "  --message-first <string>    Send this message first, once\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --message-rate <R>          Messages per second per connection to send\n"

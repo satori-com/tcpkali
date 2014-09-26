@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <sys/queue.h>
 #include <sysexits.h>
+#include <math.h>
 
 #include <config.h>
 
@@ -118,7 +119,7 @@ static void setup_channel_lifetime_timer(EV_P_ double first_timeout);
 static void update_io_interest(EV_P_ struct connection *conn, int events);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
-static void multiply_data(void **data, size_t *size);
+static void multiply_data(struct engine_params *);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 
 struct engine *engine_start(struct engine_params params) {
@@ -142,7 +143,7 @@ struct engine *engine_start(struct engine_params params) {
      * For efficiency, make sure we concatenate a few data items
      * instead of sending short messages one by one.
      */
-    multiply_data(&params.message_data, &params.message_size);
+    multiply_data(&params);
     if(params.minimal_write_size == 0)
         params.minimal_write_size = 1460; /* ~MTU */
     params.epoch = ev_now(EV_DEFAULT);  /* Single epoch for all threads */
@@ -495,7 +496,7 @@ static void start_new_connection(EV_P) {
         ev_timer_start(EV_A_ &conn->timer);
     }
 
-    int want_write = (largs->params.message_size
+    int want_write = (largs->params.data_size
                         || largs->params.connect_timeout > 0.0);
     ev_io_init(&conn->watcher, connection_cb, sockfd,
         EV_READ | (want_write ? EV_WRITE : 0));
@@ -535,7 +536,7 @@ static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
         update_io_interest(EV_A_ conn,
-            EV_READ | (largs->params.message_size ? EV_WRITE : 0));
+            EV_READ | (largs->params.data_size ? EV_WRITE : 0));
         break;
     case CSTATE_CONNECTING:
         /* Timed out in the connection establishment phase. */
@@ -627,8 +628,8 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
          * If there's nothing to write, we remove the write interest.
          */
         ev_timer_stop(EV_A_ &conn->timer);
-        if(largs->params.message_size == 0) {
-            update_io_interest(EV_A_ conn, EV_READ);  /* Disable write */
+        if(largs->params.data_size == 0) {
+            update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
             revents &= ~EV_WRITE;   /* Don't actually write in this loop */
         }
     }
@@ -666,6 +667,12 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         const void *position;
         size_t available_length;
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
+        if(!available_length) {
+            /* Only the header was sent. Now, silence. */
+            assert(largs->params.data_size == largs->params.data_header_size);
+            update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
+            return;
+        }
         size_t bw = largs->params.channel_bandwidth_Bps;
         if(bw != 0) {
             size_t bytes = pacefier_allow(&conn->bw_pace, bw, ev_now(EV_A));
@@ -713,15 +720,16 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
  */
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length) {
 
-    size_t size = largs->params.message_size;
-    size_t available = size - *current_offset;
+    size_t total_size = largs->params.data_size;
+    size_t available = total_size - *current_offset;
     if(available) {
-        *position = largs->params.message_data + *current_offset;
+        *position = largs->params.data + *current_offset;
         *available_length = available;
     } else {
-        *position = largs->params.message_data;
-        *available_length = size;
-        *current_offset = 0;
+        size_t off = largs->params.data_header_size;
+        *position = largs->params.data + off;
+        *available_length = total_size - off;
+        *current_offset = off;
     }
 }
 
@@ -814,21 +822,26 @@ static void connection_flush_stats(EV_P_ struct connection *conn) {
  * If the datum is less then 65k, make sure we repeat it several times
  * so the total buffer exceeds 65k.
  */
-static void multiply_data(void **data, size_t *size) {
-    if(!*size) {
+static void multiply_data(struct engine_params *params) {
+    size_t msg_size = params->data_size - params->data_header_size;
+
+    if(!msg_size) {
         /* Can't blow up empty buffer. */
-    } else if(*size >= 65536) {
+    } else if(msg_size >= 65536) {
         /* Data is large enough to avoid blowing up. */
     } else {
-        size_t n = 1 + 65536/(*size);
-        size_t s = n * (*size);
-        char *p = malloc(s);
+        size_t n = ceil((128*1024.0)/msg_size); /* Optimum is ~size(L2)/2 */
+        size_t s = n * msg_size;
+        size_t hdr_off = params->data_header_size;
+        char *p = realloc(params->data, hdr_off + s + 1);
+        void *msg_data = p + hdr_off;
         assert(p);
-        for(size_t i = 0; i < n; i++) {
-            memcpy(&p[i * (*size)], *data, *size);
+        for(size_t i = 1; i < n; i++) {
+            memcpy(&p[hdr_off + i * msg_size], msg_data, msg_size);
         }
-        *data = p;
-        *size = s;
+        p[hdr_off + s] = '\0';
+        params->data = p;
+        params->data_size = hdr_off + s;
     }
 }
 
