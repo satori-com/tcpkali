@@ -194,10 +194,10 @@ void engine_terminate(struct engine *eng) {
     double epoch = eng->loops[0].params.epoch;   /* same in all threads. */
     double now = ev_now(EV_DEFAULT);
     char buf[64];
-    printf(stderr, "Total data sent:     %s (%ld bytes)\n",
+    printf("Total data sent:     %s (%ld bytes)\n",
         express_bytes(eng->total_data_sent, buf, sizeof(buf)),
         (long)eng->total_data_sent);
-    printf(stderr, "Total data received: %s (%ld bytes)\n",
+    printf("Total data received: %s (%ld bytes)\n",
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
     long conns = conn_in + conn_out;
