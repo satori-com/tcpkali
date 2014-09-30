@@ -45,15 +45,15 @@ struct connection {
     size_t data_sent;
     size_t data_received;
     float channel_eol_point;    /* End of life time, since epoch */
-    enum state {
-        CSTATE_CONNECTED,
-        CSTATE_CONNECTING,
-    } conn_state:8;
     enum type {
         CONN_OUTGOING,
         CONN_INCOMING,
         CONN_ACCEPTOR,
     } conn_type:8;
+    enum state {
+        CSTATE_CONNECTED,
+        CSTATE_CONNECTING,
+    } conn_state:8;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     TAILQ_ENTRY(connection) hook;
 };
@@ -487,6 +487,7 @@ static void start_new_connection(EV_P) {
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_OUTGOING;
+    conn->conn_state = CSTATE_CONNECTING;
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
             setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
@@ -499,7 +500,6 @@ static void start_new_connection(EV_P) {
     conn->remote_index = remote_index;
 
     if(largs->params.connect_timeout > 0.0) {
-        conn->conn_state = CSTATE_CONNECTING;
         ev_timer_init(&conn->timer, conn_timer,
                       largs->params.connect_timeout, 0.0);
         ev_timer_start(EV_A_ &conn->timer);
@@ -580,6 +580,14 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     assert(rc != -1);
 
     atomic_increment(&largs->connections_counter);
+
+    /* If channel lifetime is 0, close it right away. */
+    if(largs->params.channel_lifetime == 0.0) {
+        largs->worker_connections_accepted++;
+        close(sockfd);
+        return;
+    }
+
     atomic_increment(&largs->incoming_connections);
 
     struct connection *conn = calloc(1, sizeof(*conn));
