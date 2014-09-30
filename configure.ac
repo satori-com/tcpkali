@@ -19,6 +19,8 @@ m4_include([m4/ax_check_compile_flag.m4])
 
 AX_CHECK_COMPILE_FLAG([-W], [CFLAGS="$CFLAGS -W"])
 AX_CHECK_COMPILE_FLAG([-Wall], [CFLAGS="$CFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-Wno-strict-aliasing], [CFLAGS="$CFLAGS -Wno-strict-aliasing"])
+AX_CHECK_COMPILE_FLAG([-fno-strict-aliasing], [CFLAGS="$CFLAGS -fno-strict-aliasing"])
 AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])
 
 AC_CHECK_HEADERS(sched.h)

@@ -7,7 +7,7 @@
  * A list of IPv4/IPv6 addresses.
  */
 struct addresses {
-    struct sockaddr *addrs;
+    struct sockaddr_storage *addrs;
     size_t n_addrs;
 };
 

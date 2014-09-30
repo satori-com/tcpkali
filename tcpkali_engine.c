@@ -122,6 +122,15 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 static void multiply_data(struct engine_params *);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 
+/* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
+static socklen_t sockaddr_len(struct sockaddr *sa) {
+    switch(sa->sa_family) {
+    case AF_INET: return sizeof(struct sockaddr_in);
+    case AF_INET6: return sizeof(struct sockaddr_in6);
+    }
+    assert(!"Not IPv4 and not IPv6");
+}
+
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
@@ -327,7 +336,7 @@ static void *single_engine_loop_thread(void *argp) {
     if(largs->params.listen_addresses.n_addrs) {
         int opened_listening_sockets = 0;
         for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
-            struct sockaddr *sa = &largs->params.listen_addresses.addrs[n];
+            struct sockaddr *sa = (struct sockaddr *)&largs->params.listen_addresses.addrs[n];
             int lsock = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
             assert(lsock != -1);
             int rc = fcntl(lsock, F_SETFL, fcntl(lsock, F_GETFL) | O_NONBLOCK);
@@ -335,7 +344,7 @@ static void *single_engine_loop_thread(void *argp) {
             int on = ~0;
             rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
             assert(rc != -1);
-            rc = bind(lsock, sa, sizeof(*sa));
+            rc = bind(lsock, sa, sockaddr_len(sa));
             if(rc == -1) {
                 char buf[256];
                 fprintf(stderr, "Bind %s is not done: %s\n",
@@ -455,7 +464,7 @@ static void start_new_connection(EV_P) {
     rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
     assert(rc != -1);
 
-    rc = connect(sockfd, sa, sizeof(*sa));
+    rc = connect(sockfd, sa, sockaddr_len(sa));
     if(rc == -1) {
         char buf[INET6_ADDRSTRLEN+64];
         switch(errno) {
@@ -526,7 +535,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     }
 
     *remote_index = off;
-    return &largs->params.remote_addresses.addrs[off];
+    return (struct sockaddr *)&largs->params.remote_addresses.addrs[off];
 }
 
 static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
@@ -617,7 +626,7 @@ static void update_io_interest(EV_P_ struct connection *conn, int events) {
 static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
-    struct sockaddr *remote = &largs->params.remote_addresses.addrs[conn->remote_index];
+    struct sockaddr *remote = (struct sockaddr *)&largs->params.remote_addresses.addrs[conn->remote_index];
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         conn->conn_state = CSTATE_CONNECTED;
@@ -782,7 +791,9 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
         fprintf(stderr, "Connection to %s is not done: %s\n",
-                format_sockaddr(&largs->params.remote_addresses.addrs[conn->remote_index], buf, sizeof(buf)),
+                format_sockaddr((struct sockaddr *)&largs->params
+                    .remote_addresses.addrs[conn->remote_index],
+                    buf, sizeof(buf)),
                 strerror(errno));
         largs->worker_connection_failures++;
         largs->worker_connection_timeouts++;

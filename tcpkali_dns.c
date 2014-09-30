@@ -14,13 +14,32 @@
 
 #include "tcpkali.h"
 
+/*
+ * Note: struct sockaddr_in6 is larger than struct sockaddr, hence
+ * the storage should be bigger. However, we shall not dereference
+ * the AF_INET (struct sockaddr_in *) as it were a larger structure.
+ * Therefore this code is rather complex.
+ */
 void address_add(struct addresses *aseq, struct sockaddr *sa) {
     /* Reallocate a bigger list and continue. Don't laugh. */
     aseq->addrs = realloc(aseq->addrs,
                           (aseq->n_addrs + 1) * sizeof(aseq->addrs[0]));
     assert(aseq->addrs);
-    aseq->addrs[aseq->n_addrs] = *sa;
-    aseq->n_addrs++;
+    switch(sa->sa_family) {
+    case AF_INET:
+        *(struct sockaddr_in *)&aseq->addrs[aseq->n_addrs]
+                = *(struct sockaddr_in *)sa;
+        aseq->n_addrs++;
+        break;
+    case AF_INET6:
+        *(struct sockaddr_in6 *)&aseq->addrs[aseq->n_addrs]
+                = *(struct sockaddr_in6 *)sa;
+        aseq->n_addrs++;
+        break;
+    default:
+        assert(!"Not IPv4 and not IPv6");
+        break;
+    }
 }
 
 /*
@@ -85,7 +104,8 @@ void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, str
             fprintf(fp, "%s", separator);
         }
         char buf[INET6_ADDRSTRLEN+64];
-        fprintf(stderr, "%s", format_sockaddr(&addresses.addrs[n],
+        fprintf(stderr, "%s",
+            format_sockaddr((struct sockaddr *)&addresses.addrs[n],
                               buf, sizeof(buf)));
         if(n == addresses.n_addrs - 1) {
             fprintf(fp, "%s", suffix);

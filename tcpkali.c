@@ -590,33 +590,28 @@ read_in_file(const char *filename, char **data, size_t *size) {
 }
 
 struct addresses enumerate_usable_addresses(int listen_port) {
-    struct ifaddrs *ifaddr, *ifa;
     struct addresses addresses = { 0, 0 };
+    struct addrinfo hints = {
+            .ai_family = AF_UNSPEC,
+            .ai_socktype = SOCK_STREAM,
+            .ai_protocol = IPPROTO_TCP,
+            .ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG };
+    char service[32];
+    snprintf(service, sizeof(service), "%d", listen_port);
 
-    if(getifaddrs(&ifaddr) == -1) {
-        perror("getifaddrs");
+    struct addrinfo *res;
+    int err = getaddrinfo(NULL, service, &hints, &res);
+    if(err != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
         exit(EXIT_FAILURE);
     }
 
-    for(ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if(ifa->ifa_addr == NULL)
-                   continue;
-
-        switch(ifa->ifa_addr->sa_family) {
-        case AF_INET:
-            ((struct sockaddr_in *)ifa->ifa_addr)->sin_port = htons(listen_port);
-            address_add(&addresses, ifa->ifa_addr);
-            break;
-        case AF_INET6:
-            ((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_port = htons(listen_port);
-            address_add(&addresses, ifa->ifa_addr);
-            break;
-        default:
-            continue;
-        }
+    /* Move all of the addresses into the separate storage */
+    for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
+        address_add(&addresses, tmp->ai_addr);
     }
 
-    freeifaddrs(ifaddr);
+    freeaddrinfo(res);
 
     fprint_addresses(stderr, "Listen on: ",
                                "\nListen on: ", "\n",
