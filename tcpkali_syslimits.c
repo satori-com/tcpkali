@@ -26,15 +26,25 @@ static int compare_rlimits(const void *ap, const void *bp) {
 /*
  * Determine the global limit on open files.
  */
-static long max_open_files() {
-    return sysconf(_SC_OPEN_MAX);
+static rlim_t max_open_files() {
+    long value = sysconf(_SC_OPEN_MAX);
+    if(value != -1) {
+        return value;
+    } else {
+        perror("sysconf(_SC_OPEN_MAX)");
+#ifdef  OPEN_MAX
+        return OPEN_MAX;
+#else
+        return 1024;
+#endif
+    }
 }
 
 /*
  * Adjust number of open files.
  */
 int adjust_system_limits_for_highload(int expected_sockets, int workers) {
-    long max_open = max_open_files();
+    rlim_t max_open = max_open_files();
     struct rlimit prev_limit;
     int ret;
 
@@ -109,14 +119,14 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     ret = getrlimit(RLIMIT_NOFILE, &rlp);
     assert(ret == 0);
 
-    if(rlp.rlim_cur < (size_t)(expected_sockets + 4 + workers)) {
+    if(rlp.rlim_cur < (rlim_t)(expected_sockets + 4 + workers)) {
         fprintf(stderr, "Warning: Open files limit (`ulimit -n`) %ld "
                         "is too low for the expected load (-c %d).\n",
             (long)rlp.rlim_cur, expected_sockets);
         return -1;
     }
 
-    if(max_open_files() < (expected_sockets + 4 + workers)) {
+    if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
         fprintf(stderr, "Warning: System files limit (`ulimit -n`) %ld "
                         "is too low for the expected load (-c %d).\n",
             (long)rlp.rlim_cur, expected_sockets);
