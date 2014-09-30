@@ -21,6 +21,7 @@
 #include "tcpkali.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
+#include "tcpkali_syslimits.h"
 
 /*
  * Describe the command line options.
@@ -134,10 +135,6 @@ int main(int argc, char **argv) {
             conf.max_connections = atoi(optarg);
             if(conf.max_connections < 0) {
                 fprintf(stderr, "Expecting --connections > 0\n");
-                exit(EX_USAGE);
-            } else if(conf.max_connections + 10 + number_of_cpus()
-                        > max_open_files()) {
-                fprintf(stderr, "Number of connections exceeds system limit on open files. Update `ulimit -n`.\n");
                 exit(EX_USAGE);
             }
             break;
@@ -279,6 +276,20 @@ int main(int argc, char **argv) {
         && conf.listen_port == 0) {
         engine_params.requested_workers = conf.max_connections;
     }
+    if(!engine_params.requested_workers)
+        engine_params.requested_workers = number_of_cpus();
+
+    /*
+     * Check that the system environment is prepared to handle high load.
+     */
+    if(adjust_system_limits_for_highload(conf.max_connections,
+            engine_params.requested_workers) == -1) {
+        fprintf(stderr, "System limits will not support the expected load.\n");
+        exit(EX_SOFTWARE);
+    }
+    /* Check system limits and print out if they are not sane. */
+    check_system_limits_sanity(conf.max_connections,
+                               engine_params.requested_workers);
 
     /* Default connection timeout is 1 seconds */
     if(engine_params.connect_timeout == 0.0)

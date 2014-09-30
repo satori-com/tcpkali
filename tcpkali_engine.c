@@ -453,7 +453,7 @@ static void start_new_connection(EV_P) {
     if(sockfd == -1) {
         switch(errno) {
         case ENFILE:
-            fprintf(stderr, "System socket table is full (%d), consider changing ulimit -n", max_open_files());
+            fprintf(stderr, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles sysctl\n");
             exit(1);
         }
         return; /* Come back later */
@@ -854,13 +854,6 @@ static void multiply_data(struct engine_params *params) {
         params->data = p;
         params->data_size = hdr_off + s;
     }
-}
-
-/*
- * Determine the limit on open files.
- */
-int max_open_files() {
-    return sysconf(_SC_OPEN_MAX);
 }
 
 

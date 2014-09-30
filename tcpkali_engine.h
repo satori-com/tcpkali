@@ -2,7 +2,6 @@
 #define TCPKALI_ENGINE_H
 
 long number_of_cpus();
-int max_open_files();
 
 struct engine;
 
