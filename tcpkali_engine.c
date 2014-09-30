@@ -121,6 +121,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static void multiply_data(struct engine_params *);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
+static int limit_channel_lifetime(struct loop_arguments *largs);
 
 /* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
 static socklen_t sockaddr_len(struct sockaddr *sa) {
@@ -286,7 +287,7 @@ static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
     struct connection *conn;
     struct connection *tmpconn;
 
-    assert(largs->params.channel_lifetime);
+    assert(limit_channel_lifetime(largs));
     double delta = ev_now(EV_A) - largs->params.epoch;
     TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
         if(conn->channel_eol_point <= delta) {
@@ -374,8 +375,7 @@ static void *single_engine_loop_thread(void *argp) {
         }
     }
 
-
-    if(largs->params.channel_lifetime > 0.0) {
+    if(limit_channel_lifetime(largs)) {
         ev_timer_init(&largs->channel_lifetime_timer, channel_lifetime, 1, 0);
         ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
     }
@@ -487,7 +487,7 @@ static void start_new_connection(EV_P) {
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_OUTGOING;
-    if(largs->params.channel_lifetime > 0.0) {
+    if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
             setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
         }
@@ -554,6 +554,16 @@ static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
     }
 }
 
+/*
+ * Check whether we have configured an extended (e.g., non-zero), but
+ * finite channel lifetime. Zero channel lifetime is managed differently:
+ * the channel closes right after we figure out that the connection took place.
+ */
+static int limit_channel_lifetime(struct loop_arguments *largs) {
+    return (largs->params.channel_lifetime != INFINITY
+                && largs->params.channel_lifetime > 0.0);
+}
+
 static void setup_channel_lifetime_timer(EV_P_ double first_timeout) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     ev_timer_set(&largs->channel_lifetime_timer, first_timeout, 0);
@@ -574,7 +584,7 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_INCOMING;
-    if(largs->params.channel_lifetime > 0.0) {
+    if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
             setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
         }
@@ -630,7 +640,16 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         conn->conn_state = CSTATE_CONNECTED;
-        ev_timer_stop(EV_A_ &conn->timer);
+
+        /*
+         * Extended channel lifetimes managed out-of-band, but zero
+         * lifetime can be managed here very quickly.
+         */
+        if(largs->params.channel_lifetime == 0.0) {
+            close_connection(EV_A_ conn, CCR_CLEAN);
+            return;
+        }
+
         /*
          * We were asked to produce the WRITE event
          * only to detect successful connection.

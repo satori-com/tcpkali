@@ -1,3 +1,5 @@
+#define _ISOC99_SOURCE
+#define _BSD_SOURCE
 #include <getopt.h>
 #include <sysexits.h>
 #include <stdlib.h>
@@ -46,7 +48,8 @@ static struct option cli_long_options[] = {
     { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
-    { "listen-port", 1, 0, 'l' }
+    { "listen-port", 1, 0, 'l' },
+    { 0, 0, 0, 0 }
 };
 
 static struct tcpkali_config {
@@ -86,7 +89,7 @@ struct stats_checkpoint {
  */
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
-static double parse_with_multipliers(char *str, struct multiplier *, int n);
+static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
 struct addresses enumerate_usable_addresses(int listen_port);
@@ -119,12 +122,15 @@ static struct multiplier bw_multiplier[] = {
  */
 int main(int argc, char **argv) {
     struct tcpkali_config conf = default_config;
-    struct engine_params engine_params;
-    memset(&engine_params, 0, sizeof(engine_params));
+    struct engine_params engine_params = {
+        .connect_timeout = 1.0,
+        .channel_lifetime = INFINITY
+    };
 
     while(1) {
+        char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:l:w:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:m:f:l:r:w:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -139,7 +145,7 @@ int main(int argc, char **argv) {
             }
             break;
         case 'r':
-            conf.connect_rate = parse_with_multipliers(optarg,
+            conf.connect_rate = parse_with_multipliers(option, optarg,
                             k_multiplier,
                             sizeof(k_multiplier)/sizeof(k_multiplier[0]));
             if(conf.connect_rate <= 0) {
@@ -148,7 +154,7 @@ int main(int argc, char **argv) {
             }
             break;
         case 't':
-            conf.test_duration = parse_with_multipliers(optarg,
+            conf.test_duration = parse_with_multipliers(option, optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
             if(conf.test_duration <= 0) {
@@ -198,7 +204,7 @@ int main(int argc, char **argv) {
             break;
             }
         case 'b': {
-            int Bps = parse_with_multipliers(optarg,
+            int Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
             if(Bps <= 0) {
@@ -209,7 +215,7 @@ int main(int argc, char **argv) {
             break;
             }
         case 'M': {
-            int rate = parse_with_multipliers(optarg,
+            int rate = parse_with_multipliers(option, optarg,
                         k_multiplier,
                         sizeof(k_multiplier)/sizeof(k_multiplier[0]));
             if(rate <= 0) {
@@ -243,7 +249,8 @@ int main(int argc, char **argv) {
             }
             break;
         case CLI_CONN_OFFSET + 't':
-            engine_params.connect_timeout = parse_with_multipliers(optarg,
+            engine_params.connect_timeout = parse_with_multipliers(
+                            option, optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
             if(engine_params.connect_timeout <= 0.0) {
@@ -253,11 +260,12 @@ int main(int argc, char **argv) {
             }
             break;
         case CLI_CHAN_OFFSET + 't':
-            engine_params.channel_lifetime = parse_with_multipliers(optarg,
+            engine_params.channel_lifetime = parse_with_multipliers(
+                            option, optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
-            if(engine_params.channel_lifetime <= 0.0) {
-                fprintf(stderr, "Expected positive --channel-lifetime=%s\n",
+            if(engine_params.channel_lifetime < 0.0) {
+                fprintf(stderr, "Expected non-negative --channel-lifetime=%s\n",
                     optarg);
                 exit(EX_USAGE);
             }
@@ -290,10 +298,6 @@ int main(int argc, char **argv) {
     /* Check system limits and print out if they are not sane. */
     check_system_limits_sanity(conf.max_connections,
                                engine_params.requested_workers);
-
-    /* Default connection timeout is 1 seconds */
-    if(engine_params.connect_timeout == 0.0)
-        engine_params.connect_timeout = 1.0;
 
     if(conf.message_size || conf.first_message_size) {
         char *p;
@@ -553,7 +557,7 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
 }
 
 static double
-parse_with_multipliers(char *str, struct multiplier *ms, int n) {
+parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int n) {
     char *endptr;
     double value = strtod(str, &endptr);
     if(endptr == str) {
@@ -568,6 +572,10 @@ parse_with_multipliers(char *str, struct multiplier *ms, int n) {
     }
     if(*endptr) {
         fprintf(stderr, "Unknown prefix \"%s\" in %s\n", endptr, str);
+        return -1;
+    }
+    if(!isfinite(value)) {
+        fprintf(stderr, "Option %s parses to infinite value\n", option);
         return -1;
     }
     return value;
@@ -642,7 +650,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
-    "  --connect-rate <R=%.0f>      Limit number of new connections per second\n"
+    "  -r, --connect-rate <R=%.0f>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
