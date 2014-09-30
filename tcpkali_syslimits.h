@@ -12,9 +12,4 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers);
  */
 int check_system_limits_sanity(int expected_sockets, int workers);
 
-/*
- * Determine the global limit on open files.
- */
-int max_open_files();
-
 #endif  /* TCPKALI_SYSLIMITS_H */

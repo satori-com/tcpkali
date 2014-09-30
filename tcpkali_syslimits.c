@@ -24,9 +24,17 @@ static int compare_rlimits(const void *ap, const void *bp) {
 }
 
 /*
+ * Determine the global limit on open files.
+ */
+static long max_open_files() {
+    return sysconf(_SC_OPEN_MAX);
+}
+
+/*
  * Adjust number of open files.
  */
 int adjust_system_limits_for_highload(int expected_sockets, int workers) {
+    long max_open = max_open_files();
     struct rlimit prev_limit;
     int ret;
 
@@ -41,7 +49,7 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
      * be arbitrary spikes. So we want to set our limit as high as we can.
      */
     rlim_t limits[] = {
-        prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : OPEN_MAX,
+        prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : max_open,
         expected_sockets + 100 + workers,
         expected_sockets + 4 + workers, /* n cores and other overhead */
     };
@@ -118,10 +126,3 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     return 0;
 }
 
-
-/*
- * Determine the global limit on open files.
- */
-int max_open_files() {
-    return sysconf(_SC_OPEN_MAX);
-}
