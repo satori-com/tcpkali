@@ -328,12 +328,16 @@ int main(int argc, char **argv) {
      */
     if(adjust_system_limits_for_highload(conf.max_connections,
             engine_params.requested_workers) == -1) {
+        /* Print the full set of problems with system limits. */
+        check_system_limits_sanity(conf.max_connections,
+                                   engine_params.requested_workers);
         fprintf(stderr, "System limits will not support the expected load.\n");
         exit(EX_SOFTWARE);
+    } else {
+        /* Check other system limits and print out if they might be too low. */
+        check_system_limits_sanity(conf.max_connections,
+                                   engine_params.requested_workers);
     }
-    /* Check system limits and print out if they are not sane. */
-    check_system_limits_sanity(conf.max_connections,
-                               engine_params.requested_workers);
 
     if(conf.message_size || conf.first_message_size) {
         char *p;

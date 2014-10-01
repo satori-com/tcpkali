@@ -120,7 +120,7 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
             (long)prev_limit.rlim_cur, (long)limits[limits_count - 1]);
         return -1;
     } else if(limits[i] < (size_t)(expected_sockets + 4 + workers)) {
-        fprintf(stderr, "Adjusted limit from %ld to %ld, but still too low for --connections=%d.\n",
+        fprintf(stderr, "Adjusted open files limit from %ld to %ld, but still too low for --connections=%d.\n",
             (long)prev_limit.rlim_cur, (long)limits[i], expected_sockets);
         return -1;
     } else {
