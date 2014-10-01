@@ -475,6 +475,7 @@ static void start_new_connection(EV_P) {
     rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
     assert(rc != -1);
 
+    int conn_state;
     rc = connect(sockfd, sa, sockaddr_len(sa));
     if(rc == -1) {
         char buf[INET6_ADDRSTRLEN+64];
@@ -491,14 +492,24 @@ static void start_new_connection(EV_P) {
             close(sockfd);
             return;
         }
+
+        atomic_increment(&largs->outgoing_connecting);
+        conn_state = CSTATE_CONNECTING;
+    } else { /* This branch is for completeness only. Should not happen. */
+        assert(!"Synchronous connection should not happen");
+        if(largs->params.channel_lifetime == 0.0) {
+            close(sockfd);
+            return;
+        }
+        atomic_increment(&largs->outgoing_established);
+        conn_state = CSTATE_CONNECTED;
     }
 
     double now = ev_now(EV_A);
-    atomic_increment(&largs->outgoing_connecting);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_OUTGOING;
-    conn->conn_state = CSTATE_CONNECTING;
+    conn->conn_state = conn_state;
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
             setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
@@ -510,14 +521,15 @@ static void start_new_connection(EV_P) {
     pacefier_init(&conn->bw_pace, now);
     conn->remote_index = remote_index;
 
-    if(largs->params.connect_timeout > 0.0) {
+    int want_catch_connect = (conn_state == CSTATE_CONNECTING
+                    && largs->params.connect_timeout > 0.0);
+    if(want_catch_connect) {
         ev_timer_init(&conn->timer, conn_timer,
                       largs->params.connect_timeout, 0.0);
         ev_timer_start(EV_A_ &conn->timer);
     }
 
-    int want_write = (largs->params.data_size
-                        || largs->params.connect_timeout > 0.0);
+    int want_write = (largs->params.data_size || want_catch_connect);
     ev_io_init(&conn->watcher, connection_cb, sockfd,
         EV_READ | (want_write ? EV_WRITE : 0));
 
