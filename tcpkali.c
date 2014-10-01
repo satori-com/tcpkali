@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
             break;
         case 'm': {
             if(conf.message_data) {
-                fprintf(stderr, "-m: Message is already specified.\n");
+                fprintf(stderr, "--message: Message is already specified.\n");
                 exit(EX_USAGE);
             }
             conf.message_data = strdup(optarg);
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
             }
         case '1': {
             if(conf.first_message_data) {
-                fprintf(stderr, "-m: Message is already specified.\n");
+                fprintf(stderr, "--message: Message is already specified.\n");
                 exit(EX_USAGE);
             }
             conf.first_message_data = strdup(optarg);
@@ -206,9 +206,10 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expected --workers > 1\n");
                 exit(EX_USAGE);
             }
-            if(n > 64) {
-                fprintf(stderr, "Value --workers=%d is unreasonably large\n",
-                    n);
+            if(n > number_of_cpus()) {
+                fprintf(stderr, "Value --workers=%d is unreasonably large,"
+                    " only %ld CPU%s detected\n",
+                    n, number_of_cpus(), number_of_cpus()==1?"":"s");
                 exit(EX_USAGE);
             }
             engine_params.requested_workers = n;
@@ -248,14 +249,16 @@ int main(int argc, char **argv) {
         case CLI_STATSD_OFFSET+'p':
             conf.statsd_port = atoi(optarg);
             if(conf.statsd_port <= 0 || conf.statsd_port >= 65535) {
-                fprintf(stderr, "Port value --statsd-port is out of range\n");
+                fprintf(stderr, "--statsd-port=%d is not in [1..65535]\n",
+                    conf.statsd_port);
                 exit(EX_USAGE);
             }
             break;
         case 'l':
             conf.listen_port = atoi(optarg);
             if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
-                fprintf(stderr, "Port value --listen_port is out of range\n");
+                fprintf(stderr, "--listen-port=%d is not in [1..65535]\n",
+                    conf.listen_port);
                 exit(EX_USAGE);
             }
             break;
@@ -364,7 +367,7 @@ int main(int argc, char **argv) {
         if(conf.max_connections/conf.connect_rate > conf.test_duration) {
             fprintf(stderr, "%d connections can not be opened at a rate %.1f,"
                             " within test duration %.f.\n"
-                            "Decrease --connect-rate or increse --duration.\n",
+                            "Decrease --connect-rate or increase --duration.\n",
                 conf.max_connections,
                 conf.connect_rate,
                 conf.test_duration);
@@ -372,7 +375,7 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "WARNING: %d connections might not be opened at a rate %.1f,"
                             " within test duration %.f.\n"
-                            "Decrease --connect-rate or increse --duration.\n",
+                            "Decrease --connect-rate or increase --duration.\n",
                 conf.max_connections,
                 conf.connect_rate,
                 conf.test_duration);
