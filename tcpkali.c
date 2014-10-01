@@ -365,20 +365,20 @@ int main(int argc, char **argv) {
      */
     if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
         if(conf.max_connections/conf.connect_rate > conf.test_duration) {
-            fprintf(stderr, "%d connections can not be opened at a rate %.1f,"
-                            " within test duration %.f.\n"
-                            "Decrease --connect-rate or increase --duration.\n",
+            fprintf(stderr, "%d connections can not be opened at a rate %.f,"
+                    " within test duration %.f.\n"
+                    "Decrease --connect-rate=%.f or increase --duration=%.f.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration);
+                conf.test_duration, conf.connect_rate, conf.test_duration);
             exit(EX_USAGE);
         } else {
             fprintf(stderr, "WARNING: %d connections might not be opened at a rate %.1f,"
-                            " within test duration %.f.\n"
-                            "Decrease --connect-rate or increase --duration.\n",
+                    " within test duration %.f.\n"
+                    "Decrease --connect-rate=%.f or increase --duration=%.f.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration);
+                conf.test_duration, conf.connect_rate, conf.test_duration);
         }
     }
 
