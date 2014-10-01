@@ -500,7 +500,7 @@ static void start_new_connection(EV_P) {
     if(sockfd == -1) {
         switch(errno) {
         case ENFILE:
-            DEBUG(DBG_ERROR, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles sysctl\n");
+            DEBUG(DBG_ERROR, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles/fs.file-max sysctls\n");
             exit(1);
         }
         return; /* Come back later */
