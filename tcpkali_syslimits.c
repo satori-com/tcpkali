@@ -162,7 +162,7 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * expected_sockets to the destination.
      */
     const char *portrange_filename = "/proc/sys/net/ipv4/ip_local_port_range";
-    FILE *f = fopen("/proc/sys/net/ipv4/ip_local_port_range", "r");
+    FILE *f = fopen(portrange_filename, "r");
     if(f) {
         int lo, hi;
         if(fscanf(f, "%d %d", &lo, &hi) == 2) {
@@ -171,6 +171,27 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
                     "%d simultaneous connections "
                     "since \"%s\" specifies too narrow range [%d..%d].\n",
                     expected_sockets, portrange_filename, lo, hi);
+                return_value = -1;
+            }
+        }
+        fclose(f);
+    }
+
+    /*
+     * Check that we are able to reuse the sockets when opening a lot
+     * of connections over the short period of time.
+     * http://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html
+     */
+    const char *time_wait_reuse_filename = "/proc/sys/net/ipv4/tcp_tw_reuse";
+    f = fopen(time_wait_reuse_filename, "r");
+    if(f) {
+        int flag;
+        if(fscanf(f, "%d", &flag) == 1) {
+            if(flag != 1 && expected_sockets > 1) {
+                fprintf(stderr, "WARNING: Not reusing TIME_WAIT sockets, "
+                    "might not open %d simultaneous connections. "
+                    "Adjust \"%s\" value.\n",
+                    expected_sockets, time_wait_reuse_filename);
                 return_value = -1;
             }
         }
