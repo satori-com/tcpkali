@@ -132,6 +132,11 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
     assert(!"Not IPv4 and not IPv6");
 }
 
+#define DEBUG(level, fmt, args...) do {         \
+        if(largs->params.debug_level >= level)  \
+            fprintf(stderr, fmt, ##args);       \
+    } while(0)
+
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
@@ -348,7 +353,7 @@ static void *single_engine_loop_thread(void *argp) {
             rc = bind(lsock, sa, sockaddr_len(sa));
             if(rc == -1) {
                 char buf[256];
-                fprintf(stderr, "Bind %s is not done: %s\n",
+                DEBUG(DBG_ALWAYS, "Bind %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)),
                         strerror(errno));
                 if(errno == EINVAL) {
@@ -370,7 +375,7 @@ static void *single_engine_loop_thread(void *argp) {
             ev_io_start(EV_A_ &conn->watcher);
         }
         if(!opened_listening_sockets) {
-            fprintf(stderr, "Could not listen on any local sockets!\n");
+            DEBUG(DBG_ALWAYS, "Could not listen on any local sockets!\n");
             exit(EX_UNAVAILABLE);
         }
     }
@@ -390,7 +395,7 @@ static void *single_engine_loop_thread(void *argp) {
 
     connections_flush_stats(EV_A);
 
-    fprintf(stderr, "Exiting worker %d\n"
+    DEBUG(DBG_ALWAYS, "Exiting worker %d\n"
             "  %u↓, %u↑ open connections\n"
             "  %u connections_counter \n"
             "  ↳ %lu connections_initiated\n"
@@ -420,7 +425,7 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
 
     char c;
     if(read(w->fd, &c, 1) != 1) {
-        fprintf(stderr, "%d Reading from control channel %d returned: %s\n",
+        DEBUG(DBG_ALWAYS, "%d Reading from control channel %d returned: %s\n",
             largs->thread_no, w->fd, strerror(errno));
         return;
     }
@@ -432,7 +437,8 @@ static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
         ev_break(EV_A_ EVBREAK_ALL);
         break;
     default:
-        fprintf(stderr, "Unknown operation '%c' from a control channel %d\n",
+        DEBUG(DBG_ALWAYS,
+            "Unknown operation '%c' from a control channel %d\n",
             c, w->fd);
     }
 }
@@ -453,7 +459,7 @@ static void start_new_connection(EV_P) {
     if(sockfd == -1) {
         switch(errno) {
         case ENFILE:
-            fprintf(stderr, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles sysctl\n");
+            DEBUG(DBG_ERROR, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles sysctl\n");
             exit(1);
         }
         return; /* Come back later */
@@ -474,7 +480,7 @@ static void start_new_connection(EV_P) {
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
             if(remote_stats->connection_failures == 1) {
-                fprintf(stderr, "Connection to %s is not done: %s\n",
+                DEBUG(DBG_ERROR, "Connection to %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)), strerror(errno));
             }
             close(sockfd);
@@ -680,7 +686,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 case EAGAIN:
                     return;
                 default:
-                    fprintf(stderr, "Closing %s: %s\n",
+                    DEBUG(DBG_ERROR, "Closing %s: %s\n",
                         format_sockaddr(remote, buf, sizeof(buf)),
                         strerror(errno));
                     close_connection(EV_A_ conn, CCR_REMOTE);
@@ -688,7 +694,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 }
                 /* Fall through */
             case 0:
-                fprintf(stderr, "Connection half-closed by %s\n",
+                DEBUG(DBG_ERROR, "Connection half-closed by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(EV_A_ conn, CCR_REMOTE);
                 return;
@@ -736,7 +742,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 break;
             case EPIPE:
             default:
-                fprintf(stderr, "Connection reset by %s\n",
+                DEBUG(DBG_ERROR, "Connection reset by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(EV_A_ conn, CCR_REMOTE);
                 return;
@@ -817,7 +823,7 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     case CCR_TIMEOUT:
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
-        fprintf(stderr, "Connection to %s is not done: %s\n",
+        DEBUG(DBG_ERROR, "Connection to %s is not done: %s\n",
                 format_sockaddr((struct sockaddr *)&largs->params
                     .remote_addresses.addrs[conn->remote_index],
                     buf, sizeof(buf)),

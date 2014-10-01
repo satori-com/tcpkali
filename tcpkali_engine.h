@@ -11,6 +11,11 @@ struct engine_params {
     size_t requested_workers;       /* Number of threads to start */
     size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
     size_t minimal_write_size;
+    enum {
+        DBG_ALWAYS,
+        DBG_ERROR,
+        DBG_DETAIL,
+    } debug_level;
     double connect_timeout;
     double channel_lifetime;
     double epoch;

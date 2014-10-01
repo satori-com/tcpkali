@@ -33,6 +33,7 @@
 #define CLI_CONN_OFFSET  1024
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
+    { "debug", 1, 0, 'd' },
     { "connections", 0, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
     { "duration", 1, 0, 't' },
@@ -123,6 +124,7 @@ static struct multiplier bw_multiplier[] = {
 int main(int argc, char **argv) {
     struct tcpkali_config conf = default_config;
     struct engine_params engine_params = {
+        .debug_level = DBG_ERROR,
         .connect_timeout = 1.0,
         .channel_lifetime = INFINITY
     };
@@ -137,6 +139,15 @@ int main(int argc, char **argv) {
         case 'h':
             usage(argv[0], &default_config);
             exit(EX_USAGE);
+        case 'd':
+            engine_params.debug_level = atoi(optarg);
+            switch(engine_params.debug_level) {
+            case 0: case 1: break;
+            default:
+                fprintf(stderr, "Expecting --debug=[0..1]\n");
+                exit(EX_USAGE);
+            }
+            break;
         case 'c':
             conf.max_connections = atoi(optarg);
             if(conf.max_connections < 0) {
@@ -649,6 +660,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
+    "  --debug <level=1>           Debug level [0..1].\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
     "  -r, --connect-rate <R=%.0f>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
