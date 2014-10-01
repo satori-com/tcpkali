@@ -72,8 +72,9 @@ struct loop_arguments {
     /* The following atomic members are accessed outside of worker thread */
     atomic64_t worker_data_sent;
     atomic64_t worker_data_received;
-    atomic_t incoming_connections;
-    atomic_t outgoing_connections;
+    atomic_t outgoing_connecting;
+    atomic_t outgoing_established;
+    atomic_t incoming_established;
     atomic_t connections_counter;
     TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
     unsigned long worker_connections_initiated;
@@ -190,8 +191,8 @@ struct engine *engine_start(struct engine_params params) {
  * Send a signal to finish work and wait for all workers to terminate.
  */
 void engine_terminate(struct engine *eng) {
-    size_t conn_in, conn_out, conn_counter;
-    engine_connections(eng, &conn_in, &conn_out, &conn_counter);
+    size_t connecting, conn_in, conn_out, conn_counter;
+    engine_connections(eng, &connecting, &conn_in, &conn_out, &conn_counter);
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
@@ -215,7 +216,7 @@ void engine_terminate(struct engine *eng) {
     printf("Total data received: %s (%ld bytes)\n",
         express_bytes(eng->total_data_received, buf, sizeof(buf)),
         (long)eng->total_data_received);
-    long conns = conn_in + conn_out;
+    long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
         8 * (((eng->total_data_sent+eng->total_data_received)
@@ -242,15 +243,18 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 /*
  * Get number of connections opened by all of the workers.
  */
-void engine_connections(struct engine *eng, size_t *incoming, size_t *outgoing, size_t *counter) {
+void engine_connections(struct engine *eng, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter) {
+    size_t c_conn = 0;
     size_t c_in = 0;
     size_t c_out = 0;
     size_t c_count = 0;
     for(int n = 0; n < eng->n_workers; n++) {
-        c_in    += eng->loops[n].incoming_connections;
-        c_out   += eng->loops[n].outgoing_connections;
+        c_conn  += eng->loops[n].outgoing_connecting;
+        c_out   += eng->loops[n].outgoing_established;
+        c_in    += eng->loops[n].incoming_established;
         c_count += eng->loops[n].connections_counter;
     }
+    *connecting = c_conn;
     *incoming = c_in;
     *outgoing = c_out;
     *counter = c_count;
@@ -396,7 +400,7 @@ static void *single_engine_loop_thread(void *argp) {
     connections_flush_stats(EV_A);
 
     DEBUG(DBG_ALWAYS, "Exiting worker %d\n"
-            "  %u↓, %u↑ open connections\n"
+            "  %u↓, %u↑ open connections (%u connecting)\n"
             "  %u connections_counter \n"
             "  ↳ %lu connections_initiated\n"
             "  ↳ %lu connections_accepted\n"
@@ -405,8 +409,9 @@ static void *single_engine_loop_thread(void *argp) {
             "  %lu worker_data_sent\n"
             "  %lu worker_data_received\n",
         largs->thread_no,
-        largs->incoming_connections,
-        largs->outgoing_connections,
+        largs->incoming_established,
+        largs->outgoing_established,
+        largs->outgoing_connecting,
         largs->connections_counter,
         largs->worker_connections_initiated,
         largs->worker_connections_accepted,
@@ -489,7 +494,7 @@ static void start_new_connection(EV_P) {
     }
 
     double now = ev_now(EV_A);
-    atomic_increment(&largs->outgoing_connections);
+    atomic_increment(&largs->outgoing_connecting);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_OUTGOING;
@@ -594,7 +599,7 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
         return;
     }
 
-    atomic_increment(&largs->incoming_connections);
+    atomic_increment(&largs->incoming_established);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_INCOMING;
@@ -653,8 +658,6 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
     struct sockaddr *remote = (struct sockaddr *)&largs->params.remote_addresses.addrs[conn->remote_index];
 
     if(conn->conn_state == CSTATE_CONNECTING) {
-        conn->conn_state = CSTATE_CONNECTED;
-
         /*
          * Extended channel lifetimes managed out-of-band, but zero
          * lifetime can be managed here very quickly.
@@ -663,6 +666,10 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             close_connection(EV_A_ conn, CCR_CLEAN);
             return;
         }
+
+        atomic_decrement(&largs->outgoing_connecting);
+        atomic_increment(&largs->outgoing_established);
+        conn->conn_state = CSTATE_CONNECTED;
 
         /*
          * We were asked to produce the WRITE event
@@ -694,7 +701,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 }
                 /* Fall through */
             case 0:
-                DEBUG(DBG_ERROR, "Connection half-closed by %s\n",
+                DEBUG(DBG_DETAIL, "Connection half-closed by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(EV_A_ conn, CCR_REMOTE);
                 return;
@@ -841,11 +848,14 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     connection_flush_stats(EV_A_ conn);
 
     switch(conn->conn_type) {
-    case CONN_INCOMING:
-        atomic_decrement(&largs->incoming_connections);
-        break;
     case CONN_OUTGOING:
-        atomic_decrement(&largs->outgoing_connections);
+        if(conn->conn_state == CSTATE_CONNECTING)
+            atomic_decrement(&largs->outgoing_connecting);
+        else
+            atomic_decrement(&largs->outgoing_established);
+        break;
+    case CONN_INCOMING:
+        atomic_decrement(&largs->incoming_established);
         break;
     case CONN_ACCEPTOR:
         break;

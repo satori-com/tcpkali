@@ -142,9 +142,9 @@ int main(int argc, char **argv) {
         case 'd':
             engine_params.debug_level = atoi(optarg);
             switch(engine_params.debug_level) {
-            case 0: case 1: break;
+            case 0: case 1: case 2: break;
             default:
-                fprintf(stderr, "Expecting --debug=[0..1]\n");
+                fprintf(stderr, "Expecting --debug=[0..2]\n");
                 exit(EX_USAGE);
             }
             break;
@@ -494,9 +494,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
-        size_t conns_in, conns_out, conns_counter;
-        engine_connections(eng, &conns_in, &conns_out, &conns_counter);
-        ssize_t conn_deficit = max_connections - conns_out;
+        size_t connecting, conns_in, conns_out, conns_counter;
+        engine_connections(eng, &connecting, &conns_in, &conns_out, &conns_counter);
+        ssize_t conn_deficit = max_connections - (connecting + conns_out);
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
         size_t to_start = allowed;
@@ -532,11 +532,11 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                                     rcvd - checkpoint->initial_data_received,1);
                 }
                 if(print_stats) {
-                    printf("  Traffic %.3f↓, %.3f↑ Mbps (conns in %ld; out %ld/%d; seen %ld)     \r",
+                    printf("  Traffic %.3f↓, %.3f↑ Mbps (conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
                         bps_in / 1000000,
                         bps_out / 1000000,
-                        (long)conns_in, (long)conns_out, max_connections,
-                        (long)conns_counter);
+                        (long)conns_in, (long)conns_out,
+                        (long)connecting, (long)conns_counter);
                 }
             } else if(print_stats) {
                 print_connections_line(conns_out, max_connections, conns_counter);
@@ -660,7 +660,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h, --help                  Display this help screen\n"
-    "  --debug <level=1>           Debug level [0..1].\n"
+    "  --debug <level=1>           Debug level [0..2].\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
     "  -r, --connect-rate <R=%.0f>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
