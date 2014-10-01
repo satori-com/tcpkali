@@ -351,18 +351,32 @@ static void *single_engine_loop_thread(void *argp) {
             assert(lsock != -1);
             int rc = fcntl(lsock, F_SETFL, fcntl(lsock, F_GETFL) | O_NONBLOCK);
             assert(rc != -1);
+#ifdef SO_REUSEPORT
             int on = ~0;
             rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
             assert(rc != -1);
+#else
+            /*
+             * SO_REUSEPORT cannot be used, which means that only a single
+             * thread could create their own separate listening socket on
+             * a specified address/port. This is bad, but changing.
+             * See http://permalink.gmane.org/gmane.linux.network/158320
+             */
+#endif  /* SO_REUSEPORT */
             rc = bind(lsock, sa, sockaddr_len(sa));
             if(rc == -1) {
                 char buf[256];
                 DEBUG(DBG_ALWAYS, "Bind %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)),
                         strerror(errno));
-                if(errno == EINVAL) {
-                    continue;
-                } else {
+                switch(errno) {
+                case EINVAL: continue;
+                case EADDRINUSE:
+#ifndef  SO_REUSEPORT
+                    DEBUG(DBG_ALWAYS, "A system without SO_REUSEPORT detected."
+                        " Use --workers=1 to avoid binding multiple times.\n");
+#endif
+                default:
                     exit(EX_UNAVAILABLE);
                 }
             }
