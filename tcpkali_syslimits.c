@@ -108,8 +108,11 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
     }
 }
 
-
+/*
+ * Check that the limits are sane and print out if not.
+ */
 int check_system_limits_sanity(int expected_sockets, int workers) {
+    int return_value = 0;
 
     /*
      * Check that this process can open enough file descriptors.
@@ -120,17 +123,15 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     assert(ret == 0);
 
     if(rlp.rlim_cur < (rlim_t)(expected_sockets + 4 + workers)) {
-        fprintf(stderr, "Warning: Open files limit (`ulimit -n`) %ld "
+        fprintf(stderr, "WARNING: Open files limit (`ulimit -n`) %ld "
                         "is too low for the expected load (-c %d).\n",
             (long)rlp.rlim_cur, expected_sockets);
-        return -1;
-    }
-
-    if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
-        fprintf(stderr, "Warning: System files limit (`ulimit -n`) %ld "
+        return_value = -1;
+    } else if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
+        fprintf(stderr, "WARNING: System files limit (`ulimit -n`) %ld "
                         "is too low for the expected load (-c %d).\n",
             (long)rlp.rlim_cur, expected_sockets);
-        return -1;
+        return_value = -1;
     }
 
 
@@ -144,15 +145,16 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         int lo, hi;
         if(fscanf(f, "%d %d", &lo, &hi) == 2) {
             if(hi - lo < expected_sockets) {
-                fprintf(stderr, "Will not be able to open "
+                fprintf(stderr, "WARNING: Will not be able to open "
                     "%d simultaneous connections "
-                    "since %s specifies too small range [%d..%d]\n",
+                    "since \"%s\" specifies too narrow range [%d..%d].\n",
                     expected_sockets, portrange_filename, lo, hi);
+                return_value = -1;
             }
         }
         fclose(f);
     }
 
-    return 0;
+    return return_value;
 }
 
