@@ -115,7 +115,7 @@ static void devnull_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static void accept_cb(EV_P_ ev_io *w, int revents);
 static void conn_timer(EV_P_ ev_timer *w, int revents); /* Timeout timer */
-static void channel_lifetime(EV_P_ ev_timer *w, int revents);
+static void expire_channel_lives(EV_P_ ev_timer *w, int revents);
 static void setup_channel_lifetime_timer(EV_P_ double first_timeout);
 static void update_io_interest(EV_P_ struct connection *conn, int events);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
@@ -150,8 +150,8 @@ struct engine *engine_start(struct engine_params params) {
     int n_workers = params.requested_workers;
     if(!n_workers) {
         long n_cpus = number_of_cpus();
-        assert(n_cpus >= 1);
         fprintf(stderr, "Using %ld available CPUs\n", n_cpus);
+        assert(n_cpus >= 1);
         n_workers = n_cpus;
     }
 
@@ -291,7 +291,7 @@ size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
     return n;
 }
 
-static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
+static void expire_channel_lives(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn;
     struct connection *tmpconn;
@@ -299,7 +299,8 @@ static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
     assert(limit_channel_lifetime(largs));
     double delta = ev_now(EV_A) - largs->params.epoch;
     TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
-        if(conn->channel_eol_point <= delta) {
+        double expires_in = conn->channel_eol_point - delta;
+        if(expires_in <= 0.0) {
             close_connection(EV_A_ conn, CCR_CLEAN);
         } else {
             /*
@@ -308,8 +309,7 @@ static void channel_lifetime(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
              * are not yet expired. Restart timeout so we'll get to it
              * and the one after it when the time is really due.
              */
-            setup_channel_lifetime_timer(EV_A_
-                    (conn->channel_eol_point - delta));
+            setup_channel_lifetime_timer(EV_A_ expires_in);
             break;
         }
     }
@@ -385,8 +385,8 @@ static void *single_engine_loop_thread(void *argp) {
     }
 
     if(limit_channel_lifetime(largs)) {
-        ev_timer_init(&largs->channel_lifetime_timer, channel_lifetime, 1, 0);
-        ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
+        ev_timer_init(&largs->channel_lifetime_timer,
+            expire_channel_lives, 0, 0);
     }
 
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
@@ -577,6 +577,7 @@ static int limit_channel_lifetime(struct loop_arguments *largs) {
 
 static void setup_channel_lifetime_timer(EV_P_ double first_timeout) {
     struct loop_arguments *largs = ev_userdata(EV_A);
+    ev_timer_stop(EV_A_ &largs->channel_lifetime_timer);
     ev_timer_set(&largs->channel_lifetime_timer, first_timeout, 0);
     ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
 }
@@ -830,7 +831,7 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     case CCR_TIMEOUT:
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
-        DEBUG(DBG_ERROR, "Connection to %s is not done: %s\n",
+        DEBUG(DBG_ERROR, "Connection to %s is being closed: %s\n",
                 format_sockaddr((struct sockaddr *)&largs->params
                     .remote_addresses.addrs[conn->remote_index],
                     buf, sizeof(buf)),
