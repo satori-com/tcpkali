@@ -387,17 +387,17 @@ int main(int argc, char **argv) {
      */
     if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
         if(conf.max_connections/conf.connect_rate > conf.test_duration) {
-            fprintf(stderr, "%d connections can not be opened at a rate %.f,"
-                    " within test duration %.f.\n"
-                    "Decrease --connect-rate=%.f or increase --duration=%.f.\n",
+            fprintf(stderr, "%d connections can not be opened at a rate %g,"
+                    " within test duration %g.\n"
+                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
                 conf.test_duration, conf.connect_rate, conf.test_duration);
             exit(EX_USAGE);
         } else {
-            fprintf(stderr, "WARNING: %d connections might not be opened at a rate %.1f,"
-                    " within test duration %.f.\n"
-                    "Decrease --connect-rate=%.f or increase --duration=%.f.\n",
+            fprintf(stderr, "WARNING: %d connections might not be opened at a rate %g,"
+                    " within test duration %g.\n"
+                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
                 conf.test_duration, conf.connect_rate, conf.test_duration);
@@ -466,7 +466,7 @@ int main(int argc, char **argv) {
             printf("Ramped up to %d connections.\n", conf.max_connections);
         } else {
             fprintf(stderr, "Could not create %d connection%s"
-                            " in allotted time (%.1fs)\n",
+                            " in allotted time (%gs)\n",
                             conf.max_connections,
                             conf.max_connections==1?"":"s",
                             conf.test_duration);
@@ -687,7 +687,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -h, --help                  Display this help screen\n"
     "  --debug <level=1>           Debug level [0..2].\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
-    "  -r, --connect-rate <R=%.0f>  Limit number of new connections per second\n"
+    "  -r, --connect-rate <R=%g>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
