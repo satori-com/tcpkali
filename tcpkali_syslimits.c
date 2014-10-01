@@ -133,6 +133,26 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         return -1;
     }
 
+
+    /*
+     * Check that our system has enough ephemeral ports to open
+     * expected_sockets to the destination.
+     */
+    const char *portrange_filename = "/proc/sys/net/ipv4/ip_local_port_range";
+    FILE *f = fopen("/proc/sys/net/ipv4/ip_local_port_range", "r");
+    if(f) {
+        int lo, hi;
+        if(fscanf(f, "%d %d", &lo, &hi) == 2) {
+            if(hi - lo < expected_sockets) {
+                fprintf(stderr, "Will not be able to open "
+                    "%d simultaneous connections "
+                    "since %s specifies too small range [%d..%d]\n",
+                    expected_sockets, portrange_filename, lo, hi);
+            }
+        }
+        fclose(f);
+    }
+
     return 0;
 }
 
