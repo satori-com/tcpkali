@@ -119,7 +119,7 @@ struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
-struct addresses enumerate_usable_addresses(int listen_port);
+struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 
 static struct multiplier k_multiplier[] = {
@@ -429,8 +429,7 @@ int main(int argc, char **argv) {
         conf.max_connections = 0;
     }
     if(conf.listen_port > 0)
-        engine_params.listen_addresses =
-            enumerate_usable_addresses(conf.listen_port);
+        engine_params.listen_addresses = detect_listen_addresses(conf.listen_port);
 
     Statsd *statsd;
     if(conf.statsd_enable) {
@@ -591,7 +590,7 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     const int ribbon_width = 50;
     int at = 1 + ((ribbon_width - 2) * conns) / max_conns;
     for(int i = 1; i < ribbon_width; i++) {
-        if (i  < at)     buf[i] = '=';
+        if (i < at)      buf[i] = '=';
         else if(i  > at) buf[i] = '-';
         else if(i == at) buf[i] = '>';
     }
@@ -652,7 +651,7 @@ read_in_file(const char *filename, char **data, size_t *size) {
     return 0;
 }
 
-struct addresses enumerate_usable_addresses(int listen_port) {
+struct addresses detect_listen_addresses(int listen_port) {
     struct addresses addresses = { 0, 0 };
     struct addrinfo hints = {
             .ai_family = AF_UNSPEC,
