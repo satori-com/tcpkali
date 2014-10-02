@@ -1,13 +1,41 @@
 
-# Building
+# Build
 
     autoreconf -iv
     ./configure
     make
 
-# Installing
+# Install
 
     make install
+
+# Usage
+
+    Usage: tcpkali [OPTIONS] <host:port> [<host:port>...]
+    Where OPTIONS are:
+      -h, --help                  Display this help screen
+      --debug <level=1>           Debug level [0..2].
+      -c, --connections <N=1>     Connections to keep open to the destinations
+      -r, --connect-rate <R=100>  Limit number of new connections per second
+      --connect-timeout <T=1s>    Limit time spent in a connection attempt
+      --channel-lifetime <T>      Shut down each connection after T seconds
+      --channel-bandwidth <Bw>    Limit single connection bandwidth
+      --message-first <string>    Send this message first, once
+      -m, --message <string>      Message to repeatedly send to the remote
+      -f, --message-file <name>   Read message to send from a file
+      --message-rate <R>          Messages per second per connection to send
+      -l, --listen-port <port>    Listen on the specified port
+      -w, --workers <N=4>         Number of parallel threads to use
+      --duration <T=10s>          Load test for the specified amount of time
+      --statsd                    Enable StatsD output (default disabled)
+      --statsd-host <host>        StatsD host to send data (default is localhost)
+      --statsd-port <port>        StatsD port to use (default is 8125)
+      --statsd-namespace <string> Metric namespace (default is "tcpkali")
+    And variable multipliers are:
+      <R>:  k (1000, as in "5k" is 5000)
+      <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
+      <T>:  ms, s, m, h (milliseconds, seconds, minutes, hours)
+
 
 # Sysctls for high load (N connections, such as 50k):
 
