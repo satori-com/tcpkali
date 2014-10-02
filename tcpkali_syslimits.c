@@ -199,6 +199,28 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         fclose(f);
     }
 
+    /*
+     * Check that IP filter would allow tracking such many connections.
+     * Also see net.netfilter.nf_conntrack_buckets, should be reasonable value,
+     * such as nf_conntrack_max/4.
+     * See http://serverfault.com/questions/482480/
+     */
+    const char *nf_conntrack_filename = "/proc/sys/net/netfilter/nf_conntrack_max";
+    f = fopen(nf_conntrack_filename, "r");
+    if(f) {
+        int n;
+        if(fscanf(f, "%d", &n) == 1) {
+            if(expected_sockets > n) {
+                fprintf(stderr, "WARNING: IP filter might not allow "
+                    "opening %d simultaneous connections."
+                    "Adjust \"%s\" value.\n",
+                    expected_sockets, nf_conntrack_filename);
+                return_value = -1;
+            }
+        }
+        fclose(f);
+    }
+
     return return_value;
 }
 
