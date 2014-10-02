@@ -157,6 +157,7 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
     case AF_INET6: return sizeof(struct sockaddr_in6);
     }
     assert(!"Not IPv4 and not IPv6");
+    return 0;
 }
 
 #define DEBUG(level, fmt, args...) do {         \

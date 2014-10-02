@@ -32,6 +32,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>  /* gethostbyname(3) */
 #include <libgen.h> /* basename(3) */
@@ -142,7 +143,7 @@ void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, str
 /*
  * Printable representation of a sockaddr.
  */
-char *format_sockaddr(struct sockaddr *sa, char *buf, size_t size) {
+const char *format_sockaddr(struct sockaddr *sa, char *buf, size_t size) {
     void *in_addr;
     uint16_t nport;
     switch(sa->sa_family) {
@@ -156,6 +157,7 @@ char *format_sockaddr(struct sockaddr *sa, char *buf, size_t size) {
         break;
     default:
         assert(!"ipv4 or ipv6 expected");
+        return "<unknown>";
     }
     char ipbuf[INET6_ADDRSTRLEN];
     const char *ip = inet_ntop(sa->sa_family, in_addr, ipbuf, sizeof(ipbuf));
