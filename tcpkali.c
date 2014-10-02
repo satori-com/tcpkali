@@ -644,7 +644,7 @@ read_in_file(const char *filename, char **data, size_t *size) {
     *data = malloc(off + 1);
     size_t r = fread(*data, 1, off, fp);
     assert((long)r == off);
-    data[off] = '\0';    /* Just in case. */
+    (*data)[off] = '\0';    /* Just in case. */
     *size = off;
 
     fclose(fp);
