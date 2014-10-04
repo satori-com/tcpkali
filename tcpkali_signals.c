@@ -24,9 +24,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#define _POSIX_SOURCE
 #define _BSD_SOURCE
-#define _XOPEN_SOURCE 600
+#define _POSIX_C_SOURCE 200112
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
