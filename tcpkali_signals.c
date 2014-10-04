@@ -26,6 +26,7 @@
  */
 #define _BSD_SOURCE
 #define _POSIX_C_SOURCE 200112
+#define _XOPEN_SOURCE 600
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
