@@ -66,8 +66,8 @@ static struct option cli_long_options[] = {
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'M' },
-    { "message-first", 1, 0, '1' },
-    { "message-first-file", 1, 0, 'F' },
+    { "first-message", 1, 0, '1' },
+    { "first-message-file", 1, 0, 'F' },
     { "workers", 1, 0, 'w' },
     { "channel-bandwidth", 1, 0, 'b' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
             }
         case '1': {
             if(conf.first_message_data) {
-                fprintf(stderr, "--message-first: Message is already specified.\n");
+                fprintf(stderr, "--first-message: Message is already specified.\n");
                 exit(EX_USAGE);
             }
             conf.first_message_data = strdup(optarg);
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
             break;
         case 'F':
             if(conf.first_message_data) {
-                fprintf(stderr, "--message-first-file: Message is already specified.\n");
+                fprintf(stderr, "--first-message-file: Message is already specified.\n");
                 exit(EX_USAGE);
             } else if(read_in_file(optarg, &conf.first_message_data,
                                            &conf.first_message_size) != 0) {
@@ -708,8 +708,8 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
-    "  --message-first <string>    Send this message first, once\n"
-    "  --message-first-file <name> Read the first message from a file\n"
+    "  --first-message <string>    Send this message first, once\n"
+    "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --message-rate <R>          Messages per second per connection to send\n"
