@@ -93,7 +93,9 @@ struct loop_arguments {
     } *remote_stats;    /* Per-thread remote server stats */
     ev_timer stats_timer;
     ev_timer channel_lifetime_timer;
-    int control_pipe;
+    int global_control_pipe_rd_nbio;    /* Non-blocking pipe anyone could read from. */
+    int private_control_pipe_rd;   /* Private blocking pipe for this worker (read side). */
+    int private_control_pipe_wr;   /* Private blocking pipe for this worker (write side). */
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
     atomic64_t worker_data_sent;
@@ -110,12 +112,21 @@ struct loop_arguments {
 };
 
 /*
+ * Types of control messages which might require fair ordering between channels.
+ */
+enum control_message_type_e {
+    CONTROL_MESSAGE_CONNECT,
+    _CONTROL_MESSAGES_MAXID     /* Do not use. */
+};
+
+/*
  * Engine abstracts over workers.
  */
 struct engine {
     struct loop_arguments *loops;
     pthread_t *threads;
-    int wr_pipe;
+    int global_control_pipe_wr;
+    int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
     size_t total_data_sent;
     size_t total_data_received;
@@ -149,6 +160,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
 static void multiply_data(struct engine_params *);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
+static void set_nbio(int fd, int onoff);
 
 /* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
 static socklen_t sockaddr_len(struct sockaddr *sa) {
@@ -173,6 +185,7 @@ struct engine *engine_start(struct engine_params params) {
 
     int rd_pipe = fildes[0];
     int wr_pipe = fildes[1];
+    set_nbio(rd_pipe, 1);
 
     int n_workers = params.requested_workers;
     if(!n_workers) {
@@ -195,18 +208,25 @@ struct engine *engine_start(struct engine_params params) {
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
-    eng->wr_pipe = wr_pipe;
+    eng->global_control_pipe_wr = wr_pipe;
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loops[n];
         TAILQ_INIT(&loop_args->open_conns);
         loop_args->params = params;
         loop_args->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
-        loop_args->control_pipe = rd_pipe;
         loop_args->address_offset = n;
         loop_args->thread_no = n;
+        int rc;
 
-        int rc = pthread_create(&eng->threads[n], 0,
+        int private_pipe[2];
+        rc = pipe(private_pipe);
+        assert(rc == 0);
+        loop_args->private_control_pipe_rd = private_pipe[0];
+        loop_args->private_control_pipe_wr = private_pipe[1];
+        loop_args->global_control_pipe_rd_nbio = rd_pipe;
+
+        rc = pthread_create(&eng->threads[n], 0,
                                 single_engine_loop_thread, loop_args);
         assert(rc == 0);
     }
@@ -223,7 +243,7 @@ void engine_terminate(struct engine *eng) {
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
-        write(eng->wr_pipe, "T", 1);
+        write(eng->loops[n].private_control_pipe_wr, "T", 1);
     }
     for(int n = 0; n < eng->n_workers; n++) {
         void *value;
@@ -296,25 +316,52 @@ void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
     }
 }
 
+/*
+ * Enable (1) and disable (0) the non-blocking mode on a file descriptor.
+ */
+static void set_nbio(int fd, int onoff) {
+    int rc;
+    if(onoff) {
+        /* Enable non-blocking mode. */
+        rc = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    } else {
+        /* Enable blocking mode (disable non-blocking). */
+        rc = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+    }
+    assert(rc != -1);
+}
+
 size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
     static char buf[1024];  /* This is thread-safe! */
     if(!buf[0]) {
         memset(buf, 'c', sizeof(buf));
     }
-    int fd = eng->wr_pipe;
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
     size_t n = 0;
-    while(n < n_req) {
-        int current_batch = (n_req-n) < sizeof(buf) ? (n_req-n) : sizeof(buf);
-        int wrote = write(eng->wr_pipe, buf, current_batch);
-        if(wrote == -1) {
-            if(errno == EAGAIN)
-                break;
-            assert(wrote != -1);
+
+    enum { ATTEMPT_FAIR_BALANCE, FIRST_READER_WINS } balance = ATTEMPT_FAIR_BALANCE;
+    if(balance == ATTEMPT_FAIR_BALANCE) {
+        while(n < n_req) {
+            int worker = eng->next_worker_order[CONTROL_MESSAGE_CONNECT]++ % eng->n_workers;
+            int fd = eng->loops[worker].private_control_pipe_wr;
+            int wrote = write(fd, buf, 1);
+            assert(wrote == 1);
+            n++;
         }
-        if(wrote > 0) n += wrote;
+    } else {
+        int fd = eng->global_control_pipe_wr;
+        set_nbio(fd, 1);
+        while(n < n_req) {
+            int current_batch = (n_req-n) < sizeof(buf) ? (n_req-n) : sizeof(buf);
+            int wrote = write(fd, buf, current_batch);
+            if(wrote == -1) {
+                if(errno == EAGAIN)
+                    break;
+                assert(wrote != -1);
+            }
+            if(wrote > 0) n += wrote;
+        }
+        set_nbio(fd, 0);
     }
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
     return n;
 }
 
@@ -364,7 +411,8 @@ static void *single_engine_loop_thread(void *argp) {
     struct ev_loop *loop = ev_loop_new(EVFLAG_AUTO);
     ev_set_userdata(loop, largs);
 
-    ev_io control_watcher;
+    ev_io global_control_watcher;
+    ev_io private_control_watcher;
     signal(SIGPIPE, SIG_IGN);
 
     /*
@@ -376,11 +424,10 @@ static void *single_engine_loop_thread(void *argp) {
             struct sockaddr *sa = (struct sockaddr *)&largs->params.listen_addresses.addrs[n];
             int lsock = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
             assert(lsock != -1);
-            int rc = fcntl(lsock, F_SETFL, fcntl(lsock, F_GETFL) | O_NONBLOCK);
-            assert(rc != -1);
+            set_nbio(lsock, 1);
 #ifdef SO_REUSEPORT
             int on = ~0;
-            rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
+            int rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
             assert(rc != -1);
 #else
             /*
@@ -432,11 +479,14 @@ static void *single_engine_loop_thread(void *argp) {
 
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
     ev_timer_start(EV_A_ &largs->stats_timer);
-    ev_io_init(&control_watcher, control_cb, largs->control_pipe, EV_READ);
-    ev_io_start(loop, &control_watcher);
+    ev_io_init(&global_control_watcher, control_cb, largs->global_control_pipe_rd_nbio, EV_READ);
+    ev_io_init(&private_control_watcher, control_cb, largs->private_control_pipe_rd, EV_READ);
+    ev_io_start(loop, &global_control_watcher);
+    ev_io_start(loop, &private_control_watcher);
     ev_run(loop, 0);
     ev_timer_stop(EV_A_ &largs->stats_timer);
-    ev_io_stop(EV_A_ &control_watcher);
+    ev_io_stop(EV_A_ &global_control_watcher);
+    ev_io_stop(EV_A_ &private_control_watcher);
 
     connections_flush_stats(EV_A);
 
@@ -466,13 +516,18 @@ static void *single_engine_loop_thread(void *argp) {
     return 0;
 }
 
+/*
+ * Receive a control event from the pipe.
+ */
 static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
 
     char c;
-    if(read(w->fd, &c, 1) != 1) {
-        DEBUG(DBG_ALWAYS, "%d Reading from control channel %d returned: %s\n",
-            largs->thread_no, w->fd, strerror(errno));
+    int ret = read(w->fd, &c, 1);
+    if(ret != 1) {
+        if(errno != EAGAIN)
+            DEBUG(DBG_ALWAYS, "%d Reading from control channel %d returned: %s\n",
+                largs->thread_no, w->fd, strerror(errno));
         return;
     }
     switch(c) {
@@ -509,15 +564,15 @@ static void start_new_connection(EV_P) {
             exit(1);
         }
         return; /* Come back later */
+    } else {
+        set_nbio(sockfd, 1);
+        int on = ~0;
+        int rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+        assert(rc != -1);
     }
-    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
-    assert(rc != -1);
-    int on = ~0;
-    rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-    assert(rc != -1);
 
     int conn_state;
-    rc = connect(sockfd, sa, sockaddr_len(sa));
+    int rc = connect(sockfd, sa, sockaddr_len(sa));
     if(rc == -1) {
         char buf[INET6_ADDRSTRLEN+64];
         switch(errno) {
@@ -641,8 +696,7 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     int sockfd = accept(w->fd, 0, 0);
     if(sockfd == -1)
         return;
-    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
-    assert(rc != -1);
+    set_nbio(sockfd, 1);
 
     atomic_increment(&largs->connections_counter);
 
