@@ -406,20 +406,20 @@ int main(int argc, char **argv) {
      */
     if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
         if(conf.max_connections/conf.connect_rate > conf.test_duration) {
-            fprintf(stderr, "%d connections can not be opened at a rate %g,"
-                    " within test duration %g.\n"
-                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
+            fprintf(stderr, "%d connections can not be opened "
+                    "at a rate %g within test duration %g.\n"
+                    "Decrease --connections=%d or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration, conf.connect_rate, conf.test_duration);
+                conf.test_duration, conf.max_connections, conf.test_duration);
             exit(EX_USAGE);
         } else {
-            fprintf(stderr, "WARNING: %d connections might not be opened at a rate %g,"
-                    " within test duration %g.\n"
-                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
+            fprintf(stderr, "WARNING: %d connections might not be opened "
+                    "at a rate %g within test duration %g.\n"
+                    "Decrease --connections=%d or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration, conf.connect_rate, conf.test_duration);
+                conf.test_duration, conf.max_connections, conf.test_duration);
         }
     }
 
@@ -590,22 +590,21 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         mavg_bump(&traffic_mavgs[0], now, (double)rcvd);
         mavg_bump(&traffic_mavgs[1], now, (double)sent);
 
-        double bps_in =
-            8 * (mavg_per_second(&traffic_mavgs[0], now)) / 1000000.0;
-        double bps_out =
-            8 * (mavg_per_second(&traffic_mavgs[1], now)) / 1000000.0;
+        double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
+        double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
 
         if(statsd) {
+            statsd_count(statsd, "connections.opened", to_start, 1);
+            statsd_gauge(statsd, "connections.total", conns_in + conns_out, 1);
             statsd_gauge(statsd, "connections.total.in", conns_in, 1);
             statsd_gauge(statsd, "connections.total.out", conns_out, 1);
-            statsd_count(statsd, "connections.opened", to_start, 1);
             if(phase == PHASE_STEADY_STATE) {
-                statsd_gauge(statsd, "traffic.bitrate.total",
-                                        bps_in+bps_out, 1);
+                statsd_gauge(statsd, "traffic.bitrate", bps_in + bps_out, 1);
                 statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
                 statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
-                statsd_count(statsd, "traffic.data.sent", sent, 1);
+                statsd_count(statsd, "traffic.data", rcvd + sent, 1);
                 statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
+                statsd_count(statsd, "traffic.data.sent", sent, 1);
             }
         }
 
@@ -616,7 +615,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
             } else {
                 printf("  Traffic %.3f↓, %.3f↑ Mbps "
                         "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
-                    bps_in, bps_out,
+                    bps_in/1000000.0, bps_out/1000000.0,
                     (long)conns_in, (long)conns_out,
                     (long)connecting, (long)conns_counter
                 );
