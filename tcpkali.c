@@ -63,7 +63,7 @@ static struct option cli_long_options[] = {
     { "debug", 1, 0, 'd' },
     { "connections", 0, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
-    { "duration", 1, 0, 't' },
+    { "duration", 1, 0, 'T' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'M' },
@@ -135,22 +135,24 @@ static struct multiplier k_multiplier[] = {
     { "k", 1000 }
 };
 static struct multiplier s_multiplier[] = {
-    { "ms", 0.001 },
-    { "s", 1 },
-    { "second", 1 },
-    { "seconds", 1 },
-    { "m", 60 },
-    { "min", 60 },
-    { "minute", 60 },
-    { "minutes", 60 }
+    { "ms", 0.001 }, { "millisecond", 0.001 }, { "milliseconds", 0.001 },
+    { "s", 1 }, { "second", 1 }, { "seconds", 1 },
+    { "m", 60 }, { "min", 60 }, { "minute", 60 }, { "minutes", 60 },
+    { "h", 3600 }, { "hr", 3600 }, { "hour", 3600 }, { "hours", 3600 },
+    { "d", 86400 }, { "day", 86400 }, { "days", 86400 }
 };
 static struct multiplier bw_multiplier[] = {
+    /* bits per second */
     { "bps", 1.0/8 },
     { "kbps", 1000/8 },
-    { "Mbps", 1000000/8 },
+    { "Kbps", 1000/8 },
+    { "mbps", 1000000/8 }, { "Mbps", 1000000/8 },
+    { "gbps", 1000000000/8 }, { "Gbps", 1000000000/8 },
+    /* Bytes per second */
     { "Bps", 1 },
-    { "kBps", 1000 },
-    { "MBps", 1000000 }
+    { "kBps", 1000 }, { "KBps", 1000 },
+    { "mBps", 1000000 }, { "MBps", 1000000 },
+    { "gBps", 1000000000 }, { "GBps", 1000000000 }
 };
 
 /*
@@ -167,7 +169,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:l:r:w:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:m:f:l:r:w:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -199,12 +201,12 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 't':
+        case 'T':
             conf.test_duration = parse_with_multipliers(option, optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
             if(conf.test_duration <= 0) {
-                fprintf(stderr, "Expected positive --time=%s\n", optarg);
+                fprintf(stderr, "Expected positive --duration=%s\n", optarg);
                 exit(EX_USAGE);
             }
             break;
@@ -747,7 +749,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --message-rate <R>          Messages per second per connection to send\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
-    "  --duration <T=10s>          Load test for the specified amount of time\n"
+    "  -T, --duration <T=10s>      Load test for the specified amount of time\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
@@ -756,7 +758,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <T>:  ms, s, m, h (milliseconds, seconds, minutes, hours)\n",
+    "  <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
     conf->max_connections,
     conf->connect_rate,
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",
