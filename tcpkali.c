@@ -47,6 +47,7 @@
 #include <statsd.h>
 
 #include "tcpkali.h"
+#include "tcpkali_mavg.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
 #include "tcpkali_syslimits.h"
@@ -107,8 +108,16 @@ static struct tcpkali_config {
 
 struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
+    double last_update;   /* Last we updated the checkpoint structure */
     size_t initial_data_sent;
     size_t initial_data_received;
+    size_t last_data_sent;
+    size_t last_data_received;
+};
+
+enum work_phase {
+    PHASE_ESTABLISHING_CONNECTIONS,
+    PHASE_STEADY_STATE
 };
 
 /*
@@ -117,7 +126,7 @@ struct stats_checkpoint {
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
@@ -460,6 +469,14 @@ int main(int argc, char **argv) {
     char *clear_line = print_stats ? "\033[K" : "";
 
     /*
+     * Traffic in/out moving average, smoothing period is 3 seconds.
+     */
+    mavg traffic_mavgs[2];
+    mavg_init(&traffic_mavgs[0], ev_now(EV_DEFAULT), 3.0);
+    mavg_init(&traffic_mavgs[1], ev_now(EV_DEFAULT), 3.0);
+    struct stats_checkpoint checkpoint = { 0, 0, 0, 0, 0, 0 };
+
+    /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
      */
@@ -467,7 +484,9 @@ int main(int argc, char **argv) {
         double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            NULL, statsd, &term_flag,
+                                            &checkpoint, traffic_mavgs, statsd,
+                                            &term_flag,
+                                            PHASE_ESTABLISHING_CONNECTIONS,
                                             print_stats) == 0) {
             printf("%s", clear_line);
             printf("Ramped up to %d connections.\n", conf.max_connections);
@@ -481,9 +500,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    struct stats_checkpoint checkpoint = {
-        .epoch_start = ev_now(EV_DEFAULT),
-    };
+    /*
+     * When did we start measuring the steady-state performance,
+     * as opposed to waiting for the connections to be established.
+     */
+    checkpoint.epoch_start = ev_now(EV_DEFAULT),
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
 
@@ -491,8 +512,9 @@ int main(int argc, char **argv) {
     for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            &checkpoint,
+                                            &checkpoint, traffic_mavgs,
                                             statsd, &term_flag,
+                                            PHASE_STEADY_STATE,
                                             print_stats) == -1)
             break;
     }
@@ -503,9 +525,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, Statsd *statsd, int *term_flag, int print_stats) {
-    static double last_stats_sent;
-
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
     ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
 
@@ -522,13 +542,19 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, now);
 
-    while(now < epoch_end && !*term_flag) {
+    ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
+
+    while(now < epoch_end && !*term_flag
+            /* ...until we have all connections established or
+             * we're in a steady state. */
+            && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
         size_t connecting, conns_in, conns_out, conns_counter;
-        engine_connections(eng, &connecting, &conns_in, &conns_out, &conns_counter);
-        ssize_t conn_deficit = max_connections - (connecting + conns_out);
+        engine_connections(eng, &connecting,
+                                &conns_in, &conns_out, &conns_counter);
+        conn_deficit = max_connections - (connecting + conns_out);
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
         size_t to_start = allowed;
@@ -540,47 +566,64 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         engine_initiate_new_connections(eng, to_start);
         pacefier_emitted(&keepup_pace, connect_rate, allowed, now);
 
-        if(now - last_stats_sent > 0.25) {
-            size_t sent, rcvd;
-            if(statsd) {
-                statsd_gauge(statsd, "connections.total.in", conns_in, 1);
-                statsd_gauge(statsd, "connections.total.out", conns_out, 1);
-                statsd_count(statsd, "connections.opened", to_start, 1);
-            }
-            last_stats_sent = now;
+        /* Do not update/print checkpoint stats too often. */
+        if((now - checkpoint->last_update) < 0.25) {
+            continue;
+        } else {
+            checkpoint->last_update = now;
+            /* Fall through and do the chekpoint update. */
+        }
 
-            if(checkpoint) {
-                engine_traffic(eng, &sent, &rcvd);
-                double bps_in = (8 * rcvd) / (now - checkpoint->epoch_start);
-                double bps_out = (8 * sent) / (now - checkpoint->epoch_start);
-                if(statsd) {
-                    statsd_gauge(statsd, "traffic.bitrate.total",
-                                            bps_in+bps_out, 1);
-                    statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
-                    statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
-                    statsd_count(statsd, "traffic.data.sent",
-                                    sent - checkpoint->initial_data_sent, 1);
-                    statsd_count(statsd, "traffic.data.rcvd",
-                                    rcvd - checkpoint->initial_data_received,1);
-                }
-                if(print_stats) {
-                    printf("  Traffic %.3f↓, %.3f↑ Mbps (conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
-                        bps_in / 1000000,
-                        bps_out / 1000000,
-                        (long)conns_in, (long)conns_out,
-                        (long)connecting, (long)conns_counter);
-                }
-            } else if(print_stats) {
-                print_connections_line(conns_out, max_connections, conns_counter);
+        /*
+         * sent & rcvd to contain bytes sent/rcvd within the last
+         * period (now - checkpoint->last_stats_sent).
+         */
+        size_t sent = checkpoint->last_data_sent;
+        size_t rcvd = checkpoint->last_data_received;
+        engine_traffic(eng, &checkpoint->last_data_sent,
+                            &checkpoint->last_data_received);
+        sent = checkpoint->last_data_sent - sent;
+        rcvd = checkpoint->last_data_received - rcvd;
+
+        mavg_bump(&traffic_mavgs[0], now, (double)rcvd);
+        mavg_bump(&traffic_mavgs[1], now, (double)sent);
+
+        double bps_in =
+            8 * (mavg_per_second(&traffic_mavgs[0], now)) / 1000000.0;
+        double bps_out =
+            8 * (mavg_per_second(&traffic_mavgs[1], now)) / 1000000.0;
+
+        if(statsd) {
+            statsd_gauge(statsd, "connections.total.in", conns_in, 1);
+            statsd_gauge(statsd, "connections.total.out", conns_out, 1);
+            statsd_count(statsd, "connections.opened", to_start, 1);
+            if(phase == PHASE_STEADY_STATE) {
+                statsd_gauge(statsd, "traffic.bitrate.total",
+                                        bps_in+bps_out, 1);
+                statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
+                statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
+                statsd_count(statsd, "traffic.data.sent", sent, 1);
+                statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
             }
         }
 
-        if(conn_deficit <= 0) {
-            return 0;
+        if(print_stats) {
+            if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
+                print_connections_line(conns_out, max_connections,
+                                       conns_counter);
+            } else {
+                printf("  Traffic %.3f↓, %.3f↑ Mbps "
+                        "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
+                    bps_in, bps_out,
+                    (long)conns_in, (long)conns_out,
+                    (long)connecting, (long)conns_counter
+                );
+            }
         }
+
     }
 
-    return -1;
+    return (now >= epoch_end || *term_flag) ? -1 : 0;
 }
 
 static void

@@ -12,5 +12,6 @@ tcpkali_SOURCES = \
                 tcpkali_syslimits.c tcpkali_syslimits.h   \
                 tcpkali_signals.c tcpkali_signals.h       \
                 tcpkali_pacefier.h tcpkali_atomic.h       \
+                tcpkali_mavg.h                            \
                 tcpkali.c tcpkali.h
 tcpkali_LDADD = libev/libev.la libstatsd/src/libstatsd.la
