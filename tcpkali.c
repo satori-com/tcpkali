@@ -47,6 +47,7 @@
 #include <statsd.h>
 
 #include "tcpkali.h"
+#include "tcpkali_mavg.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
 #include "tcpkali_syslimits.h"
@@ -62,7 +63,7 @@ static struct option cli_long_options[] = {
     { "debug", 1, 0, 'd' },
     { "connections", 0, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
-    { "duration", 1, 0, 't' },
+    { "duration", 1, 0, 'T' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'M' },
@@ -108,8 +109,16 @@ static struct tcpkali_config {
 
 struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
+    double last_update;   /* Last we updated the checkpoint structure */
     size_t initial_data_sent;
     size_t initial_data_received;
+    size_t last_data_sent;
+    size_t last_data_received;
+};
+
+enum work_phase {
+    PHASE_ESTABLISHING_CONNECTIONS,
+    PHASE_STEADY_STATE
 };
 
 /*
@@ -118,31 +127,34 @@ struct stats_checkpoint {
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, Statsd *statsd, int *term_flag, int print_stats);
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
+static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
 };
 static struct multiplier s_multiplier[] = {
-    { "ms", 0.001 },
-    { "s", 1 },
-    { "second", 1 },
-    { "seconds", 1 },
-    { "m", 60 },
-    { "min", 60 },
-    { "minute", 60 },
-    { "minutes", 60 }
+    { "ms", 0.001 }, { "millisecond", 0.001 }, { "milliseconds", 0.001 },
+    { "s", 1 }, { "second", 1 }, { "seconds", 1 },
+    { "m", 60 }, { "min", 60 }, { "minute", 60 }, { "minutes", 60 },
+    { "h", 3600 }, { "hr", 3600 }, { "hour", 3600 }, { "hours", 3600 },
+    { "d", 86400 }, { "day", 86400 }, { "days", 86400 }
 };
 static struct multiplier bw_multiplier[] = {
+    /* bits per second */
     { "bps", 1.0/8 },
     { "kbps", 1000/8 },
-    { "Mbps", 1000000/8 },
+    { "Kbps", 1000/8 },
+    { "mbps", 1000000/8 }, { "Mbps", 1000000/8 },
+    { "gbps", 1000000000/8 }, { "Gbps", 1000000000/8 },
+    /* Bytes per second */
     { "Bps", 1 },
-    { "kBps", 1000 },
-    { "MBps", 1000000 }
+    { "kBps", 1000 }, { "KBps", 1000 },
+    { "mBps", 1000000 }, { "MBps", 1000000 },
+    { "gBps", 1000000000 }, { "GBps", 1000000000 }
 };
 
 /*
@@ -159,7 +171,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:l:r:w:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:m:f:l:r:w:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -191,12 +203,12 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 't':
+        case 'T':
             conf.test_duration = parse_with_multipliers(option, optarg,
                             s_multiplier,
                             sizeof(s_multiplier)/sizeof(s_multiplier[0]));
             if(conf.test_duration <= 0) {
-                fprintf(stderr, "Expected positive --time=%s\n", optarg);
+                fprintf(stderr, "Expected positive --duration=%s\n", optarg);
                 exit(EX_USAGE);
             }
             break;
@@ -405,20 +417,20 @@ int main(int argc, char **argv) {
      */
     if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
         if(conf.max_connections/conf.connect_rate > conf.test_duration) {
-            fprintf(stderr, "%d connections can not be opened at a rate %g,"
-                    " within test duration %g.\n"
-                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
+            fprintf(stderr, "%d connections can not be opened "
+                    "at a rate %g within test duration %g.\n"
+                    "Decrease --connections=%d or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration, conf.connect_rate, conf.test_duration);
+                conf.test_duration, conf.max_connections, conf.test_duration);
             exit(EX_USAGE);
         } else {
-            fprintf(stderr, "WARNING: %d connections might not be opened at a rate %g,"
-                    " within test duration %g.\n"
-                    "Decrease --connect-rate=%g or increase --duration=%g.\n",
+            fprintf(stderr, "WARNING: %d connections might not be opened "
+                    "at a rate %g within test duration %g.\n"
+                    "Decrease --connections=%d or increase --duration=%g.\n",
                 conf.max_connections,
                 conf.connect_rate,
-                conf.test_duration, conf.connect_rate, conf.test_duration);
+                conf.test_duration, conf.max_connections, conf.test_duration);
         }
     }
 
@@ -446,6 +458,8 @@ int main(int argc, char **argv) {
         statsd_new(&statsd, conf.statsd_server,
                             conf.statsd_port,
                             conf.statsd_namespace, NULL);
+        /* Clear up traffic numbers, for better graphing. */
+        report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
     } else {
         statsd = 0;
     }
@@ -470,6 +484,14 @@ int main(int argc, char **argv) {
     char *clear_line = print_stats ? "\033[K" : "";
 
     /*
+     * Traffic in/out moving average, smoothing period is 3 seconds.
+     */
+    mavg traffic_mavgs[2];
+    mavg_init(&traffic_mavgs[0], ev_now(EV_DEFAULT), 3.0);
+    mavg_init(&traffic_mavgs[1], ev_now(EV_DEFAULT), 3.0);
+    struct stats_checkpoint checkpoint = { 0, 0, 0, 0, 0, 0 };
+
+    /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
      */
@@ -477,23 +499,30 @@ int main(int argc, char **argv) {
         double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            NULL, statsd, &term_flag,
+                                            &checkpoint, traffic_mavgs, statsd,
+                                            &term_flag,
+                                            PHASE_ESTABLISHING_CONNECTIONS,
                                             print_stats) == 0) {
             printf("%s", clear_line);
             printf("Ramped up to %d connections.\n", conf.max_connections);
         } else {
+            printf("%s", clear_line);
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%gs)\n",
                             conf.max_connections,
                             conf.max_connections==1?"":"s",
                             conf.test_duration);
+            /* Level down graphs/charts. */
+            report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
             exit(1);
         }
     }
 
-    struct stats_checkpoint checkpoint = {
-        .epoch_start = ev_now(EV_DEFAULT),
-    };
+    /*
+     * Start measuring the steady-state performance, as opposed to
+     * ramping up and waiting for the connections to be established.
+     */
+    checkpoint.epoch_start = ev_now(EV_DEFAULT),
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
 
@@ -501,8 +530,9 @@ int main(int argc, char **argv) {
     for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
-                                            &checkpoint,
+                                            &checkpoint, traffic_mavgs,
                                             statsd, &term_flag,
+                                            PHASE_STEADY_STATE,
                                             print_stats) == -1)
             break;
     }
@@ -510,12 +540,13 @@ int main(int argc, char **argv) {
     printf("%s", clear_line);
     engine_terminate(eng);
 
+    /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
+    report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
+
     return 0;
 }
 
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, Statsd *statsd, int *term_flag, int print_stats) {
-    static double last_stats_sent;
-
+static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
     ev_now_update(EV_DEFAULT);
     double now = ev_now(EV_DEFAULT);
 
@@ -532,13 +563,19 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, now);
 
-    while(now < epoch_end && !*term_flag) {
+    ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
+
+    while(now < epoch_end && !*term_flag
+            /* ...until we have all connections established or
+             * we're in a steady state. */
+            && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
         usleep(timeout_us);
         ev_now_update(EV_DEFAULT);
         now = ev_now(EV_DEFAULT);
         size_t connecting, conns_in, conns_out, conns_counter;
-        engine_connections(eng, &connecting, &conns_in, &conns_out, &conns_counter);
-        ssize_t conn_deficit = max_connections - (connecting + conns_out);
+        engine_connections(eng, &connecting,
+                                &conns_in, &conns_out, &conns_counter);
+        conn_deficit = max_connections - (connecting + conns_out);
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
         size_t to_start = allowed;
@@ -550,47 +587,70 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         engine_initiate_new_connections(eng, to_start);
         pacefier_emitted(&keepup_pace, connect_rate, allowed, now);
 
-        if(now - last_stats_sent > 0.25) {
-            size_t sent, rcvd;
-            if(statsd) {
-                statsd_gauge(statsd, "connections.total.in", conns_in, 1);
-                statsd_gauge(statsd, "connections.total.out", conns_out, 1);
-                statsd_count(statsd, "connections.opened", to_start, 1);
-            }
-            last_stats_sent = now;
+        /* Do not update/print checkpoint stats too often. */
+        if((now - checkpoint->last_update) < 0.25) {
+            continue;
+        } else {
+            checkpoint->last_update = now;
+            /* Fall through and do the chekpoint update. */
+        }
 
-            if(checkpoint) {
-                engine_traffic(eng, &sent, &rcvd);
-                double bps_in = (8 * rcvd) / (now - checkpoint->epoch_start);
-                double bps_out = (8 * sent) / (now - checkpoint->epoch_start);
-                if(statsd) {
-                    statsd_gauge(statsd, "traffic.bitrate.total",
-                                            bps_in+bps_out, 1);
-                    statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
-                    statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
-                    statsd_count(statsd, "traffic.data.sent",
-                                    sent - checkpoint->initial_data_sent, 1);
-                    statsd_count(statsd, "traffic.data.rcvd",
-                                    rcvd - checkpoint->initial_data_received,1);
-                }
-                if(print_stats) {
-                    printf("  Traffic %.3f↓, %.3f↑ Mbps (conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
-                        bps_in / 1000000,
-                        bps_out / 1000000,
-                        (long)conns_in, (long)conns_out,
-                        (long)connecting, (long)conns_counter);
-                }
-            } else if(print_stats) {
-                print_connections_line(conns_out, max_connections, conns_counter);
+        /*
+         * sent & rcvd to contain bytes sent/rcvd within the last
+         * period (now - checkpoint->last_stats_sent).
+         */
+        size_t sent = checkpoint->last_data_sent;
+        size_t rcvd = checkpoint->last_data_received;
+        engine_traffic(eng, &checkpoint->last_data_sent,
+                            &checkpoint->last_data_received);
+        sent = checkpoint->last_data_sent - sent;
+        rcvd = checkpoint->last_data_received - rcvd;
+
+        mavg_bump(&traffic_mavgs[0], now, (double)rcvd);
+        mavg_bump(&traffic_mavgs[1], now, (double)sent);
+
+        double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
+        double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
+
+        report_to_statsd(statsd,
+            to_start, conns_in, conns_out, bps_in, bps_out, rcvd, sent);
+
+        if(print_stats) {
+            if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
+                print_connections_line(conns_out, max_connections,
+                                       conns_counter);
+            } else {
+                printf("  Traffic %.3f↓, %.3f↑ Mbps "
+                        "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
+                    bps_in/1000000.0, bps_out/1000000.0,
+                    (long)conns_in, (long)conns_out,
+                    (long)connecting, (long)conns_counter
+                );
             }
         }
 
-        if(conn_deficit <= 0) {
-            return 0;
-        }
     }
 
-    return -1;
+    return (now >= epoch_end || *term_flag) ? -1 : 0;
+}
+
+
+static void report_to_statsd(Statsd *statsd, size_t opened,
+                size_t conns_in, size_t conns_out,
+                size_t bps_in, size_t bps_out,
+                size_t rcvd, size_t sent) {
+    if(statsd) {
+        statsd_count(statsd, "connections.opened", opened, 1);
+        statsd_gauge(statsd, "connections.total", conns_in + conns_out, 1);
+        statsd_gauge(statsd, "connections.total.in", conns_in, 1);
+        statsd_gauge(statsd, "connections.total.out", conns_out, 1);
+        statsd_gauge(statsd, "traffic.bitrate", bps_in + bps_out, 1);
+        statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
+        statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
+        statsd_count(statsd, "traffic.data", rcvd + sent, 1);
+        statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
+        statsd_count(statsd, "traffic.data.sent", sent, 1);
+    }
 }
 
 static void
@@ -715,7 +775,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --message-rate <R>          Messages per second per connection to send\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
-    "  --duration <T=10s>          Load test for the specified amount of time\n"
+    "  -T, --duration <T=10s>      Load test for the specified amount of time\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
@@ -724,7 +784,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <T>:  ms, s, m, h (milliseconds, seconds, minutes, hours)\n",
+    "  <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
     conf->max_connections,
     conf->connect_rate,
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",
