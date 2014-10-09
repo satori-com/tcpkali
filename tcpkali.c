@@ -130,6 +130,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
 static int read_in_file(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
+static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -447,6 +448,8 @@ int main(int argc, char **argv) {
         statsd_new(&statsd, conf.statsd_server,
                             conf.statsd_port,
                             conf.statsd_namespace, NULL);
+        /* Clear up traffic numbers, for better graphing. */
+        report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
     } else {
         statsd = 0;
     }
@@ -493,18 +496,21 @@ int main(int argc, char **argv) {
             printf("%s", clear_line);
             printf("Ramped up to %d connections.\n", conf.max_connections);
         } else {
+            printf("%s", clear_line);
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%gs)\n",
                             conf.max_connections,
                             conf.max_connections==1?"":"s",
                             conf.test_duration);
+            /* Level down graphs/charts. */
+            report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
             exit(1);
         }
     }
 
     /*
-     * When did we start measuring the steady-state performance,
-     * as opposed to waiting for the connections to be established.
+     * Start measuring the steady-state performance, as opposed to
+     * ramping up and waiting for the connections to be established.
      */
     checkpoint.epoch_start = ev_now(EV_DEFAULT),
     engine_traffic(eng, &checkpoint.initial_data_sent,
@@ -523,6 +529,9 @@ int main(int argc, char **argv) {
 
     printf("%s", clear_line);
     engine_terminate(eng);
+
+    /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
+    report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;
 }
@@ -593,20 +602,8 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
 
-        if(statsd) {
-            statsd_count(statsd, "connections.opened", to_start, 1);
-            statsd_gauge(statsd, "connections.total", conns_in + conns_out, 1);
-            statsd_gauge(statsd, "connections.total.in", conns_in, 1);
-            statsd_gauge(statsd, "connections.total.out", conns_out, 1);
-            if(phase == PHASE_STEADY_STATE) {
-                statsd_gauge(statsd, "traffic.bitrate", bps_in + bps_out, 1);
-                statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
-                statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
-                statsd_count(statsd, "traffic.data", rcvd + sent, 1);
-                statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
-                statsd_count(statsd, "traffic.data.sent", sent, 1);
-            }
-        }
+        report_to_statsd(statsd,
+            to_start, conns_in, conns_out, bps_in, bps_out, rcvd, sent);
 
         if(print_stats) {
             if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
@@ -625,6 +622,25 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     }
 
     return (now >= epoch_end || *term_flag) ? -1 : 0;
+}
+
+
+static void report_to_statsd(Statsd *statsd, size_t opened,
+                size_t conns_in, size_t conns_out,
+                size_t bps_in, size_t bps_out,
+                size_t rcvd, size_t sent) {
+    if(statsd) {
+        statsd_count(statsd, "connections.opened", opened, 1);
+        statsd_gauge(statsd, "connections.total", conns_in + conns_out, 1);
+        statsd_gauge(statsd, "connections.total.in", conns_in, 1);
+        statsd_gauge(statsd, "connections.total.out", conns_out, 1);
+        statsd_gauge(statsd, "traffic.bitrate", bps_in + bps_out, 1);
+        statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
+        statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
+        statsd_count(statsd, "traffic.data", rcvd + sent, 1);
+        statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
+        statsd_count(statsd, "traffic.data.sent", sent, 1);
+    }
 }
 
 static void
