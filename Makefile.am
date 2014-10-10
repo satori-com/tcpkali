@@ -15,3 +15,5 @@ tcpkali_SOURCES = \
                 tcpkali_mavg.h                            \
                 tcpkali.c tcpkali.h
 tcpkali_LDADD = libev/libev.la libstatsd/src/libstatsd.la
+
+TESTS = check-tcpkali.sh
