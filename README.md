@@ -1,4 +1,6 @@
 
+[![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
+
 # Build
 
     autoreconf -iv
@@ -26,7 +28,7 @@
       --message-rate <R>          Messages per second per connection to send
       -l, --listen-port <port>    Listen on the specified port
       -w, --workers <N=4>         Number of parallel threads to use
-      --duration <T=10s>          Load test for the specified amount of time
+      -T, --duration <T=10s>      Load test for the specified amount of time
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
       --statsd-port <port>        StatsD port to use (default is 8125)
@@ -34,10 +36,10 @@
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
-      <T>:  ms, s, m, h (milliseconds, seconds, minutes, hours)
+      <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
 
 
-# Sysctls for high load (N connections, such as 50k):
+# Sysctls for high load (N connections, such as 50k)
 
     kern.maxfiles=10000+2*N         # BSD
     kern.maxfilesperproc=100+N      # BSD
@@ -53,7 +55,7 @@
     net.netfilter.nf_conntrack_max=N
     net.netfilter.nf_conntrack_max=N/4
 
-# Readings:
+# Readings
 
  * On TIME-WAIT state and its reuse:
      http://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html
