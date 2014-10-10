@@ -243,7 +243,8 @@ void engine_terminate(struct engine *eng) {
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
-        write(eng->loops[n].private_control_pipe_wr, "T", 1);
+        int rc = write(eng->loops[n].private_control_pipe_wr, "T", 1);
+        assert(rc == 1);
     }
     for(int n = 0; n < eng->n_workers; n++) {
         void *value;
@@ -422,12 +423,13 @@ static void *single_engine_loop_thread(void *argp) {
         int opened_listening_sockets = 0;
         for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
             struct sockaddr *sa = (struct sockaddr *)&largs->params.listen_addresses.addrs[n];
+            int rc;
             int lsock = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
             assert(lsock != -1);
             set_nbio(lsock, 1);
 #ifdef SO_REUSEPORT
             int on = ~0;
-            int rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
+            rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
             assert(rc != -1);
 #else
             /*
