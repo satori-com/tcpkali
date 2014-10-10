@@ -61,7 +61,7 @@
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
     { "debug", 1, 0, 'd' },
-    { "connections", 0, 0, 'c' },
+    { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
     { "duration", 1, 0, 'T' },
     { "message", 1, 0, 'm' },
