@@ -5,7 +5,6 @@ bin_PROGRAMS = tcpkali
 
 tcpkali_CPPFLAGS = -Ilibev -Ilibstatsd/src
 tcpkali_CFLAGS = -std=gnu99
-tcpkali_LDFLAGS = -all-static
 tcpkali_SOURCES = \
                 tcpkali_dns.c tcpkali_dns.h               \
                 tcpkali_engine.c tcpkali_engine.h         \
