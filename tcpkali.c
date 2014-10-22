@@ -503,10 +503,11 @@ int main(int argc, char **argv) {
                                             &term_flag,
                                             PHASE_ESTABLISHING_CONNECTIONS,
                                             print_stats) == 0) {
-            printf("%s", clear_line);
-            printf("Ramped up to %d connections.\n", conf.max_connections);
+            fprintf(stderr, "%s", clear_line);
+            fprintf(stderr, "Ramped up to %d connections.\n",
+                conf.max_connections);
         } else {
-            printf("%s", clear_line);
+            fprintf(stderr, "%s", clear_line);
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%gs)\n",
                             conf.max_connections,
@@ -537,7 +538,7 @@ int main(int argc, char **argv) {
             break;
     }
 
-    printf("%s", clear_line);
+    fprintf(stderr, "%s", clear_line);
     engine_terminate(eng);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
@@ -620,8 +621,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 print_connections_line(conns_out, max_connections,
                                        conns_counter);
             } else {
-                printf("  Traffic %.3f↓, %.3f↑ Mbps "
-                        "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
+                fprintf(stderr,
+                    "  Traffic %.3f↓, %.3f↑ Mbps "
+                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
                     bps_in/1000000.0, bps_out/1000000.0,
                     (long)conns_in, (long)conns_out,
                     (long)connecting, (long)conns_counter
@@ -666,7 +668,7 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     }
     snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
         "| %d of %d (%d)", conns, max_conns, conns_counter);
-    printf("%s  \r", buf);
+    fprintf(stderr, "%s  \r", buf);
 }
 
 static double
