@@ -22,12 +22,13 @@
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
-      --message-first <string>    Send this message first, once
+      --first-message <string>    Send this message first, once
+      --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
       -f, --message-file <name>   Read message to send from a file
       --message-rate <R>          Messages per second per connection to send
       -l, --listen-port <port>    Listen on the specified port
-      -w, --workers <N=4>         Number of parallel threads to use
+      -w, --workers <N>           Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
@@ -37,7 +38,6 @@
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
       <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
-
 
 # Sysctls for high load (N connections, such as 50k)
 
