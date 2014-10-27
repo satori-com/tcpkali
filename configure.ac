@@ -26,6 +26,8 @@ AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])
 AC_CHECK_HEADERS(sched.h)
 AC_CHECK_FUNCS(sched_getaffinity)
 
+AC_CHECK_LIB(curl, curl_global_init)
+
 AC_CONFIG_FILES([Makefile
                  libev/Makefile
                  libstatsd/Makefile
