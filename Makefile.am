@@ -16,3 +16,15 @@ tcpkali_SOURCES = \
 tcpkali_LDADD = libev/libev.la libstatsd/src/libstatsd.la
 
 TESTS = check-tcpkali.sh
+
+##
+## Building RPM.
+##
+PKG_NAME=@PACKAGE@
+PKG_VERSION=@PACKAGE_VERSION@
+PKG_PREFIX=/usr/local
+pkgroot:: tcpkali
+	rm -rf pkgroot
+	mkdir pkgroot
+	cp tcpkali pkgroot
+-include mz-rpm.mk
