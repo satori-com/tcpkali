@@ -129,6 +129,7 @@ struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
+static int append_string(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
@@ -223,11 +224,13 @@ int main(int argc, char **argv) {
             }
         case '1': {
             if(conf.first_message_data) {
-                fprintf(stderr, "--first-message: Message is already specified.\n");
+                fprintf(stderr, "WARNING: --first-message is already specified;"
+                                " appending.\n");
+                /* FALL THROUGH */
+            }
+            if(append_string(optarg, &conf.first_message_data, &conf.first_message_size) != 0) {
                 exit(EX_USAGE);
             }
-            conf.first_message_data = strdup(optarg);
-            conf.first_message_size = strlen(optarg);
             break;
             }
         case 'f':
@@ -694,6 +697,21 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
         return -1;
     }
     return value;
+}
+
+static int
+append_string(const char *str, char **data, size_t *size) {
+    size_t old_size = (*size);
+    size_t str_size = strlen(str);
+    size_t new_size = old_size + str_size;
+    char *p = malloc(new_size + 1);
+    assert(p);
+    memcpy(p, *data, old_size);
+    memcpy(&p[old_size], str, str_size);
+    p[new_size] = '\0';
+    *data = p;
+    *size = new_size;
+    return 0;
 }
 
 static int
