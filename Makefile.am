@@ -22,7 +22,7 @@ TESTS = check-tcpkali.sh
 ##
 PKG_NAME=@PACKAGE@
 PKG_VERSION=@PACKAGE_VERSION@
-PKG_PREFIX=/usr/local
+PKG_PREFIX=/usr/local/bin
 pkgroot:: tcpkali
 	rm -rf pkgroot
 	mkdir pkgroot
