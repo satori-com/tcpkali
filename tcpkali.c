@@ -78,6 +78,7 @@ static struct option cli_long_options[] = {
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "listen-port", 1, 0, 'l' },
+    { "ws", 0, 0, 'W' }, { "websocket", 0, 0, 'W' },
     { 0, 0, 0, 0 }
 };
 
@@ -95,6 +96,7 @@ static struct tcpkali_config {
     size_t first_message_size;
     char  *message_data;
     size_t message_size;
+    int    websocket_enable;    /* Enable WebSocket framing. */
 } default_config = {
         .max_connections = 1,
         .connect_rate = 100.0,
@@ -133,6 +135,7 @@ static int append_string(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
+static void add_transport_framing(struct engine_params *engine_params, struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -335,6 +338,9 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case 'W':   /* --websocket: Enable WebSocket framing */
+            conf.websocket_enable = 1;
+            break;
         default:
             usage(argv[0], &default_config);
             exit(EX_USAGE);
@@ -369,18 +375,16 @@ int main(int argc, char **argv) {
     }
 
     if(conf.message_size || conf.first_message_size) {
-        char *p;
-        size_t s;
-        s = conf.message_size + conf.first_message_size;
-        p = malloc(s + 1);
-        assert(p);
-        memcpy(p + 0, conf.first_message_data, conf.first_message_size);
-        memcpy(p + conf.first_message_size,
-                    conf.message_data, conf.message_size);
-        p[s] = '\0';
-        engine_params.data = p;
-        engine_params.data_header_size = conf.first_message_size;
-        engine_params.data_size = s;
+        struct iovec iovs[2] = {
+            { .iov_base = conf.first_message_data,
+              .iov_len = conf.first_message_size },
+            { .iov_base = conf.message_data,
+              .iov_len = conf.message_size }
+        };
+        add_transport_framing(&engine_params, iovs,
+            1,  /* Headers */
+            2,  /* Data */
+            conf.websocket_enable);
     }
 
     /*
@@ -773,6 +777,107 @@ struct addresses detect_listen_addresses(int listen_port) {
 }
 
 /*
+ * Add transport specific framing and initialize the engine params members.
+ * No framing in case of TCP. HTTP + WebSocket framing in case of websockets.
+ */
+static size_t iovecs_length(struct iovec *iovs, size_t iovl) {
+    size_t size = 0;
+    for(size_t i = 0; i < iovl; i++)
+        size += iovs[i].iov_len;
+    return size;
+}
+static size_t put_ws_frame(size_t payload_size, uint8_t *buf) {
+    uint8_t *old_buf = buf;
+
+    if(!payload_size) return 0;
+
+    struct ws_frame {
+        enum { OP_TEXT = 0x1 } opcode:4;
+        unsigned int rsvs:3;
+        unsigned int fin:1;
+    } first_byte = {
+        .opcode = OP_TEXT,
+        .fin = 1
+    };
+
+    *buf++ = *(uint8_t *)&first_byte;
+
+    if(payload_size <= 125) {
+        *buf++ = payload_size;
+    } else if(payload_size <= 65535) {
+        *buf++ = 126;
+        uint16_t network_order_size = htonl(payload_size);
+        memcpy(buf, &network_order_size, 2);
+        buf += 2;
+    } else if(sizeof(payload_size) <= sizeof(uint32_t)) {
+        *buf++ = 127;
+        memset(buf, 0, 4);
+        buf += 4;
+        uint32_t network_order_size = htonl(payload_size);
+        memcpy(buf, &network_order_size, 4);
+        buf += 4;
+    } else {
+        /* (>>32) won't work if payload_size is uint32. */
+        *buf++ = 127;
+        uint32_t hi = htonl(payload_size >> 32);
+        memcpy(buf, &hi, 4);
+        buf += 4;
+        uint32_t lo = htonl(payload_size & 0xffffffff);
+        memcpy(buf, &lo, 4);
+        buf += 4;
+    }
+
+    return buf - old_buf;
+}
+static void add_transport_framing(struct engine_params *engine_params, struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable) {
+    assert(iovh <= iovl);
+    if(websocket_enable) {
+        static const char ws_http_headers[] =
+            "GET /ws HTTP/1.1\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "\r\n";
+        struct iovec ws_iovs[1 + 2 * iovl];
+        /* The max number of bytes in a WS frame header is 2+8+4 */
+        uint8_t ws_framing_prefixes[14 * iovl];
+        uint8_t *wsp = ws_framing_prefixes;
+        ws_iovs[0].iov_base = (void *)ws_http_headers;
+        ws_iovs[0].iov_len = sizeof(ws_http_headers)-1;
+        for(size_t i = 0; i < iovl; i++) {
+            uint8_t *old_wsp = wsp;
+            wsp += put_ws_frame(iovs[i].iov_len, wsp);
+            /* WS header */
+            ws_iovs[1 + 2*i].iov_base = old_wsp;
+            ws_iovs[1 + 2*i].iov_len = wsp - old_wsp;
+            /* WS data */
+            memcpy(&ws_iovs[1 + 2*i + 1], &iovs[i], sizeof(iovs[0]));
+        }
+        assert((wsp - ws_framing_prefixes)
+            <= (ssize_t)sizeof(ws_framing_prefixes));
+        add_transport_framing(engine_params, ws_iovs, 1 + 2*iovh, 1 + 2*iovl, 0);
+    } else {
+        /* Straight plain flat TCP with no framing and back-to-back messages. */
+        char *p;
+        size_t header_size = iovecs_length(iovs, iovh);
+        size_t total_size = iovecs_length(iovs, iovl);
+        p = malloc(total_size + 1);
+        assert(p);
+
+        engine_params->data = p;
+        engine_params->data_header_size = header_size;
+        engine_params->data_size = total_size;
+
+        for(size_t i = 0; i < iovl; i++) {
+            memcpy(p, iovs[i].iov_base, iovs[i].iov_len);
+            p += iovs[i].iov_len;
+        }
+        p[0] = '\0';
+    }
+}
+
+/*
  * Display the Usage screen.
  */
 static void
@@ -800,7 +905,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
-    //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
+    "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
