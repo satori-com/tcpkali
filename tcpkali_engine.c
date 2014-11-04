@@ -173,7 +173,7 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 }
 
 #define DEBUG(level, fmt, args...) do {         \
-        if(largs->params.debug_level >= level)  \
+        if((int)largs->params.debug_level >= level)  \
             fprintf(stderr, fmt, ##args);       \
     } while(0)
 
@@ -395,7 +395,7 @@ static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
     struct loop_arguments *largs = ev_userdata(EV_A);
 
     /*
-     * Move the connections' stats data out into the atomically managed
+     * Move the connections' stats.data.ptr out into the atomically managed
      * thread-specific aggregate counters.
      */
     struct connection *conn;
@@ -627,7 +627,7 @@ static void start_new_connection(EV_P) {
         ev_timer_start(EV_A_ &conn->timer);
     }
 
-    int want_write = (largs->params.data_size || want_catch_connect);
+    int want_write = (largs->params.data.total_size || want_catch_connect);
     ev_io_init(&conn->watcher, connection_cb, sockfd,
         EV_READ | (want_write ? EV_WRITE : 0));
 
@@ -666,7 +666,7 @@ static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
         update_io_interest(EV_A_ conn,
-            EV_READ | (largs->params.data_size ? EV_WRITE : 0));
+            EV_READ | (largs->params.data.total_size ? EV_WRITE : 0));
         break;
     case CSTATE_CONNECTING:
         /* Timed out in the connection establishment phase. */
@@ -787,7 +787,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
          * If there's nothing to write, we remove the write interest.
          */
         ev_timer_stop(EV_A_ &conn->timer);
-        if(largs->params.data_size == 0) {
+        if(largs->params.data.total_size == 0) {
             update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
             revents &= ~EV_WRITE;   /* Don't actually write in this loop */
         }
@@ -828,7 +828,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
         if(!available_length) {
             /* Only the header was sent. Now, silence. */
-            assert(largs->params.data_size == largs->params.data_header_size);
+            assert(largs->params.data.total_size == largs->params.data.header_size);
             update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
             return;
         }
@@ -879,14 +879,14 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
  */
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length) {
 
-    size_t total_size = largs->params.data_size;
+    size_t total_size = largs->params.data.total_size;
     size_t available = total_size - *current_offset;
     if(available) {
-        *position = largs->params.data + *current_offset;
+        *position = largs->params.data.ptr + *current_offset;
         *available_length = available;
     } else {
-        size_t off = largs->params.data_header_size;
-        *position = largs->params.data + off;
+        size_t off = largs->params.data.header_size;
+        *position = largs->params.data.ptr + off;
         *available_length = total_size - off;
         *current_offset = off;
     }
@@ -987,7 +987,7 @@ static void connection_flush_stats(EV_P_ struct connection *conn) {
  * so the total buffer exceeds 65k.
  */
 static void multiply_data(struct engine_params *params) {
-    size_t msg_size = params->data_size - params->data_header_size;
+    size_t msg_size = params->data.total_size - params->data.header_size;
 
     if(!msg_size) {
         /* Can't blow up empty buffer. */
@@ -996,16 +996,16 @@ static void multiply_data(struct engine_params *params) {
     } else {
         size_t n = ceil((64*1024.0)/msg_size); /* Optimum is size(L2)/k */
         size_t s = n * msg_size;
-        size_t hdr_off = params->data_header_size;
-        char *p = realloc(params->data, hdr_off + s + 1);
+        size_t hdr_off = params->data.header_size;
+        char *p = realloc(params->data.ptr, hdr_off + s + 1);
         void *msg_data = p + hdr_off;
         assert(p);
         for(size_t i = 1; i < n; i++) {
             memcpy(&p[hdr_off + i * msg_size], msg_data, msg_size);
         }
         p[hdr_off + s] = '\0';
-        params->data = p;
-        params->data_size = hdr_off + s;
+        params->data.ptr = p;
+        params->data.total_size = hdr_off + s;
     }
 }
 

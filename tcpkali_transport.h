@@ -24,45 +24,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_ENGINE_H
-#define TCPKALI_ENGINE_H
+#ifndef TCPKALI_TRANSPORT_H
+#define TCPKALI_TRANSPORT_H
 
-#include "tcpkali_transport.h"
-
-long number_of_cpus();
-
-struct engine;
-
-struct engine_params {
-    struct addresses remote_addresses;
-    struct addresses listen_addresses;
-    size_t requested_workers;       /* Number of threads to start */
-    size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
-    size_t minimal_write_size;
-    enum {
-        DBG_ALWAYS,
-        DBG_ERROR,
-        DBG_DETAIL,
-    } debug_level;
-    double connect_timeout;
-    double channel_lifetime;
-    double epoch;
-    /* Pre-computed message data */
-    struct transport_data_spec data;
+/*
+ * Our send buffer is pre-computed in advance and shared between
+ * the instances of engine. The buffer contains both headers and
+ * payload. The data_header_size is used to determine the end of
+ * the headers and start of the payload.
+ */
+struct transport_data_spec {
+    void  *ptr;
+    size_t header_size; /* Part of data to send just once. */
+    size_t total_size;
 };
-
-struct engine *engine_start(struct engine_params);
 
 
 /*
- * Report the number of opened connections by categories.
+ * Create the data specification by adding transport specific framing.
  */
-void engine_connections(struct engine *, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
-void engine_traffic(struct engine *, size_t *sent, size_t *received);
+struct transport_data_spec add_transport_framing(struct iovec *iovs,
+        size_t iovs_header, size_t iovs_total, int websocket_enable);
 
-
-size_t engine_initiate_new_connections(struct engine *, size_t n);
-
-void engine_terminate(struct engine *);
-
-#endif  /* TCPKALI_ENGINE_H */
+#endif  /* TCPKALI_TRANSPORT_H */

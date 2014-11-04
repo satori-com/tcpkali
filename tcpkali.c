@@ -51,6 +51,7 @@
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
 #include "tcpkali_websocket.h"
+#include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
 
 /*
@@ -136,7 +137,6 @@ static int append_string(const char *filename, char **data, size_t *size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
-static void add_transport_framing(struct engine_params *engine_params, struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -382,10 +382,10 @@ int main(int argc, char **argv) {
             { .iov_base = conf.message_data,
               .iov_len = conf.message_size }
         };
-        add_transport_framing(&engine_params, iovs,
-            1,  /* Headers */
-            2,  /* Data */
-            conf.websocket_enable);
+        engine_params.data = add_transport_framing(iovs,
+                                1,  /* Headers */
+                                2,  /* Data */
+                                conf.websocket_enable);
     }
 
     /*
@@ -775,64 +775,6 @@ struct addresses detect_listen_addresses(int listen_port) {
                                addresses);
 
     return addresses;
-}
-
-/*
- * Add transport specific framing and initialize the engine params members.
- * No framing in case of TCP. HTTP + WebSocket framing in case of websockets.
- */
-static size_t iovecs_length(struct iovec *iovs, size_t iovl) {
-    size_t size = 0;
-    for(size_t i = 0; i < iovl; i++)
-        size += iovs[i].iov_len;
-    return size;
-}
-static void add_transport_framing(struct engine_params *engine_params, struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable) {
-    assert(iovh <= iovl);
-    if(websocket_enable) {
-        static const char ws_http_headers[] =
-            "GET /ws HTTP/1.1\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
-            "Sec-WebSocket-Version: 13\r\n"
-            "\r\n";
-        struct iovec ws_iovs[1 + 2 * iovl];
-        uint8_t ws_framing_prefixes[WEBSOCKET_MAX_FRAME_HDR_SIZE * iovl];
-        uint8_t *wsp = ws_framing_prefixes;
-        ws_iovs[0].iov_base = (void *)ws_http_headers;
-        ws_iovs[0].iov_len = sizeof(ws_http_headers)-1;
-        for(size_t i = 0; i < iovl; i++) {
-            uint8_t *old_wsp = wsp;
-            wsp += websocket_frame_header(iovs[i].iov_len, wsp,
-                                          (size_t)(wsp - ws_framing_prefixes));
-            /* WS header */
-            ws_iovs[1 + 2*i].iov_base = old_wsp;
-            ws_iovs[1 + 2*i].iov_len = wsp - old_wsp;
-            /* WS data */
-            memcpy(&ws_iovs[1 + 2*i + 1], &iovs[i], sizeof(iovs[0]));
-        }
-        assert((wsp - ws_framing_prefixes)
-            <= (ssize_t)sizeof(ws_framing_prefixes));
-        add_transport_framing(engine_params, ws_iovs, 1 + 2*iovh, 1 + 2*iovl, 0);
-    } else {
-        /* Straight plain flat TCP with no framing and back-to-back messages. */
-        char *p;
-        size_t header_size = iovecs_length(iovs, iovh);
-        size_t total_size = iovecs_length(iovs, iovl);
-        p = malloc(total_size + 1);
-        assert(p);
-
-        engine_params->data = p;
-        engine_params->data_header_size = header_size;
-        engine_params->data_size = total_size;
-
-        for(size_t i = 0; i < iovl; i++) {
-            memcpy(p, iovs[i].iov_base, iovs[i].iov_len);
-            p += iovs[i].iov_len;
-        }
-        p[0] = '\0';
-    }
 }
 
 /*
