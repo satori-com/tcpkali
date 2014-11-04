@@ -44,6 +44,14 @@ struct transport_data_spec {
  * Create the data specification by adding transport specific framing.
  */
 struct transport_data_spec add_transport_framing(struct iovec *iovs,
-        size_t iovs_header, size_t iovs_total, int websocket_enable);
+        size_t iovs_header, size_t iovs_total,
+        int websocket_enable);
+
+/*
+ * To be able to efficiently transfer small payloads, we replicate
+ * the payload data several times to send more data in a single call.
+ * The function replaces the given (data) contents.
+ */
+void replicate_payoad(struct transport_data_spec *data, size_t target_payload_size);
 
 #endif  /* TCPKALI_TRANSPORT_H */

@@ -25,7 +25,9 @@
  * SUCH DAMAGE.
  */
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <sys/uio.h>
 #include <assert.h>
 
@@ -94,6 +96,35 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
         p[0] = '\0';
 
         return data;
+    }
+}
+
+
+/*
+ * If the payload is less then target_size,
+ * replicate it several times so the total buffer exceeds target_size.
+ */
+void replicate_payload(struct transport_data_spec *data, size_t target_size) {
+    size_t payload_size = data->total_size - data->header_size;
+
+    if(!payload_size) {
+        /* Can't blow up an empty buffer. */
+    } else if(payload_size >= target_size) {
+        /* Data is large enough to avoid blowing up. */
+    } else {
+        /* The optimum target_size is size(L2)/k */
+        size_t n = ceil(((double)target_size)/payload_size);
+        size_t new_payload_size = n * payload_size;
+        size_t header_offset = data->header_size;
+        char *p = realloc(data->ptr, header_offset + new_payload_size + 1);
+        void *msg_data = p + header_offset;
+        assert(p);
+        for(size_t i = 1; i < n; i++) {
+            memcpy(&p[header_offset + i * payload_size], msg_data, payload_size);
+        }
+        p[header_offset + new_payload_size] = '\0';
+        data->ptr = p;
+        data->total_size = header_offset + new_payload_size;
     }
 }
 
