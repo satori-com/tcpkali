@@ -50,6 +50,7 @@
 #include "tcpkali_mavg.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
+#include "tcpkali_websocket.h"
 #include "tcpkali_syslimits.h"
 
 /*
@@ -786,49 +787,6 @@ static size_t iovecs_length(struct iovec *iovs, size_t iovl) {
         size += iovs[i].iov_len;
     return size;
 }
-static size_t put_ws_frame(size_t payload_size, uint8_t *buf) {
-    uint8_t *old_buf = buf;
-
-    if(!payload_size) return 0;
-
-    struct ws_frame {
-        enum { OP_TEXT = 0x1 } opcode:4;
-        unsigned int rsvs:3;
-        unsigned int fin:1;
-    } first_byte = {
-        .opcode = OP_TEXT,
-        .fin = 1
-    };
-
-    *buf++ = *(uint8_t *)&first_byte;
-
-    if(payload_size <= 125) {
-        *buf++ = payload_size;
-    } else if(payload_size <= 65535) {
-        *buf++ = 126;
-        uint16_t network_order_size = htonl(payload_size);
-        memcpy(buf, &network_order_size, 2);
-        buf += 2;
-    } else if(sizeof(payload_size) <= sizeof(uint32_t)) {
-        *buf++ = 127;
-        memset(buf, 0, 4);
-        buf += 4;
-        uint32_t network_order_size = htonl(payload_size);
-        memcpy(buf, &network_order_size, 4);
-        buf += 4;
-    } else {
-        /* (>>32) won't work if payload_size is uint32. */
-        *buf++ = 127;
-        uint32_t hi = htonl(payload_size >> 32);
-        memcpy(buf, &hi, 4);
-        buf += 4;
-        uint32_t lo = htonl(payload_size & 0xffffffff);
-        memcpy(buf, &lo, 4);
-        buf += 4;
-    }
-
-    return buf - old_buf;
-}
 static void add_transport_framing(struct engine_params *engine_params, struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable) {
     assert(iovh <= iovl);
     if(websocket_enable) {
@@ -840,14 +798,14 @@ static void add_transport_framing(struct engine_params *engine_params, struct io
             "Sec-WebSocket-Version: 13\r\n"
             "\r\n";
         struct iovec ws_iovs[1 + 2 * iovl];
-        /* The max number of bytes in a WS frame header is 2+8+4 */
-        uint8_t ws_framing_prefixes[14 * iovl];
+        uint8_t ws_framing_prefixes[WEBSOCKET_MAX_FRAME_HDR_SIZE * iovl];
         uint8_t *wsp = ws_framing_prefixes;
         ws_iovs[0].iov_base = (void *)ws_http_headers;
         ws_iovs[0].iov_len = sizeof(ws_http_headers)-1;
         for(size_t i = 0; i < iovl; i++) {
             uint8_t *old_wsp = wsp;
-            wsp += put_ws_frame(iovs[i].iov_len, wsp);
+            wsp += websocket_frame_header(iovs[i].iov_len, wsp,
+                                          (size_t)(wsp - ws_framing_prefixes));
             /* WS header */
             ws_iovs[1 + 2*i].iov_base = old_wsp;
             ws_iovs[1 + 2*i].iov_len = wsp - old_wsp;
