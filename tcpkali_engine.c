@@ -172,7 +172,7 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 }
 
 #define DEBUG(level, fmt, args...) do {         \
-        if((int)largs->params.debug_level >= level)  \
+        if((int)largs->params.verbosity_level >= level)  \
             fprintf(stderr, fmt, ##args);       \
     } while(0)
 

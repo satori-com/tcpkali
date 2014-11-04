@@ -43,7 +43,7 @@ struct engine_params {
         DBG_ALWAYS,
         DBG_ERROR,
         DBG_DETAIL,
-    } debug_level;
+    } verbosity_level;
     double connect_timeout;
     double channel_lifetime;
     double epoch;

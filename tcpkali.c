@@ -62,7 +62,8 @@
 #define CLI_CONN_OFFSET  1024
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
-    { "debug", 1, 0, 'd' },
+    { "version", 0, 0, 'V' },
+    { "verbose", 1, 0, 'v' },
     { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
     { "duration", 1, 0, 'T' },
@@ -168,8 +169,8 @@ static struct multiplier bw_multiplier[] = {
 int main(int argc, char **argv) {
     struct tcpkali_config conf = default_config;
     struct engine_params engine_params = {
-        .debug_level = DBG_ERROR,
-        .connect_timeout = 1.0,
+        .verbosity_level    = DBG_ERROR,
+        .connect_timeout  = 1.0,
         .channel_lifetime = INFINITY
     };
 
@@ -180,15 +181,18 @@ int main(int argc, char **argv) {
         if(c == -1)
             break;
         switch(c) {
+        case 'V':
+            printf(PACKAGE_NAME " version " VERSION "\n");
+            exit(0);
         case 'h':
             usage(argv[0], &default_config);
             exit(EX_USAGE);
-        case 'd':
-            engine_params.debug_level = atoi(optarg);
-            switch(engine_params.debug_level) {
+        case 'v':
+            engine_params.verbosity_level = atoi(optarg);
+            switch(engine_params.verbosity_level) {
             case 0: case 1: case 2: break;
             default:
-                fprintf(stderr, "Expecting --debug=[0..2]\n");
+                fprintf(stderr, "Expecting --verbose=[0..2]\n");
                 exit(EX_USAGE);
             }
             break;
@@ -786,8 +790,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
         basename(argv0));
     fprintf(stderr,
     "Where OPTIONS are:\n"
-    "  -h, --help                  Display this help screen\n"
-    "  --debug <level=1>           Debug level [0..2].\n"
+    "  -h, --help                  Print this help screen, then exit\n"
+    "  --version                   Print version number, then exit\n"
+    "  --verbose <level=1>         Verbosity level [0..2]\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
     "  -r, --connect-rate <R=%g>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
