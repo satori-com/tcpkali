@@ -15,8 +15,9 @@
 
     Usage: tcpkali [OPTIONS] <host:port> [<host:port>...]
     Where OPTIONS are:
-      -h, --help                  Display this help screen
-      --debug <level=1>           Debug level [0..2].
+      -h, --help                  Print this help screen, then exit
+      --version                   Print version number, then exit
+      --verbose <level=1>         Verbosity level [0..2]
       -c, --connections <N=1>     Connections to keep open to the destinations
       -r, --connect-rate <R=100>  Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
@@ -34,6 +35,7 @@
       --statsd-host <host>        StatsD host to send data (default is localhost)
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
+      --ws, --websocket           Use RFC6455 WebSocket transport
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
