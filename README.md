@@ -52,12 +52,12 @@
     tcpkali --message '$' localhost:echo
     tcpkali -m '$' localhost:echo
 
-### Open 10000 connections to two remote servers:
+### Open 10000 connections to two remote servers
 
     tcpkali --connections 10000 yahoo.com:80 google.com:80
     tcpkali -c 10000 yahoo.com:80 google.com:80
 
-### Open 100 connections to itself and do nothing.
+### Open 100 connections to itself and do nothing
 
     tcpkali --connections 100 --listen-port 12345 127.0.0.1:12345
     tcpkali -c100 -l12345 127.0.0.1:12345
