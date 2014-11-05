@@ -43,41 +43,41 @@
 
 # Examples
 
-## Connect to a local web server and do nothing
+### Connect to a local web server and do nothing
 
     tcpkali 127.0.0.1:80
 
-## Connect to a local echo server and hammer it with stream of dollars
+### Connect to a local echo server and hammer it with stream of dollars
 
     tcpkali --message '$' localhost:echo
     tcpkali -m '$' localhost:echo
 
-## Open 10000 connections to two remote servers:
+### Open 10000 connections to two remote servers:
 
     tcpkali --connections -c 10000 yahoo.com:80 google.com:80
     tcpkali -c 10000 yahoo.com:80 google.com:80
 
-## Open 100 connections to itself and do nothing.
+### Open 100 connections to itself and do nothing.
 
     tcpkali --connections=100 --listen-port=12345 127.0.0.1:12345
     tcpkali -c100 -l12345 127.0.0.1:12345
 
-## Open a connection to itself and send lots of cookies
+### Open a connection to itself and send lots of cookies
 
     tcpkali --listen-port=12345 --message "cookies" 127.0.0.1:12345
     tcpkali -l 12345 -m "cookies" 127.0.0.1:12345
 
-## WebSocket connections
+### WebSocket connections
 
-### Open connection to the local WebSocket server, send hello, and wait
+#### Open connection to the local WebSocket server, send hello, and wait
 
     tcpkali --websocket --first-message "hello" 127.0.0.1:80
 
-### Open connection to the local server and send tons of empty JSON frames
+#### Open connection to the local server and send tons of empty JSON frames
 
     tcpkali --websocket --message "{}" 127.0.0.1:80
 
-### Open connection to the local server and send a JSON frame every second
+#### Open connection to the local server and send a JSON frame every second
 
     tcpkali --websocket --message "{}" --message-rate=1 127.0.0.1:80
 
