@@ -1,4 +1,4 @@
-AC_INIT(tcpkali, 0.1, lwalkin@machinezone.com)
+AC_INIT(tcpkali, 0.2, lwalkin@machinezone.com)
 
 AC_CONFIG_SRCDIR([tcpkali.c])
 AC_CONFIG_AUX_DIR(config)

@@ -15,8 +15,9 @@
 
     Usage: tcpkali [OPTIONS] <host:port> [<host:port>...]
     Where OPTIONS are:
-      -h, --help                  Display this help screen
-      --debug <level=1>           Debug level [0..2].
+      -h, --help                  Print this help screen, then exit
+      --version                   Print version number, then exit
+      --verbose <level=1>         Verbosity level [0..2]
       -c, --connections <N=1>     Connections to keep open to the destinations
       -r, --connect-rate <R=100>  Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
@@ -34,12 +35,60 @@
       --statsd-host <host>        StatsD host to send data (default is localhost)
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
+      --ws, --websocket           Use RFC6455 WebSocket transport
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
       <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
 
-# Sysctls for high load (N connections, such as 50k)
+# Examples
+
+### Connect to a local web server and do nothing
+
+    tcpkali 127.0.0.1:80
+
+### Connect to a local echo server and hammer it with stream of dollars
+
+    tcpkali --message '$' localhost:echo
+    tcpkali -m '$' localhost:echo
+
+### Open 10000 connections to two remote servers
+
+    tcpkali --connections 10000 yahoo.com:80 google.com:80
+    tcpkali -c 10000 yahoo.com:80 google.com:80
+
+### Open 100 connections to itself and do nothing
+
+    tcpkali --connections 100 --listen-port 12345 127.0.0.1:12345
+    tcpkali -c100 -l12345 127.0.0.1:12345
+
+### Open a connection to itself and send lots of cookies
+
+    tcpkali --listen-port 12345 --message "cookies" 127.0.0.1:12345
+    tcpkali -l 12345 -m "cookies" 127.0.0.1:12345
+
+### Listen for incoming connections and throw away data for 3 hours
+
+    tcpkali --listen-port 12345 --duration 3h
+    tcpkali -l12345 -T3h
+
+### WebSocket connections
+
+#### Open connection to the local WebSocket server, send hello, and wait
+
+    tcpkali --websocket --first-message "hello" 127.0.0.1:80
+
+#### Open connection to the local server and send tons of empty JSON frames
+
+    tcpkali --websocket --message "{}" 127.0.0.1:80
+
+#### Open connection to the local server and send a JSON frame every second
+
+    tcpkali --websocket --message "{}" --message-rate=1 127.0.0.1:80
+
+
+# Sysctls for high load
+## (for N connections, such as 50k)
 
     kern.maxfiles=10000+2*N         # BSD
     kern.maxfilesperproc=100+N      # BSD

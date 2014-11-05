@@ -192,7 +192,7 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     if(f) {
         int flag;
         if(fscanf(f, "%d", &flag) == 1) {
-            if(flag != 1 && expected_sockets > 1) {
+            if(flag != 1 && expected_sockets > 10) {
                 fprintf(stderr, "WARNING: Not reusing TIME_WAIT sockets, "
                     "might not open %d simultaneous connections. "
                     "Adjust \"%s\" value.\n",

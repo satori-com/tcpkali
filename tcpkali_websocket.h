@@ -24,45 +24,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_ENGINE_H
-#define TCPKALI_ENGINE_H
-
-#include "tcpkali_transport.h"
-
-long number_of_cpus();
-
-struct engine;
-
-struct engine_params {
-    struct addresses remote_addresses;
-    struct addresses listen_addresses;
-    size_t requested_workers;       /* Number of threads to start */
-    size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
-    size_t minimal_write_size;
-    enum {
-        DBG_ALWAYS,
-        DBG_ERROR,
-        DBG_DETAIL,
-    } verbosity_level;
-    double connect_timeout;
-    double channel_lifetime;
-    double epoch;
-    /* Pre-computed message data */
-    struct transport_data_spec data;
-};
-
-struct engine *engine_start(struct engine_params);
-
+#ifndef TCPKALI_WEBSOCKET_H
+#define TCPKALI_WEBSOCKET_H
 
 /*
- * Report the number of opened connections by categories.
+ * Establish the maximum size of the WebSocket frame header.
  */
-void engine_connections(struct engine *, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
-void engine_traffic(struct engine *, size_t *sent, size_t *received);
+#define  WEBSOCKET_MAX_FRAME_HDR_SIZE    (2+8+4)
 
+/*
+ * Write out a frame header to prefix a payload of given size.
+ * RETURN VALUE:
+ *   Number of bytes written out to the buffer.
+ */
+size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size);
 
-size_t engine_initiate_new_connections(struct engine *, size_t n);
-
-void engine_terminate(struct engine *);
-
-#endif  /* TCPKALI_ENGINE_H */
+#endif  /* TCPKALI_WEBSOCKET_H */

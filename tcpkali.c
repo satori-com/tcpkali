@@ -50,6 +50,8 @@
 #include "tcpkali_mavg.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_signals.h"
+#include "tcpkali_websocket.h"
+#include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
 
 /*
@@ -60,7 +62,8 @@
 #define CLI_CONN_OFFSET  1024
 static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
-    { "debug", 1, 0, 'd' },
+    { "version", 0, 0, 'V' },
+    { "verbose", 1, 0, 'v' },
     { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'r' },
     { "duration", 1, 0, 'T' },
@@ -78,6 +81,7 @@ static struct option cli_long_options[] = {
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "listen-port", 1, 0, 'l' },
+    { "ws", 0, 0, 'W' }, { "websocket", 0, 0, 'W' },
     { 0, 0, 0, 0 }
 };
 
@@ -95,6 +99,7 @@ static struct tcpkali_config {
     size_t first_message_size;
     char  *message_data;
     size_t message_size;
+    int    websocket_enable;    /* Enable WebSocket framing. */
 } default_config = {
         .max_connections = 1,
         .connect_rate = 100.0,
@@ -164,8 +169,8 @@ static struct multiplier bw_multiplier[] = {
 int main(int argc, char **argv) {
     struct tcpkali_config conf = default_config;
     struct engine_params engine_params = {
-        .debug_level = DBG_ERROR,
-        .connect_timeout = 1.0,
+        .verbosity_level    = DBG_ERROR,
+        .connect_timeout  = 1.0,
         .channel_lifetime = INFINITY
     };
 
@@ -176,15 +181,18 @@ int main(int argc, char **argv) {
         if(c == -1)
             break;
         switch(c) {
+        case 'V':
+            printf(PACKAGE_NAME " version " VERSION "\n");
+            exit(0);
         case 'h':
             usage(argv[0], &default_config);
             exit(EX_USAGE);
-        case 'd':
-            engine_params.debug_level = atoi(optarg);
-            switch(engine_params.debug_level) {
+        case 'v':
+            engine_params.verbosity_level = atoi(optarg);
+            switch(engine_params.verbosity_level) {
             case 0: case 1: case 2: break;
             default:
-                fprintf(stderr, "Expecting --debug=[0..2]\n");
+                fprintf(stderr, "Expecting --verbose=[0..2]\n");
                 exit(EX_USAGE);
             }
             break;
@@ -335,6 +343,9 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case 'W':   /* --websocket: Enable WebSocket framing */
+            conf.websocket_enable = 1;
+            break;
         default:
             usage(argv[0], &default_config);
             exit(EX_USAGE);
@@ -369,18 +380,16 @@ int main(int argc, char **argv) {
     }
 
     if(conf.message_size || conf.first_message_size) {
-        char *p;
-        size_t s;
-        s = conf.message_size + conf.first_message_size;
-        p = malloc(s + 1);
-        assert(p);
-        memcpy(p + 0, conf.first_message_data, conf.first_message_size);
-        memcpy(p + conf.first_message_size,
-                    conf.message_data, conf.message_size);
-        p[s] = '\0';
-        engine_params.data = p;
-        engine_params.data_header_size = conf.first_message_size;
-        engine_params.data_size = s;
+        struct iovec iovs[2] = {
+            { .iov_base = conf.first_message_data,
+              .iov_len = conf.first_message_size },
+            { .iov_base = conf.message_data,
+              .iov_len = conf.message_size }
+        };
+        engine_params.data = add_transport_framing(iovs,
+                                1,  /* Headers */
+                                2,  /* Data */
+                                conf.websocket_enable);
     }
 
     /*
@@ -781,8 +790,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
         basename(argv0));
     fprintf(stderr,
     "Where OPTIONS are:\n"
-    "  -h, --help                  Display this help screen\n"
-    "  --debug <level=1>           Debug level [0..2].\n"
+    "  -h, --help                  Print this help screen, then exit\n"
+    "  --version                   Print version number, then exit\n"
+    "  --verbose <level=1>         Verbosity level [0..2]\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
     "  -r, --connect-rate <R=%g>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
@@ -800,7 +810,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
-    //"  --total-bandwidth <Bw>    Limit total bandwidth (see multipliers below)\n"
+    "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "And variable multipliers are:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
