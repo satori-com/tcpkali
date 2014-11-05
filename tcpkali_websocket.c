@@ -38,7 +38,7 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
     uint8_t *orig_buf_ptr = buf;
 
     /* Buf should be able to contain the largest frame header. */
-    assert(2 + 8 <= size);
+    assert(size >= WEBSOCKET_MAX_FRAME_HDR_SIZE);
 
     if(!payload_size) return 0;
 
@@ -57,7 +57,6 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
         .opcode = OP_TEXT_FRAME,
         .fin = 1
     };
-    assert(sizeof(first_byte) == 1);
 
     *buf++ = *(uint8_t *)&first_byte;
 

@@ -64,7 +64,8 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
         for(size_t i = 0; i < iovl; i++) {
             uint8_t *old_wsp = wsp;
             wsp += websocket_frame_header(iovs[i].iov_len, wsp,
-                                          (size_t)(wsp - ws_framing_prefixes));
+                                         (size_t)(sizeof(ws_framing_prefixes)
+                                               - (wsp - ws_framing_prefixes)));
             /* WS header */
             ws_iovs[1 + 2*i].iov_base = old_wsp;
             ws_iovs[1 + 2*i].iov_len = wsp - old_wsp;
