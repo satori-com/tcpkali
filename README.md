@@ -67,6 +67,11 @@
     tcpkali --listen-port 12345 --message "cookies" 127.0.0.1:12345
     tcpkali -l 12345 -m "cookies" 127.0.0.1:12345
 
+### Listen for incoming connections and throw away data for 3 hours
+
+    tcpkali --listen-port 12345 --duration 3h
+    tcpkali -l12345 -T3h
+
 ### WebSocket connections
 
 #### Open connection to the local WebSocket server, send hello, and wait
