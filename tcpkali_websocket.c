@@ -35,10 +35,18 @@
  * Write out a frame header to prefix a payload of given size.
  */
 size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
-    uint8_t *orig_buf_ptr = buf;
+    uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
+    uint8_t *orig_buf_ptr;
 
-    /* Buf should be able to contain the largest frame header. */
-    assert(size >= WEBSOCKET_MAX_FRAME_HDR_SIZE);
+    /* Return the frame header size if there's no buffer to write to. */
+    if(buf) {
+        /* Buf should be able to contain the largest frame header. */
+        assert(!buf || size >= WEBSOCKET_MAX_FRAME_HDR_SIZE);
+        orig_buf_ptr = buf;
+    } else {
+        orig_buf_ptr = buf = tmpbuf;
+        size = sizeof(tmpbuf);
+    }
 
     if(!payload_size) return 0;
 

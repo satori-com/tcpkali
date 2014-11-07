@@ -379,6 +379,7 @@ int main(int argc, char **argv) {
                                    engine_params.requested_workers);
     }
 
+    size_t message_size_with_framing = conf.message_size; /* TCP||WS framing */
     if(conf.message_size || conf.first_message_size) {
         struct iovec iovs[2] = {
             { .iov_base = conf.first_message_data,
@@ -390,15 +391,17 @@ int main(int argc, char **argv) {
                                 1,  /* Headers */
                                 2,  /* Data */
                                 conf.websocket_enable);
+        message_size_with_framing += conf.websocket_enable
+            ? websocket_frame_header(conf.message_size, 0, 0) : 0;
     }
 
     /*
      * Make sure we're consistent with the message rate and channel bandwidth.
      */
     if(conf.message_rate) {
-        size_t msize = conf.message_size;
+        size_t msize = message_size_with_framing;
         if(msize == 0) {
-            fprintf(stderr, "--message-rate parameter has no sense "
+            fprintf(stderr, "--message-rate parameter makes no sense "
                             "without --message or --message-file\n");
             exit(EX_USAGE);
         }
