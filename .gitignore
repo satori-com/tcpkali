@@ -6,8 +6,10 @@
 *.o
 *.la
 *.lo
+*.log
+*.trs
 
-libev/ev.3
+src/libev/ev.3
 
 m4/*
 config/

@@ -52,6 +52,6 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs,
  * the payload data several times to send more data in a single call.
  * The function replaces the given (data) contents.
  */
-void replicate_payoad(struct transport_data_spec *data, size_t target_payload_size);
+void replicate_payload(struct transport_data_spec *data, size_t target_payload_size);
 
 #endif  /* TCPKALI_TRANSPORT_H */
