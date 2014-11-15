@@ -379,6 +379,30 @@ int main(int argc, char **argv) {
                                    engine_params.requested_workers);
     }
 
+    /*
+     * Pick multiple destinations from the command line, resolve them.
+     */
+    if(argc - optind > 0) {
+        engine_params.remote_addresses
+            = resolve_remote_addresses(&argv[optind], argc - optind);
+        if(engine_params.remote_addresses.n_addrs == 0) {
+            errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)");
+        } else {
+            fprint_addresses(stderr, "Destination: ",
+                                   "\nDestination: ", "\n",
+                                   engine_params.remote_addresses);
+        }
+    } else {
+        conf.max_connections = 0;
+    }
+    if(conf.listen_port > 0) {
+        engine_params.listen_addresses =
+            detect_listen_addresses(conf.listen_port);
+    }
+
+    /*
+     * Prepare a buffer with data to [repeatedly] send to the other system.
+     */
     size_t message_size_with_framing = conf.message_size; /* TCP||WS framing */
     if(conf.message_size || conf.first_message_size) {
         struct iovec iovs[2] = {
@@ -450,24 +474,8 @@ int main(int argc, char **argv) {
     }
 
     /*
-     * Pick multiple destinations from the command line, resolve them.
+     * Initialize statsd library and push initial (empty) metrics.
      */
-    if(argc - optind > 0) {
-        engine_params.remote_addresses
-            = resolve_remote_addresses(&argv[optind], argc - optind);
-        if(engine_params.remote_addresses.n_addrs == 0) {
-            errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)");
-        } else {
-            fprint_addresses(stderr, "Destination: ",
-                                   "\nDestination: ", "\n",
-                                   engine_params.remote_addresses);
-        }
-    } else {
-        conf.max_connections = 0;
-    }
-    if(conf.listen_port > 0)
-        engine_params.listen_addresses = detect_listen_addresses(conf.listen_port);
-
     Statsd *statsd;
     if(conf.statsd_enable) {
         statsd_new(&statsd, conf.statsd_server,
