@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 #include <sys/uio.h>
 #include <assert.h>
@@ -45,37 +46,48 @@ static size_t iovecs_length(struct iovec *iovs, size_t iovl) {
  * Add transport specific framing and initialize the engine params members.
  * No framing in case of TCP. HTTP + WebSocket framing in case of websockets.
  */
-struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable) {
+struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable, const char *hostport, const char *path) {
     assert(iovh <= iovl);
 
     if(websocket_enable) {
-        static const char ws_http_headers[] =
-            "GET /ws HTTP/1.1\r\n"
+        static const char ws_http_headers_fmt[] =
+            "GET /%s HTTP/1.1\r\n"
+            "Host: %s\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
             "Sec-WebSocket-Version: 13\r\n"
             "\r\n";
-        struct iovec ws_iovs[1 + 2 * iovl];
+        ssize_t http_headers_size;
+        http_headers_size = snprintf("", 0, ws_http_headers_fmt,
+            path, hostport);
+        assert(http_headers_size > (ssize_t)sizeof(ws_http_headers_fmt));
+        char http_headers[http_headers_size + 1];
+        snprintf(http_headers, http_headers_size + 1, ws_http_headers_fmt,
+            path, hostport);
+        const int http_hdr_iovs = 1;
+        struct iovec ws_iovs[http_hdr_iovs + 2 * iovl];
         uint8_t ws_framing_prefixes[WEBSOCKET_MAX_FRAME_HDR_SIZE * iovl];
         uint8_t *wsp = ws_framing_prefixes;
-        ws_iovs[0].iov_base = (void *)ws_http_headers;
-        ws_iovs[0].iov_len = sizeof(ws_http_headers)-1;
+        ws_iovs[0].iov_base = (void *)http_headers;
+        ws_iovs[0].iov_len = http_headers_size;
         for(size_t i = 0; i < iovl; i++) {
             uint8_t *old_wsp = wsp;
             wsp += websocket_frame_header(iovs[i].iov_len, wsp,
                                          (size_t)(sizeof(ws_framing_prefixes)
                                                - (wsp - ws_framing_prefixes)));
             /* WS header */
-            ws_iovs[1 + 2*i].iov_base = old_wsp;
-            ws_iovs[1 + 2*i].iov_len = wsp - old_wsp;
+            ws_iovs[http_hdr_iovs + 2*i].iov_base = old_wsp;
+            ws_iovs[http_hdr_iovs + 2*i].iov_len = wsp - old_wsp;
             /* WS data */
-            memcpy(&ws_iovs[1 + 2*i + 1], &iovs[i], sizeof(iovs[0]));
+            ws_iovs[http_hdr_iovs + 2*i + 1] = iovs[i];
         }
         assert((wsp - ws_framing_prefixes)
             <= (ssize_t)sizeof(ws_framing_prefixes));
 
-        return add_transport_framing(ws_iovs, 1 + 2*iovh, 1 + 2*iovl, 0);
+        return add_transport_framing(ws_iovs,
+            http_hdr_iovs + 2*iovh,
+            http_hdr_iovs + 2*iovl, 0, 0, 0);
     } else {
         /* Straight plain flat TCP with no framing and back-to-back messages. */
         char *p;

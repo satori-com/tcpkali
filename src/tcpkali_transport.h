@@ -45,7 +45,9 @@ struct transport_data_spec {
  */
 struct transport_data_spec add_transport_framing(struct iovec *iovs,
         size_t iovs_header, size_t iovs_total,
-        int websocket_enable);
+        int websocket_enable,
+        const char *hostport,
+        const char *path);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate

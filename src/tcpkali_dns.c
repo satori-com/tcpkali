@@ -83,16 +83,18 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
     struct addresses addresses = { 0, 0 };
 
     for(int n = 0; n < nhostports; n++) {
-        char *hostport = hostports[n];
+        char *hostport = strdup(hostports[n]);
+        char *host = hostport;
         char *service_string = strchr(hostport, ':');
         if(service_string) {
-            service_string++;
+            *service_string++ = '\0';
         } else {
             fprintf(stderr, "Expected :port specification. See --help.\n");
             exit(EX_USAGE);
         }
 
-        char *host = strndup(hostport, (service_string - hostport) - 1);
+        char *path = strchr(service_string, '/');
+        if(path) *path++ = '\0';
 
         struct addrinfo hints = {
             .ai_family = PF_UNSPEC,
@@ -110,9 +112,9 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
         /* Move all of the addresses into the separate storage */
         for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
             address_add(&addresses, tmp->ai_addr);
-
         }
 
+        free(hostport);
         freeaddrinfo(res);
     }
 

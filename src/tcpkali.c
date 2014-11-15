@@ -100,6 +100,8 @@ static struct tcpkali_config {
     char  *message_data;
     size_t message_size;
     int    websocket_enable;    /* Enable WebSocket framing. */
+    char  *first_hostport;      /* A single host:port specification */
+    char  *first_path;          /* A first /path specification */
 } default_config = {
         .max_connections = 1,
         .connect_rate = 100.0,
@@ -392,6 +394,14 @@ int main(int argc, char **argv) {
                                    "\nDestination: ", "\n",
                                    engine_params.remote_addresses);
         }
+        /* Figure out the host and port for HTTP "Host:" header. */
+        conf.first_hostport = strdup(argv[optind]);
+        conf.first_path = strchr(conf.first_hostport, '/');
+        if(conf.first_path) {
+            *conf.first_path++ = '\0';
+        } else {
+            conf.first_path = "ws"; /* "GET /ws HTTP/1.1" */
+        }
     } else {
         conf.max_connections = 0;
     }
@@ -404,7 +414,7 @@ int main(int argc, char **argv) {
      * Prepare a buffer with data to [repeatedly] send to the other system.
      */
     size_t message_size_with_framing = conf.message_size; /* TCP||WS framing */
-    if(conf.message_size || conf.first_message_size) {
+    if(conf.message_size || conf.first_message_size || conf.websocket_enable) {
         struct iovec iovs[2] = {
             { .iov_base = conf.first_message_data,
               .iov_len = conf.first_message_size },
@@ -412,9 +422,10 @@ int main(int argc, char **argv) {
               .iov_len = conf.message_size }
         };
         engine_params.data = add_transport_framing(iovs,
-                                1,  /* Headers */
-                                2,  /* Data */
-                                conf.websocket_enable);
+                                1,  /* First message data */
+                                2,  /* Subsequent messages data */
+                                conf.websocket_enable,
+                                conf.first_hostport, conf.first_path);
         message_size_with_framing += conf.websocket_enable
             ? websocket_frame_header(conf.message_size, 0, 0) : 0;
     }
