@@ -94,7 +94,7 @@ static struct tcpkali_config {
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
-    int   message_rate;     /* Messages per second per channel */
+    double message_rate;    /* Messages per second in channel */
     char  *first_message_data;
     size_t first_message_size;
     char  *message_data;
@@ -109,9 +109,7 @@ static struct tcpkali_config {
         .statsd_enable = 0,
         .statsd_server = "127.0.0.1",
         .statsd_port = 8125,
-        .statsd_namespace = "tcpkali",
-        .listen_port = 0,
-        .message_rate = 0
+        .statsd_namespace = "tcpkali"
     };
 
 struct stats_checkpoint {
@@ -287,7 +285,7 @@ int main(int argc, char **argv) {
             break;
             }
         case 'M': {
-            int rate = parse_with_multipliers(option, optarg,
+            double rate = parse_with_multipliers(option, optarg,
                         k_multiplier,
                         sizeof(k_multiplier)/sizeof(k_multiplier[0]));
             if(rate <= 0) {
@@ -440,13 +438,18 @@ int main(int argc, char **argv) {
             exit(EX_USAGE);
         }
         size_t message_bandwidth = (msize * conf.message_rate) / 1;
+        if(message_bandwidth == 0) {
+            fprintf(stderr, "--message-rate=%g with message size %ld results in a less than a byte per second bandwidth, refusing to proceed\n",
+                conf.message_rate, (long)msize);
+            exit(EX_USAGE);
+        }
         if(engine_params.channel_bandwidth_Bps &&
            engine_params.channel_bandwidth_Bps != message_bandwidth) {
-            fprintf(stderr, "--channel-bandwidth=%ld is %s than --message-rate=%ld * %ld (message size)\n",
+            fprintf(stderr, "--channel-bandwidth=%ld is %s than --message-rate=%g * %ld (message size)\n",
                 (long)engine_params.channel_bandwidth_Bps,
                 (engine_params.channel_bandwidth_Bps > message_bandwidth)
                     ? "more" : "less",
-                (long)conf.message_rate,
+                conf.message_rate,
                 (long)msize);
             exit(EX_USAGE);
         }
@@ -823,7 +826,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    "  --message-rate <R>          Messages per second per connection to send\n"
+    "  --message-rate <R>          Messages per second to send in a connection\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  -T, --duration <T=10s>      Load test for the specified amount of time\n"

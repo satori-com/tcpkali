@@ -27,7 +27,7 @@
       --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
       -f, --message-file <name>   Read message to send from a file
-      --message-rate <R>          Messages per second per connection to send
+      --message-rate <R>          Messages per second to send in a connection
       -l, --listen-port <port>    Listen on the specified port
       -w, --workers <N>           Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
