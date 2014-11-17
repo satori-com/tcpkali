@@ -17,7 +17,7 @@
     Where OPTIONS are:
       -h, --help                  Print this help screen, then exit
       --version                   Print version number, then exit
-      --verbose <level=1>         Verbosity level [0..2]
+      --verbose <level=1>         Verbosity level [0..3]
       -c, --connections <N=1>     Connections to keep open to the destinations
       -r, --connect-rate <R=100>  Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
