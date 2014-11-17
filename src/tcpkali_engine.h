@@ -43,6 +43,8 @@ struct engine_params {
         DBG_ALWAYS,
         DBG_ERROR,
         DBG_DETAIL,
+        DBG_DATA,       /* Dump incoming and outgoing data as well */
+        _DBG_MAX
     } verbosity_level;
     double connect_timeout;
     double channel_lifetime;

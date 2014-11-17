@@ -191,10 +191,9 @@ int main(int argc, char **argv) {
             exit(EX_USAGE);
         case 'v':
             engine_params.verbosity_level = atoi(optarg);
-            switch(engine_params.verbosity_level) {
-            case 0: case 1: case 2: break;
-            default:
-                fprintf(stderr, "Expecting --verbose=[0..2]\n");
+            if((int)engine_params.verbosity_level < 0
+               || engine_params.verbosity_level >= _DBG_MAX) {
+                fprintf(stderr, "Expecting --verbose=[0..%d]\n", _DBG_MAX-1);
                 exit(EX_USAGE);
             }
             break;
@@ -814,7 +813,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "Where OPTIONS are:\n"
     "  -h, --help                  Print this help screen, then exit\n"
     "  --version                   Print version number, then exit\n"
-    "  --verbose <level=1>         Verbosity level [0..2]\n"
+    "  --verbose <level=1>         Verbosity level [0..%d]\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
     "  -r, --connect-rate <R=%g>  Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
@@ -837,6 +836,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
     "  <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
+    (_DBG_MAX - 1),
     conf->max_connections,
     conf->connect_rate,
     number_of_cpus(), number_of_cpus() < 10 ? " " : "",

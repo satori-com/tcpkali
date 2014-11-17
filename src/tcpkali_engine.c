@@ -727,7 +727,35 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     ev_io_start(EV_A_ &conn->watcher);
 }
 
+/*
+ * Debug data by dumping it in a format escaping all the special
+ * characters.
+ */
+void debug_dump_data(const void *data, size_t size) {
+    const int blowup_factor = 4; /* Each character expands by 4, max. */
+    char buffer[blowup_factor * size + 1];
+    const unsigned char *p = data;
+    const unsigned char *pend = p + size;
+    char *b;
+    for(b = buffer; p < pend; p++) {
+        switch(*p) {
+        case '\r': *b++ = '\\'; *b++ = 'r'; break;
+        case '\n': *b++ = '\\'; *b++ = 'n';
+            if(p+1 == pend) break;
+            *b++ = '\n'; *b++ = '\t'; break;
+        case 32 ... 126: *b++ = *p; break;
+        default:
+            b += snprintf(b, sizeof(buffer) - (b - buffer), "\\%03o", *p);
+            break;
+        }
+    }
+    *b++ = '\0';
+    assert((size_t)(b - buffer) <= sizeof(buffer));
+    fprintf(stderr, "Data(%ld): ➧%s⬅︎\n", (long)size, buffer);
+}
+
 static void devnull_cb(EV_P_ ev_io *w, int revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
     if(revents & EV_READ) {
@@ -749,6 +777,9 @@ static void devnull_cb(EV_P_ ev_io *w, int revents) {
                 return;
             default:
                 conn->data_received += rd;
+                if(largs->params.verbosity_level >= DBG_DATA) {
+                    debug_dump_data(buf, rd);
+                }
                 break;
             }
         }
@@ -816,6 +847,9 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 return;
             default:
                 conn->data_received += rd;
+                if(largs->params.verbosity_level >= DBG_DATA) {
+                    debug_dump_data(buf, rd);
+                }
                 break;
             }
         }
