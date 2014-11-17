@@ -72,7 +72,7 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
         *buf++ = payload_size;
     } else if(payload_size <= 65535) {
         *buf++ = 126;
-        uint16_t network_order_size = htonl(payload_size);
+        uint16_t network_order_size = htons(payload_size);
         memcpy(buf, &network_order_size, 2);
         buf += 2;
     } else if(sizeof(payload_size) <= sizeof(uint32_t)) {
