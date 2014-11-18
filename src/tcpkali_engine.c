@@ -50,6 +50,7 @@
 #include "tcpkali.h"
 #include "tcpkali_atomic.h"
 #include "tcpkali_pacefier.h"
+#include "tcpkali_websocket.h"
 
 #include <ev.h>
 
@@ -140,6 +141,7 @@ enum connection_close_reason {
     CCR_LIFETIME, /* Channel lifetime limit (no failure) */
     CCR_TIMEOUT, /* Connection timeout */
     CCR_REMOTE, /* Remote side closed connection */
+    CCR_DATA,   /* Data framing error */
 };
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(EV_P);
@@ -148,6 +150,7 @@ static void connections_flush_stats(EV_P);
 static void connection_flush_stats(EV_P_ struct connection *conn);
 static void close_all_connections(EV_P_ enum connection_close_reason reason);
 static void connection_cb(EV_P_ ev_io *w, int revents);
+static void devnull_websocket_cb(EV_P_ ev_io *w, int revents);
 static void devnull_cb(EV_P_ ev_io *w, int revents);
 static void control_cb(EV_P_ ev_io *w, int revents);
 static void accept_cb(EV_P_ ev_io *w, int revents);
@@ -723,7 +726,12 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
     largs->worker_connections_accepted++;
 
-    ev_io_init(&conn->watcher, devnull_cb, sockfd, EV_READ);
+    void (*responder_callback)(EV_P_ ev_io *w, int revents);
+    if(largs->params.websocket_enable)
+        responder_callback = devnull_websocket_cb;
+    else
+        responder_callback = devnull_cb;
+    ev_io_init(&conn->watcher, responder_callback, sockfd, EV_READ);
     ev_io_start(EV_A_ &conn->watcher);
 }
 
@@ -780,6 +788,55 @@ static void devnull_cb(EV_P_ ev_io *w, int revents) {
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
                 }
+                break;
+            }
+        }
+    }
+}
+
+static void devnull_websocket_cb(EV_P_ ev_io *w, int revents) {
+    struct loop_arguments *largs = ev_userdata(EV_A);
+    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+
+    if(revents & EV_READ) {
+        char buf[16384];
+        for(;;) {
+            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            switch(rd) {
+            case -1:
+                switch(errno) {
+                case EAGAIN:
+                    return;
+                default:
+                    close_connection(EV_A_ conn, CCR_REMOTE);
+                    return;
+                }
+                /* Fall through */
+            case 0:
+                close_connection(EV_A_ conn, CCR_REMOTE);
+                return;
+            default:
+                conn->data_received += rd;
+                if(largs->params.verbosity_level >= DBG_DATA) {
+                    debug_dump_data(buf, rd);
+                }
+
+                /*
+                 * Attempt to detect websocket key in HTTP and respond.
+                 */
+                switch (http_detect_websocket(w->fd, buf, rd)) {
+                case HDW_NOT_ENOUGH_DATA: return;
+                case HDW_WEBSOCKET_DETECTED: break;
+                case HDW_TRUNCATED_INPUT:
+                case HDW_UNEXPECTED_ERROR:
+                    close_connection(EV_A_ conn, CCR_DATA);
+                    return;
+                }
+
+                /* Do a proper /dev/null from now on */
+                ev_io_stop(EV_A_ w);
+                ev_io_init(w, devnull_cb, w->fd, EV_READ);
+                ev_io_start(EV_A_ w);
                 break;
             }
         }
@@ -958,6 +1015,7 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
     case CCR_CLEAN:
         break;
     case CCR_REMOTE:
+    case CCR_DATA:
         switch(conn->conn_type) {
         case CONN_OUTGOING:
             /* Make sure we don't go to this address eventually

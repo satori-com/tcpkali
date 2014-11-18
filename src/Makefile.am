@@ -1,9 +1,9 @@
 
-SUBDIRS = libev libstatsd
+SUBDIRS = libev libcows libstatsd
 
 bin_PROGRAMS = tcpkali
 
-tcpkali_CPPFLAGS = -I$(srcdir)/libev -I$(srcdir)/libstatsd/src
+tcpkali_CPPFLAGS = -I$(srcdir)/libev -I$(srcdir)/libcows -I$(srcdir)/libstatsd/src
 tcpkali_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 tcpkali_SOURCES = \
                 tcpkali_dns.c tcpkali_dns.h               \
@@ -15,5 +15,5 @@ tcpkali_SOURCES = \
                 tcpkali_transport.c tcpkali_transport.h   \
                 tcpkali_mavg.h                            \
                 tcpkali.c tcpkali.h
-tcpkali_LDADD = $(builddir)/libev/libev.la $(builddir)/libstatsd/src/libstatsd.la
+tcpkali_LDADD = $(builddir)/libev/libev.la $(builddir)/libcows/libcows.la $(builddir)/libstatsd/src/libstatsd.la
 

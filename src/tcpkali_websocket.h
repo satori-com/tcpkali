@@ -39,4 +39,16 @@
  */
 size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size);
 
+
+/*
+ * Detect the Websocket handshake in the stream and accept the handshake.
+ */
+typedef enum {
+    HDW_NOT_ENOUGH_DATA,
+    HDW_WEBSOCKET_DETECTED,
+    HDW_TRUNCATED_INPUT,
+    HDW_UNEXPECTED_ERROR,
+} http_detect_websocket_rval;
+http_detect_websocket_rval http_detect_websocket(int fd, const char *, size_t);
+
 #endif  /* TCPKALI_WEBSOCKET_H */

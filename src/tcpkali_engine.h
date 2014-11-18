@@ -49,6 +49,7 @@ struct engine_params {
     double connect_timeout;
     double channel_lifetime;
     double epoch;
+    int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data */
     struct transport_data_spec data;
 };

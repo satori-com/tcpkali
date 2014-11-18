@@ -39,6 +39,7 @@ AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
                  src/libev/Makefile
+                 src/libcows/Makefile
                  src/libstatsd/Makefile
                  src/libstatsd/man/Makefile
                  src/libstatsd/src/Makefile

@@ -344,6 +344,7 @@ int main(int argc, char **argv) {
             break;
         case 'W':   /* --websocket: Enable WebSocket framing */
             conf.websocket_enable = 1;
+            engine_params.websocket_enable = 1;
             break;
         default:
             usage(argv[0], &default_config);
