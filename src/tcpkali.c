@@ -100,8 +100,8 @@ static struct tcpkali_config {
     char  *message_data;
     size_t message_size;
     int    websocket_enable;    /* Enable WebSocket framing. */
-    char  *first_hostport;      /* A single host:port specification */
-    char  *first_path;          /* A first /path specification */
+    char  *first_hostport;      /* A single (first) host:port specification */
+    char  *first_path;          /* A /path specification from the first host */
 } default_config = {
         .max_connections = 1,
         .connect_rate = 100.0,
@@ -398,7 +398,7 @@ int main(int argc, char **argv) {
         if(conf.first_path) {
             *conf.first_path++ = '\0';
         } else {
-            conf.first_path = "ws"; /* "GET /ws HTTP/1.1" */
+            conf.first_path = ""; /* "GET / HTTP/1.1" */
         }
     } else {
         conf.max_connections = 0;
