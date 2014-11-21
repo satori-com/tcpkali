@@ -54,6 +54,8 @@
 #include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
 
+#define ANSI_CLEAR_LINE "\033[K"
+
 /*
  * Describe the command line options.
  */
@@ -520,7 +522,7 @@ int main(int argc, char **argv) {
     if(print_stats) {
         setvbuf(stdout, 0, _IONBF, 0);
     }
-    char *clear_line = print_stats ? "\033[K" : "";
+    char *clear_line = print_stats ? ANSI_CLEAR_LINE : "";
 
     /*
      * Traffic in/out moving average, smoothing period is 3 seconds.
@@ -586,6 +588,17 @@ int main(int argc, char **argv) {
     report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;
+}
+
+static const char *time_progress(double start, double now, double stop) {
+    const char *clocks[] = {
+        "🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"
+    };
+    double span = (stop - start) / (sizeof(clocks)/sizeof(clocks[0]));
+    int pos = (now - start) / span;
+    if(pos < 0) pos = 0;
+    else if(pos > 11) pos = 11;
+    return clocks[pos];
 }
 
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
@@ -663,8 +676,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                                        conns_counter);
             } else {
                 fprintf(stderr,
-                    "  Traffic %.3f↓, %.3f↑ Mbps "
-                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)     \r",
+                    "%s  Traffic %.3f↓, %.3f↑ Mbps "
+                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)" ANSI_CLEAR_LINE "\r",
+                    time_progress(checkpoint->epoch_start, now, epoch_end),
                     bps_in/1000000.0, bps_out/1000000.0,
                     (long)conns_in, (long)conns_out,
                     (long)connecting, (long)conns_counter
@@ -709,7 +723,7 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     }
     snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
         "| %d of %d (%d)", conns, max_conns, conns_counter);
-    fprintf(stderr, "%s  \r", buf);
+    fprintf(stderr, "%s" ANSI_CLEAR_LINE "\r", buf);
 }
 
 static double
