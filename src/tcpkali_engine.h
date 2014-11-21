@@ -66,6 +66,9 @@ void engine_traffic(struct engine *, size_t *sent, size_t *received);
 
 size_t engine_initiate_new_connections(struct engine *, size_t n);
 
-void engine_terminate(struct engine *);
+void engine_terminate(struct engine *, double epoch_start,
+    size_t initial_data_sent,       /* Data sent during ramp-up */
+    size_t initial_data_received    /* Data received during ramp-up */
+    );
 
 #endif  /* TCPKALI_ENGINE_H */

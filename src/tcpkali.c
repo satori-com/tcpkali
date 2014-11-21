@@ -562,9 +562,9 @@ int main(int argc, char **argv) {
      * Start measuring the steady-state performance, as opposed to
      * ramping up and waiting for the connections to be established.
      */
-    checkpoint.epoch_start = ev_now(EV_DEFAULT),
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
+    checkpoint.epoch_start = ev_now(EV_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
     for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
@@ -578,7 +578,9 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "%s", clear_line);
-    engine_terminate(eng);
+    engine_terminate(eng, checkpoint.epoch_start,
+        checkpoint.initial_data_sent,
+        checkpoint.initial_data_received);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);

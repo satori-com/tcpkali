@@ -239,7 +239,7 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng) {
+void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent, size_t initial_data_received) {
     size_t connecting, conn_in, conn_out, conn_counter;
     engine_connections(eng, &connecting, &conn_in, &conn_out, &conn_counter);
 
@@ -257,26 +257,32 @@ void engine_terminate(struct engine *eng) {
             eng->loops[n].worker_data_received;
     }
     eng->n_workers = 0;
-    double epoch = eng->loops[0].params.epoch;   /* same in all threads. */
+
+    /* Data snd/rcv after ramp-up (since epoch) */
     double now = ev_now(EV_DEFAULT);
+    double test_duration = now - epoch;
+    size_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
+    size_t epoch_data_received = eng->total_data_received-initial_data_received;
+    size_t epoch_data_transmitted = epoch_data_sent + epoch_data_received;
+
     char buf[64];
+
     printf("Total data sent:     %s (%ld bytes)\n",
-        express_bytes(eng->total_data_sent, buf, sizeof(buf)),
-        (long)eng->total_data_sent);
+        express_bytes(epoch_data_sent, buf, sizeof(buf)),
+        (long)epoch_data_sent);
     printf("Total data received: %s (%ld bytes)\n",
-        express_bytes(eng->total_data_received, buf, sizeof(buf)),
-        (long)eng->total_data_received);
+        express_bytes(epoch_data_received, buf, sizeof(buf)),
+        (long)epoch_data_received);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
-        8 * (((eng->total_data_sent+eng->total_data_received)
-                /(now - epoch))/conns) / 1000000.0,
-        ((eng->total_data_sent+eng->total_data_received)
-                /(now - epoch))/conns/1000.0
+        8 * ((epoch_data_transmitted / test_duration) / conns) / 1000000.0,
+        (epoch_data_transmitted / test_duration) / conns / 1000.0
     );
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * ((eng->total_data_received) /(now - epoch)) / 1000000.0,
-        8 * ((eng->total_data_sent) /(now - epoch)) / 1000000.0);
+        8 * (epoch_data_received / test_duration) / 1000000.0,
+        8 * (epoch_data_sent / test_duration) / 1000000.0);
+    printf("Test duration: %g s.\n", test_duration);
 }
 
 static char *express_bytes(size_t bytes, char *buf, size_t size) {
@@ -494,7 +500,7 @@ static void *single_engine_loop_thread(void *argp) {
 
     connections_flush_stats(EV_A);
 
-    DEBUG(DBG_ALWAYS, "Exiting worker %d\n"
+    DEBUG(DBG_DETAIL, "Exiting worker %d\n"
             "  %u↓, %u↑ open connections (%u connecting)\n"
             "  %u connections_counter \n"
             "  ↳ %lu connections_initiated\n"
