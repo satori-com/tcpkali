@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libcows.la
+noinst_LTLIBRARIES = libcows.la
 
 libcows_la_SOURCES = libcows.c libcows_frame.c libcows_base64.c buffers.c
 
