@@ -120,7 +120,7 @@ static double __attribute__((unused)) mavg_per_second(mavg *m, double now) {
         double prev_win_avg = unproc + (m->historic_average - unproc) *
                                         exp(-aggregate_over/window);
         double avg = prev_win_avg * exp((aggregate_over - elapsed)/window);
-        return avg / mavg_aggregate_over(m);
+        return avg / aggregate_over;
     } else {
         return 0.0;
     }
