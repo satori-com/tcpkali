@@ -1,7 +1,7 @@
 /*.la
 /*.lo
 /*.o
-/check_buffers
+/check_*
 
 /config
 /configure
