@@ -15,5 +15,6 @@ tcpkali_SOURCES = \
                 tcpkali_transport.c tcpkali_transport.h   \
                 tcpkali_mavg.h                            \
                 tcpkali.c tcpkali.h
+tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(builddir)/libev/libev.la $(builddir)/libcows/libcows.la $(builddir)/libstatsd/src/libstatsd.la
 

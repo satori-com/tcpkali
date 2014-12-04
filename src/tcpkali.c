@@ -43,12 +43,12 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <ev.h>
 #include <statsd.h>
 
 #include "tcpkali.h"
 #include "tcpkali_mavg.h"
 #include "tcpkali_pacefier.h"
+#include "tcpkali_events.h"
 #include "tcpkali_signals.h"
 #include "tcpkali_websocket.h"
 #include "tcpkali_transport.h"
@@ -184,7 +184,13 @@ int main(int argc, char **argv) {
             break;
         switch(c) {
         case 'V':
-            printf(PACKAGE_NAME " version " VERSION "\n");
+            printf(PACKAGE_NAME " version " VERSION
+#ifdef  USE_LIBUV
+            " (libuv)"
+#else
+            " (libev)"
+#endif
+            "\n");
             exit(0);
         case 'h':
             usage(argv[0], &default_config);
@@ -528,8 +534,8 @@ int main(int argc, char **argv) {
      * Traffic in/out moving average, smoothing period is 3 seconds.
      */
     mavg traffic_mavgs[2];
-    mavg_init(&traffic_mavgs[0], ev_now(EV_DEFAULT), 3.0);
-    mavg_init(&traffic_mavgs[1], ev_now(EV_DEFAULT), 3.0);
+    mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
+    mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
     struct stats_checkpoint checkpoint = { 0, 0, 0, 0, 0, 0 };
 
     /*
@@ -537,7 +543,7 @@ int main(int argc, char **argv) {
      * specifed --connect-rate.
      */
     if(conf.max_connections) {
-        double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;
+        double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
                                             &checkpoint, traffic_mavgs, statsd,
@@ -566,10 +572,10 @@ int main(int argc, char **argv) {
      */
     engine_traffic(eng, &checkpoint.initial_data_sent,
                         &checkpoint.initial_data_received);
-    checkpoint.epoch_start = ev_now(EV_DEFAULT);
+    checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
-    for(double epoch_end = ev_now(EV_DEFAULT) + conf.test_duration;;) {
+    for(double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;;) {
         if(open_connections_until_maxed_out(eng, conf.connect_rate,
                                             conf.max_connections, epoch_end,
                                             &checkpoint, traffic_mavgs,
@@ -602,8 +608,8 @@ static const char *time_progress(double start, double now, double stop) {
 }
 
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
-    ev_now_update(EV_DEFAULT);
-    double now = ev_now(EV_DEFAULT);
+    tk_now_update(TK_DEFAULT);
+    double now = tk_now(TK_DEFAULT);
 
     /*
      * It is a little bit better to batch the starts by issuing several
@@ -625,8 +631,8 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
              * we're in a steady state. */
             && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
         usleep(timeout_us);
-        ev_now_update(EV_DEFAULT);
-        now = ev_now(EV_DEFAULT);
+        tk_now_update(TK_DEFAULT);
+        now = tk_now(TK_DEFAULT);
         size_t connecting, conns_in, conns_out, conns_counter;
         engine_connections(eng, &connecting,
                                 &conns_in, &conns_out, &conns_counter);

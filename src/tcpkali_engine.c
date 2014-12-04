@@ -49,10 +49,9 @@
 
 #include "tcpkali.h"
 #include "tcpkali_atomic.h"
+#include "tcpkali_events.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_websocket.h"
-
-#include <ev.h>
 
 #ifndef TAILQ_FOREACH_SAFE
 #define TAILQ_FOREACH_SAFE(var, head, field, tvar)             \
@@ -65,8 +64,8 @@
  * A single connection is described by this structure (about 150 bytes).
  */
 struct connection {
-    ev_io watcher;
-    ev_timer timer;
+    tk_io watcher;
+    tk_timer timer;
     struct pacefier bw_pace;
     off_t write_offset;
     size_t data_sent;
@@ -92,8 +91,8 @@ struct loop_arguments {
         atomic_t connection_attempts;
         atomic_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
-    ev_timer stats_timer;
-    ev_timer channel_lifetime_timer;
+    tk_timer stats_timer;
+    tk_timer channel_lifetime_timer;
     int global_control_pipe_rd_nbio;    /* Non-blocking pipe anyone could read from. */
     int private_control_pipe_rd;   /* Private blocking pipe for this worker (read side). */
     int private_control_pipe_wr;   /* Private blocking pipe for this worker (write side). */
@@ -144,25 +143,53 @@ enum connection_close_reason {
     CCR_DATA,   /* Data framing error */
 };
 static void *single_engine_loop_thread(void *argp);
-static void start_new_connection(EV_P);
-static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason);
-static void connections_flush_stats(EV_P);
-static void connection_flush_stats(EV_P_ struct connection *conn);
-static void close_all_connections(EV_P_ enum connection_close_reason reason);
-static void connection_cb(EV_P_ ev_io *w, int revents);
-static void devnull_websocket_cb(EV_P_ ev_io *w, int revents);
-static void devnull_cb(EV_P_ ev_io *w, int revents);
-static void control_cb(EV_P_ ev_io *w, int revents);
-static void accept_cb(EV_P_ ev_io *w, int revents);
-static void conn_timer(EV_P_ ev_timer *w, int revents); /* Timeout timer */
-static void expire_channel_lives(EV_P_ ev_timer *w, int revents);
-static void setup_channel_lifetime_timer(EV_P_ double first_timeout);
-static void update_io_interest(EV_P_ struct connection *conn, int events);
+static void start_new_connection(TK_P);
+static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason);
+static void connections_flush_stats(TK_P);
+static void connection_flush_stats(TK_P_ struct connection *conn);
+static void close_all_connections(TK_P_ enum connection_close_reason reason);
+static void connection_cb(TK_P_ tk_io *w, int revents);
+static void devnull_websocket_cb(TK_P_ tk_io *w, int revents);
+static void devnull_cb(TK_P_ tk_io *w, int revents);
+static void control_cb(TK_P_ tk_io *w, int revents);
+static void accept_cb(TK_P_ tk_io *w, int revents);
+static void stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents);
+static void conn_timer_cb(TK_P_ tk_timer *w, int revents); /* Timeout timer */
+static void expire_channel_lives(TK_P_ tk_timer *w, int revents);
+static void setup_channel_lifetime_timer(TK_P_ double first_timeout);
+static void update_io_interest(TK_P_ struct connection *conn, int events);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
+
+#ifdef  USE_LIBUV
+static void expire_channel_lives_uv(tk_timer *w) {
+    expire_channel_lives(w->loop, w, 0);
+}
+static void stats_timer_cb_uv(tk_timer *w) {
+    stats_timer_cb(w->loop, w, 0);
+}
+static void conn_timer_cb_uv(tk_timer *w) {
+    conn_timer_cb(w->loop, w, 0);
+}
+static void devnull_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    devnull_websocket_cb(w->loop, w, revents);
+}
+static void connection_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    connection_cb(w->loop, w, revents);
+}
+static void devnull_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    devnull_cb(w->loop, w, revents);
+}
+static void accept_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    accept_cb(w->loop, w, revents);
+}
+static void control_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    control_cb(w->loop, w, revents);
+}
+#endif
 
 /* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
 static socklen_t sockaddr_len(struct sockaddr *sa) {
@@ -204,7 +231,7 @@ struct engine *engine_start(struct engine_params params) {
     replicate_payload(&params.data, 64*1024);
     if(params.minimal_write_size == 0)
         params.minimal_write_size = 1460; /* ~MTU */
-    params.epoch = ev_now(EV_DEFAULT);  /* Single epoch for all threads */
+    params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
 
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
@@ -229,7 +256,7 @@ struct engine *engine_start(struct engine_params params) {
         loop_args->global_control_pipe_rd_nbio = rd_pipe;
 
         rc = pthread_create(&eng->threads[n], 0,
-                                single_engine_loop_thread, loop_args);
+                            single_engine_loop_thread, loop_args);
         assert(rc == 0);
     }
 
@@ -259,7 +286,7 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
     eng->n_workers = 0;
 
     /* Data snd/rcv after ramp-up (since epoch) */
-    double now = ev_now(EV_DEFAULT);
+    double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
     size_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
     size_t epoch_data_received = eng->total_data_received-initial_data_received;
@@ -374,17 +401,17 @@ size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
     return n;
 }
 
-static void expire_channel_lives(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void expire_channel_lives(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn;
     struct connection *tmpconn;
 
     assert(limit_channel_lifetime(largs));
-    double delta = ev_now(EV_A) - largs->params.epoch;
+    double delta = tk_now(TK_A) - largs->params.epoch;
     TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
         double expires_in = conn->channel_eol_point - delta;
         if(expires_in <= 0.0) {
-            close_connection(EV_A_ conn, CCR_CLEAN);
+            close_connection(TK_A_ conn, CCR_CLEAN);
         } else {
             /*
              * Channels are added to the tail of the queue and have the same
@@ -392,15 +419,15 @@ static void expire_channel_lives(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
              * are not yet expired. Restart timeout so we'll get to it
              * and the one after it when the time is really due.
              */
-            setup_channel_lifetime_timer(EV_A_ expires_in);
+            setup_channel_lifetime_timer(TK_A_ expires_in);
             break;
         }
     }
 
 }
 
-static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
 
     /*
      * Move the connections' stats.data.ptr out into the atomically managed
@@ -417,11 +444,11 @@ static void stats_timer_cb(EV_P_ ev_timer UNUSED *w, int UNUSED revents) {
 
 static void *single_engine_loop_thread(void *argp) {
     struct loop_arguments *largs = (struct loop_arguments *)argp;
-    struct ev_loop *loop = ev_loop_new(EVFLAG_AUTO);
-    ev_set_userdata(loop, largs);
+    tk_loop *loop = tk_loop_new();
+    tk_set_userdata(loop, largs);
 
-    ev_io global_control_watcher;
-    ev_io private_control_watcher;
+    tk_io global_control_watcher;
+    tk_io private_control_watcher;
     signal(SIGPIPE, SIG_IGN);
 
     /*
@@ -472,9 +499,14 @@ static void *single_engine_loop_thread(void *argp) {
             struct connection *conn = calloc(1, sizeof(*conn));
             conn->conn_type = CONN_ACCEPTOR;
             /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
-            pacefier_init(&conn->bw_pace, ev_now(EV_A));
-            ev_io_init(&conn->watcher, accept_cb, lsock, EV_READ | EV_WRITE);
-            ev_io_start(EV_A_ &conn->watcher);
+            pacefier_init(&conn->bw_pace, tk_now(TK_A));
+#ifdef   USE_LIBUV
+            uv_poll_init(TK_A_ &conn->watcher, lsock);
+            uv_poll_start(&conn->watcher, TK_READ | TK_WRITE, accept_cb_uv);
+#else
+            ev_io_init(&conn->watcher, accept_cb, lsock, TK_READ | TK_WRITE);
+            ev_io_start(TK_A_ &conn->watcher);
+#endif
         }
         if(!opened_listening_sockets) {
             DEBUG(DBG_ALWAYS, "Could not listen on any local sockets!\n");
@@ -482,23 +514,42 @@ static void *single_engine_loop_thread(void *argp) {
         }
     }
 
+#ifdef  USE_LIBUV
+    if(limit_channel_lifetime(largs)) {
+        uv_timer_init(TK_A_ &largs->channel_lifetime_timer);
+        uv_timer_start(&largs->channel_lifetime_timer,
+            expire_channel_lives_uv, 0, 0);
+    }
+    uv_timer_init(TK_A_ &largs->stats_timer);
+    uv_timer_start(&largs->stats_timer, stats_timer_cb_uv, 250, 250);
+    uv_poll_init(TK_A_ &global_control_watcher, largs->global_control_pipe_rd_nbio);
+    uv_poll_init(TK_A_ &private_control_watcher, largs->private_control_pipe_rd);
+    uv_poll_start(&global_control_watcher, TK_READ, control_cb_uv);
+    uv_poll_start(&private_control_watcher, TK_READ, control_cb_uv);
+    uv_run(TK_A_ UV_RUN_DEFAULT);
+    uv_timer_stop(&largs->stats_timer);
+    uv_poll_stop(&global_control_watcher);
+    uv_poll_stop(&private_control_watcher);
+#else
     if(limit_channel_lifetime(largs)) {
         ev_timer_init(&largs->channel_lifetime_timer,
             expire_channel_lives, 0, 0);
     }
-
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
-    ev_timer_start(EV_A_ &largs->stats_timer);
-    ev_io_init(&global_control_watcher, control_cb, largs->global_control_pipe_rd_nbio, EV_READ);
-    ev_io_init(&private_control_watcher, control_cb, largs->private_control_pipe_rd, EV_READ);
+    ev_timer_start(TK_A_ &largs->stats_timer);
+    ev_io_init(&global_control_watcher, control_cb, largs->global_control_pipe_rd_nbio, TK_READ);
+    ev_io_init(&private_control_watcher, control_cb, largs->private_control_pipe_rd, TK_READ);
     ev_io_start(loop, &global_control_watcher);
     ev_io_start(loop, &private_control_watcher);
     ev_run(loop, 0);
-    ev_timer_stop(EV_A_ &largs->stats_timer);
-    ev_io_stop(EV_A_ &global_control_watcher);
-    ev_io_stop(EV_A_ &private_control_watcher);
+    ev_timer_stop(TK_A_ &largs->stats_timer);
+    ev_io_stop(TK_A_ &global_control_watcher);
+    ev_io_stop(TK_A_ &private_control_watcher);
+#endif
 
-    connections_flush_stats(EV_A);
+    connections_flush_stats(TK_A);
+
+    close_all_connections(TK_A_ CCR_CLEAN);
 
     DEBUG(DBG_DETAIL, "Exiting worker %d\n"
             "  %u↓, %u↑ open connections (%u connecting)\n"
@@ -521,41 +572,39 @@ static void *single_engine_loop_thread(void *argp) {
         (unsigned long)largs->worker_data_sent,
         (unsigned long)largs->worker_data_received);
 
-    close_all_connections(EV_A_ CCR_CLEAN);
-
     return 0;
 }
 
 /*
  * Receive a control event from the pipe.
  */
-static void control_cb(EV_P_ ev_io *w, int __attribute__((unused)) revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
 
     char c;
-    int ret = read(w->fd, &c, 1);
+    int ret = read(tk_fd(w), &c, 1);
     if(ret != 1) {
         if(errno != EAGAIN)
             DEBUG(DBG_ALWAYS, "%d Reading from control channel %d returned: %s\n",
-                largs->thread_no, w->fd, strerror(errno));
+                largs->thread_no, tk_fd(w), strerror(errno));
         return;
     }
     switch(c) {
     case 'c':
-        start_new_connection(EV_A);
+        start_new_connection(TK_A);
         break;
     case 'T':
-        ev_break(EV_A_ EVBREAK_ALL);
+        tk_stop(TK_A);
         break;
     default:
         DEBUG(DBG_ALWAYS,
             "Unknown operation '%c' from a control channel %d\n",
-            c, w->fd);
+            c, tk_fd(w));
     }
 }
 
-static void start_new_connection(EV_P) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void start_new_connection(TK_P) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct remote_stats *remote_stats;
     size_t remote_index;
 
@@ -611,14 +660,14 @@ static void start_new_connection(EV_P) {
         conn_state = CSTATE_CONNECTED;
     }
 
-    double now = ev_now(EV_A);
+    double now = tk_now(TK_A);
 
     struct connection *conn = calloc(1, sizeof(*conn));
     conn->conn_type = CONN_OUTGOING;
     conn->conn_state = conn_state;
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
-            setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
+            setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
         }
         conn->channel_eol_point =
             (now - largs->params.epoch) + largs->params.channel_lifetime;
@@ -630,16 +679,28 @@ static void start_new_connection(EV_P) {
     int want_catch_connect = (conn_state == CSTATE_CONNECTING
                     && largs->params.connect_timeout > 0.0);
     if(want_catch_connect) {
-        ev_timer_init(&conn->timer, conn_timer,
+#ifdef  USE_LIBUV
+        uv_timer_init(TK_A_ &conn->timer);
+        uint64_t delay = 1000 * largs->params.connect_timeout;
+        if(delay == 0) delay = 1;
+        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
+#else
+        ev_timer_init(&conn->timer, conn_timer_cb,
                       largs->params.connect_timeout, 0.0);
-        ev_timer_start(EV_A_ &conn->timer);
+        ev_timer_start(TK_A_ &conn->timer);
+#endif
     }
 
     int want_write = (largs->params.data.total_size || want_catch_connect);
+#ifdef  USE_LIBUV
+    uv_poll_init(TK_A_ &conn->watcher, sockfd);
+    uv_poll_start(&conn->watcher, TK_READ | (want_write ? TK_WRITE : 0),
+        connection_cb_uv);
+#else
     ev_io_init(&conn->watcher, connection_cb, sockfd,
-        EV_READ | (want_write ? EV_WRITE : 0));
-
-    ev_io_start(EV_A_ &conn->watcher);
+        TK_READ | (want_write ? TK_WRITE : 0));
+    ev_io_start(TK_A_ &conn->watcher);
+#endif
 }
 
 /*
@@ -667,18 +728,18 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     return (struct sockaddr *)&largs->params.remote_addresses.addrs[off];
 }
 
-static void conn_timer(EV_P_ ev_timer *w, int __attribute__((unused)) revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, timer));
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
-        update_io_interest(EV_A_ conn,
-            EV_READ | (largs->params.data.total_size ? EV_WRITE : 0));
+        update_io_interest(TK_A_ conn,
+            TK_READ | (largs->params.data.total_size ? TK_WRITE : 0));
         break;
     case CSTATE_CONNECTING:
         /* Timed out in the connection establishment phase. */
-        close_connection(EV_A_ conn, CCR_TIMEOUT);
+        close_connection(TK_A_ conn, CCR_TIMEOUT);
         return;
     }
 }
@@ -693,17 +754,24 @@ static int limit_channel_lifetime(struct loop_arguments *largs) {
                 && largs->params.channel_lifetime > 0.0);
 }
 
-static void setup_channel_lifetime_timer(EV_P_ double first_timeout) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
-    ev_timer_stop(EV_A_ &largs->channel_lifetime_timer);
+static void setup_channel_lifetime_timer(TK_P_ double first_timeout) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
+#ifdef  USE_LIBUV
+    uint64_t delay = 1000 * first_timeout;
+    if(delay == 0) delay = 1;
+    uv_timer_start(&largs->channel_lifetime_timer,
+        expire_channel_lives_uv, delay, 0);
+#else
+    ev_timer_stop(TK_A_ &largs->channel_lifetime_timer);
     ev_timer_set(&largs->channel_lifetime_timer, first_timeout, 0);
-    ev_timer_start(EV_A_ &largs->channel_lifetime_timer);
+    ev_timer_start(TK_A_ &largs->channel_lifetime_timer);
+#endif
 }
 
-static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
 
-    int sockfd = accept(w->fd, 0, 0);
+    int sockfd = accept(tk_fd(w), 0, 0);
     if(sockfd == -1)
         return;
     set_nbio(sockfd, 1);
@@ -723,22 +791,32 @@ static void accept_cb(EV_P_ ev_io *w, int UNUSED revents) {
     conn->conn_type = CONN_INCOMING;
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
-            setup_channel_lifetime_timer(EV_A_ largs->params.channel_lifetime);
+            setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
         }
-        double now = ev_now(EV_A);
+        double now = tk_now(TK_A);
         conn->channel_eol_point =
             (now - largs->params.epoch) + largs->params.channel_lifetime;
     }
     TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
     largs->worker_connections_accepted++;
 
-    void (*responder_callback)(EV_P_ ev_io *w, int revents);
+#ifdef  USE_LIBUV
+    void (*responder_callback)(tk_io *w, int status, int revents);
+    if(largs->params.websocket_enable)
+        responder_callback = devnull_websocket_cb_uv;
+    else
+        responder_callback = devnull_cb_uv;
+    uv_poll_init(TK_A_ &conn->watcher, sockfd);
+    uv_poll_start(&conn->watcher, TK_READ, responder_callback);
+#else
+    void (*responder_callback)(TK_P_ tk_io *w, int revents);
     if(largs->params.websocket_enable)
         responder_callback = devnull_websocket_cb;
     else
         responder_callback = devnull_cb;
-    ev_io_init(&conn->watcher, responder_callback, sockfd, EV_READ);
-    ev_io_start(EV_A_ &conn->watcher);
+    ev_io_init(&conn->watcher, responder_callback, sockfd, TK_READ);
+    ev_io_start(TK_A_ &conn->watcher);
+#endif
 }
 
 /*
@@ -768,26 +846,26 @@ void debug_dump_data(const void *data, size_t size) {
     fprintf(stderr, "Data(%ld): ➧%s⬅︎\n", (long)size, buffer);
 }
 
-static void devnull_cb(EV_P_ ev_io *w, int revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void devnull_cb(TK_P_ tk_io *w, int revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
-    if(revents & EV_READ) {
+    if(revents & TK_READ) {
         char buf[16384];
         for(;;) {
-            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
             switch(rd) {
             case -1:
                 switch(errno) {
                 case EAGAIN:
                     return;
                 default:
-                    close_connection(EV_A_ conn, CCR_REMOTE);
+                    close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
                 /* Fall through */
             case 0:
-                close_connection(EV_A_ conn, CCR_REMOTE);
+                close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
                 conn->data_received += rd;
@@ -800,26 +878,26 @@ static void devnull_cb(EV_P_ ev_io *w, int revents) {
     }
 }
 
-static void devnull_websocket_cb(EV_P_ ev_io *w, int revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void devnull_websocket_cb(TK_P_ tk_io *w, int revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
-    if(revents & EV_READ) {
+    if(revents & TK_READ) {
         char buf[16384];
         for(;;) {
-            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
             switch(rd) {
             case -1:
                 switch(errno) {
                 case EAGAIN:
                     return;
                 default:
-                    close_connection(EV_A_ conn, CCR_REMOTE);
+                    close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
                 /* Fall through */
             case 0:
-                close_connection(EV_A_ conn, CCR_REMOTE);
+                close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
                 conn->data_received += rd;
@@ -830,33 +908,42 @@ static void devnull_websocket_cb(EV_P_ ev_io *w, int revents) {
                 /*
                  * Attempt to detect websocket key in HTTP and respond.
                  */
-                switch (http_detect_websocket(w->fd, buf, rd)) {
+                switch (http_detect_websocket(tk_fd(w), buf, rd)) {
                 case HDW_NOT_ENOUGH_DATA: return;
                 case HDW_WEBSOCKET_DETECTED: break;
                 case HDW_TRUNCATED_INPUT:
                 case HDW_UNEXPECTED_ERROR:
-                    close_connection(EV_A_ conn, CCR_DATA);
+                    close_connection(TK_A_ conn, CCR_DATA);
                     return;
                 }
 
                 /* Do a proper /dev/null from now on */
-                ev_io_stop(EV_A_ w);
-                ev_io_init(w, devnull_cb, w->fd, EV_READ);
-                ev_io_start(EV_A_ w);
+#ifdef  USE_LIBUV
+                uv_poll_start(w, TK_READ, devnull_cb_uv);
+#else
+                ev_io_stop(TK_A_ w);
+                ev_io_init(w, devnull_cb, tk_fd(w), TK_READ);
+                ev_io_start(TK_A_ w);
+#endif
                 break;
             }
         }
     }
 }
 
-static void update_io_interest(EV_P_ struct connection *conn, int events) {
-    ev_io_stop(EV_A_ &conn->watcher);
+static void update_io_interest(TK_P_ struct connection *conn, int events) {
+#ifdef  USE_LIBUV
+    (void)loop;
+    uv_poll_start(&conn->watcher, events, conn->watcher.poll_cb);
+#else
+    ev_io_stop(TK_A_ &conn->watcher);
     ev_io_set(&conn->watcher, conn->watcher.fd, events);
-    ev_io_start(EV_A_ &conn->watcher);
+    ev_io_start(TK_A_ &conn->watcher);
+#endif
 }
 
-static void connection_cb(EV_P_ ev_io *w, int revents) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void connection_cb(TK_P_ tk_io *w, int revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
     struct sockaddr *remote = (struct sockaddr *)&largs->params.remote_addresses.addrs[conn->remote_index];
 
@@ -866,7 +953,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
          * lifetime can be managed here very quickly.
          */
         if(largs->params.channel_lifetime == 0.0) {
-            close_connection(EV_A_ conn, CCR_CLEAN);
+            close_connection(TK_A_ conn, CCR_CLEAN);
             return;
         }
 
@@ -879,17 +966,17 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
          * only to detect successful connection.
          * If there's nothing to write, we remove the write interest.
          */
-        ev_timer_stop(EV_A_ &conn->timer);
+        tk_timer_stop(TK_A, &conn->timer);
         if(largs->params.data.total_size == 0) {
-            update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
-            revents &= ~EV_WRITE;   /* Don't actually write in this loop */
+            update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
+            revents &= ~TK_WRITE;   /* Don't actually write in this loop */
         }
     }
 
-    if(revents & EV_READ) {
+    if(revents & TK_READ) {
         char buf[16384];
         for(;;) {
-            ssize_t rd = read(w->fd, buf, sizeof(buf));
+            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
             switch(rd) {
             case -1:
                 switch(errno) {
@@ -899,14 +986,14 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                     DEBUG(DBG_ERROR, "Closing %s: %s\n",
                         format_sockaddr(remote, buf, sizeof(buf)),
                         strerror(errno));
-                    close_connection(EV_A_ conn, CCR_REMOTE);
+                    close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
                 /* Fall through */
             case 0:
                 DEBUG(DBG_DETAIL, "Connection half-closed by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
-                close_connection(EV_A_ conn, CCR_REMOTE);
+                close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
                 conn->data_received += rd;
@@ -918,27 +1005,32 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
         }
     }
 
-    if(revents & EV_WRITE) {
+    if(revents & TK_WRITE) {
         const void *position;
         size_t available_length;
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
         if(!available_length) {
             /* Only the header was sent. Now, silence. */
             assert(largs->params.data.total_size == largs->params.data.header_size);
-            update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
+            update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
             return;
         }
         size_t bw = largs->params.channel_bandwidth_Bps;
         if(bw != 0) {
-            size_t bytes = pacefier_allow(&conn->bw_pace, bw, ev_now(EV_A));
+            size_t bytes = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
             size_t smallest_block_to_send = largs->params.minimal_write_size;
             if(bytes == 0) {
                 double delay = (double)smallest_block_to_send/bw;
                 if(delay > 1.0) delay = 1.0;
                 else if(delay < 0.001) delay = 0.001;
-                update_io_interest(EV_A_ conn, EV_READ); /* no write interest */
-                ev_timer_init(&conn->timer, conn_timer, delay, 0.0);
-                ev_timer_start(EV_A_ &conn->timer);
+                update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
+#ifdef  USE_LIBUV
+                uv_timer_init(TK_A_ &conn->timer);
+                uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
+#else
+                ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
+                ev_timer_start(TK_A_ &conn->timer);
+#endif
                 return;
             } else if((size_t)bytes < available_length
                     && available_length > smallest_block_to_send) {
@@ -946,7 +1038,7 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
                 available_length = smallest_block_to_send;
             }
         }
-        ssize_t wrote = write(w->fd, position, available_length);
+        ssize_t wrote = write(tk_fd(w), position, available_length);
         if(wrote == -1) {
             char buf[INET6_ADDRSTRLEN+64];
             switch(errno) {
@@ -957,13 +1049,13 @@ static void connection_cb(EV_P_ ev_io *w, int revents) {
             default:
                 DEBUG(DBG_ERROR, "Connection reset by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
-                close_connection(EV_A_ conn, CCR_REMOTE);
+                close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             }
         } else {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
-            if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, ev_now(EV_A));
+            if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, tk_now(TK_A));
         }
     }
 
@@ -992,30 +1084,35 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *curren
  * Ungracefully close all connections and report accumulated stats
  * back to the central loop structure.
  */
-static void close_all_connections(EV_P_ enum connection_close_reason reason) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void close_all_connections(TK_P_ enum connection_close_reason reason) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn;
     struct connection *tmpconn;
     TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
-        close_connection(EV_A_ conn, reason);
+        close_connection(TK_A_ conn, reason);
     }
 }
 
-static void connections_flush_stats(EV_P) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+static void connections_flush_stats(TK_P) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn;
     struct connection *tmpconn;
     TAILQ_FOREACH_SAFE(conn, &largs->open_conns, hook, tmpconn) {
-        connection_flush_stats(EV_A_ conn);
+        connection_flush_stats(TK_A_ conn);
     }
+}
+
+static void free_connection_by_handle(tk_io *w) {
+    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+    free(conn);
 }
 
 /*
  * Close connection and update connection and data transfer counters.
  */
-static void close_connection(EV_P_ struct connection *conn, enum connection_close_reason reason) {
+static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason) {
     char buf[256];
-    struct loop_arguments *largs = ev_userdata(EV_A);
+    struct loop_arguments *largs = tk_userdata(TK_A);
     switch(reason) {
     case CCR_LIFETIME:
     case CCR_CLEAN:
@@ -1046,13 +1143,15 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
         largs->worker_connection_timeouts++;
         break;
     }
-    ev_timer_stop(EV_A_ &conn->timer);
-    ev_io_stop(EV_A_ &conn->watcher);
+#ifdef  USE_LIBUV
+    uv_timer_stop(&conn->timer);
+    uv_poll_stop(&conn->watcher);
+#else
+    ev_timer_stop(TK_A_ &conn->timer);
+    ev_io_stop(TK_A_ &conn->watcher);
+#endif
 
-    close(conn->watcher.fd);
-    conn->watcher.fd = -1;
-
-    connection_flush_stats(EV_A_ conn);
+    connection_flush_stats(TK_A_ conn);
 
     switch(conn->conn_type) {
     case CONN_OUTGOING:
@@ -1068,11 +1167,16 @@ static void close_connection(EV_P_ struct connection *conn, enum connection_clos
         break;
     }
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
-    free(conn);
+
+    tk_close(&conn->watcher, free_connection_by_handle);
 }
 
-static void connection_flush_stats(EV_P_ struct connection *conn) {
-    struct loop_arguments *largs = ev_userdata(EV_A);
+/*
+ * Add whatever data transfer counters we accumulated in a connection
+ * back to the worker-wide tally.
+ */
+static void connection_flush_stats(TK_P_ struct connection *conn) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     atomic_add(&largs->worker_data_sent, conn->data_sent);
     atomic_add(&largs->worker_data_received, conn->data_received);
     conn->data_sent = 0;

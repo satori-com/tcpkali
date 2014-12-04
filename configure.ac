@@ -1,4 +1,4 @@
-AC_INIT(tcpkali, 0.2, lwalkin@machinezone.com)
+AC_INIT(tcpkali, 0.3, lwalkin@machinezone.com)
 
 AC_CONFIG_SRCDIR([src/tcpkali.c])
 AC_CONFIG_AUX_DIR(config)
@@ -32,8 +32,24 @@ AX_CHECK_COMPILE_FLAG([-fno-strict-aliasing], [TK_CFLAGS="$TK_CFLAGS -fno-strict
 dnl Apply TK_CFLAGS only for tcpkali sources, not third-party dependencies.
 AC_SUBST(TK_CFLAGS)
 
-AC_CHECK_HEADERS(sched.h)
+AC_CHECK_HEADERS(sched.h uv.h)
 AC_CHECK_FUNCS(sched_getaffinity)
+
+AC_ARG_WITH([libuv],
+    [AS_HELP_STRING([--with-libuv],
+      [Enable support for libuv (2-4% slower than libev)])],
+    [],
+    [with_libuv=no])
+  LIBUV=
+  AS_IF([test "x$with_libuv" != xno],
+    [AC_CHECK_LIB([uv], [uv_now],
+      [AC_SUBST([LIBUV], ["-luv"])
+       AC_DEFINE([HAVE_LIBUV], [1],
+                 [Define if you have libuv])
+      ],
+      [AC_MSG_FAILURE(
+         [--with-libuv was given, but test for libuv failed])],
+      [])])
 
 AC_CONFIG_FILES([Makefile
                  test/Makefile
