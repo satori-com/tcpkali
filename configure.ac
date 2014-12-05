@@ -14,8 +14,8 @@ AC_PROG_CPP
 AC_PROG_INSTALL
 
 dnl Third-party dependencies.
-m4_include([src/libev/libev.m4])
-m4_include([src/libstatsd/libstatsd.m4])
+m4_include([deps/libev/libev.m4])
+m4_include([deps/libstatsd/libstatsd.m4])
 
 dnl Import compile flags checking macro.
 m4_include([m4/ax_check_compile_flag.m4])
@@ -54,10 +54,11 @@ AC_ARG_WITH([libuv],
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
-                 src/libev/Makefile
-                 src/libcows/Makefile
-                 src/libstatsd/Makefile
-                 src/libstatsd/man/Makefile
-                 src/libstatsd/src/Makefile
+                 deps/Makefile
+                 deps/libev/Makefile
+                 deps/libcows/Makefile
+                 deps/libstatsd/Makefile
+                 deps/libstatsd/man/Makefile
+                 deps/libstatsd/src/Makefile
                 ])
 AC_OUTPUT

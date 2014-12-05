@@ -1,6 +1,10 @@
 noinst_LTLIBRARIES = libcows.la
 
-libcows_la_SOURCES = libcows.c libcows_frame.c libcows_base64.c buffers.c
+libcows_la_SOURCES =    \
+    buffers.c libcows_base64.c libcows_frame.h \
+    buffers.h libcows_base64.h sha-1.c \
+    libcows.c libcows_common.h libcows_frame.c \
+    libcows.h
 
 check_buffers_SOURCES = buffers.c
 check_buffers_CFLAGS = -DUNIT_TEST_BUFFERS $(AM_CFLAGS)
