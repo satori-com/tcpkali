@@ -1,0 +1,3 @@
+
+SUBDIRS = libev libcows libstatsd
+
