@@ -101,6 +101,7 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
         data.ptr = p;
         data.header_size = header_size;
         data.total_size = total_size;
+        data.single_message_size = total_size - header_size;
 
         for(size_t i = 0; i < iovl; i++) {
             memcpy(p, iovs[i].iov_base, iovs[i].iov_len);

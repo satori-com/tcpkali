@@ -14,9 +14,16 @@ tcpkali_SOURCES = \
                 tcpkali_websocket.c tcpkali_websocket.h   \
                 tcpkali_transport.c tcpkali_transport.h   \
                 tcpkali_mavg.h tcpkali_events.h           \
+                tcpkali_ring.c tcpkali_ring.h             \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
                 $(top_builddir)/deps/libcows/libcows.la \
                 $(top_builddir)/deps/libstatsd/src/libstatsd.la
 
+check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
+check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
+
+
+TESTS = $(check_PROGRAMS)
+check_PROGRAMS = check_tcpkali_ring

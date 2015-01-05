@@ -31,3 +31,4 @@ Makefile
 Makefile.in
 
 tcpkali
+check_*

@@ -37,6 +37,7 @@ struct transport_data_spec {
     void  *ptr;
     size_t header_size; /* Part of data to send just once. */
     size_t total_size;
+    size_t single_message_size;
 };
 
 

@@ -48,6 +48,7 @@
 #endif
 
 #include "tcpkali.h"
+#include "tcpkali_ring.h"
 #include "tcpkali_atomic.h"
 #include "tcpkali_events.h"
 #include "tcpkali_pacefier.h"
@@ -82,6 +83,11 @@ struct connection {
     } conn_state:8;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     TAILQ_ENTRY(connection) hook;
+    /* Latency */
+    struct {
+        struct ring_buffer *sent_timestamps;
+        unsigned incomplete_message_bytes_sent;
+    } latency;
 };
 
 struct loop_arguments {
@@ -691,6 +697,10 @@ static void start_new_connection(TK_P) {
 #endif
     }
 
+    if(largs->params.latency_marker && largs->params.data.single_message_size) {
+        conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
+    }
+
     int want_write = (largs->params.data.total_size || want_catch_connect);
 #ifdef  USE_LIBUV
     uv_poll_init(TK_A_ &conn->watcher, sockfd);
@@ -942,6 +952,47 @@ static void update_io_interest(TK_P_ struct connection *conn, int events) {
 #endif
 }
 
+static void latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
+    if(!conn->latency.sent_timestamps)
+        return;
+
+    struct loop_arguments *largs = tk_userdata(TK_A);
+
+    size_t sent = wrote + conn->latency.incomplete_message_bytes_sent;
+    size_t whole_msgs = (sent / largs->params.data.single_message_size);
+    conn->latency.incomplete_message_bytes_sent =
+        sent % largs->params.data.single_message_size;
+    for(double now = tk_now(TK_A); whole_msgs; whole_msgs--) {
+        ring_buffer_add(conn->latency.sent_timestamps, now);
+    }
+}
+
+static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf, size_t size) {
+    char *p, *bend;
+
+    if(!conn->latency.sent_timestamps)
+        return;
+
+    struct loop_arguments *largs = tk_userdata(TK_A);
+    double now = tk_now(TK_A);
+
+    for(p = buf, bend = buf + size; p < bend; p++) {
+        if(*p == largs->params.latency_marker) {
+            double ts;
+            int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
+            if(got) {
+                /* Do something with the latency here. */
+            } else {
+                fprintf(stderr, "More messages received than sent. "
+                            "Choose a different --latency-marker.\n"
+                            "Use --verbose 3 to dump received message data.\n");
+                exit(1);
+            }
+        }
+    }
+
+}
+
 static void connection_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
@@ -1000,6 +1051,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
                 }
+                latency_record_incoming_ts(TK_A_ conn, buf, rd);
                 break;
             }
         }
@@ -1056,6 +1108,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
             if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, tk_now(TK_A));
+            latency_record_outgoing_ts(TK_A_ conn, wrote);
         }
     }
 
@@ -1152,6 +1205,9 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 #endif
 
     connection_flush_stats(TK_A_ conn);
+
+    ring_buffer_free(conn->latency.sent_timestamps);
+    conn->latency.sent_timestamps = 0;
 
     switch(conn->conn_type) {
     case CONN_OUTGOING:
