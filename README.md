@@ -18,25 +18,29 @@
       -h, --help                  Print this help screen, then exit
       --version                   Print version number, then exit
       --verbose <level=1>         Verbosity level [0..3]
+
+      --ws, --websocket           Use RFC6455 WebSocket transport
       -c, --connections <N=1>     Connections to keep open to the destinations
       -r, --connect-rate <R=100>  Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
+      -l, --listen-port <port>    Listen on the specified port
+      -w, --workers <N=24>        Number of parallel threads to use
+      -T, --duration <T=10s>      Load test for the specified amount of time
+
       -e, --unescape-message-args Unescape the following {-m|-f|--first-*} arguments
       --first-message <string>    Send this message first, once
       --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
       -f, --message-file <name>   Read message to send from a file
       --message-rate <R>          Messages per second to send in a connection
-      -l, --listen-port <port>    Listen on the specified port
-      -w, --workers <N>           Number of parallel threads to use
-      -T, --duration <T=10s>      Load test for the specified amount of time
+
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
-      --ws, --websocket           Use RFC6455 WebSocket transport
+
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
