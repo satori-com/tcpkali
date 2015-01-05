@@ -71,9 +71,10 @@ static struct option cli_long_options[] = {
     { "duration", 1, 0, 'T' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
-    { "message-rate", 1, 0, 'M' },
+    { "message-rate", 1, 0, 'R' },
     { "first-message", 1, 0, '1' },
     { "first-message-file", 1, 0, 'F' },
+    { "unescape-message-args", 0, 0, 'e' },
     { "workers", 1, 0, 'w' },
     { "channel-bandwidth", 1, 0, 'b' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
@@ -136,10 +137,11 @@ struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static int read_in_file(const char *filename, char **data, size_t *size);
-static int append_string(const char *filename, char **data, size_t *size);
+static int append_data(const char *str, size_t str_size, char **data, size_t *data_size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
+static void unescape(char *data, size_t *initial_data_size);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -175,11 +177,12 @@ int main(int argc, char **argv) {
         .connect_timeout  = 1.0,
         .channel_lifetime = INFINITY
     };
+    int unescape_message_data = 0;
 
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:m:f:l:r:w:T:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:em:f:l:r:w:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -228,27 +231,36 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 'm': {
+        case 'e':
+            unescape_message_data = 1;
+            break;
+        case 'm':   /* --message */
             if(conf.message_data) {
                 fprintf(stderr, "--message: Message is already specified.\n");
                 exit(EX_USAGE);
             }
             conf.message_data = strdup(optarg);
             conf.message_size = strlen(optarg);
+            if(unescape_message_data)
+                unescape(conf.message_data, &conf.message_size);
             break;
-            }
-        case '1': {
+        case '1':   /* --first-message */
             if(conf.first_message_data) {
                 fprintf(stderr, "WARNING: --first-message is already specified;"
                                 " appending.\n");
                 /* FALL THROUGH */
             }
-            if(append_string(optarg, &conf.first_message_data, &conf.first_message_size) != 0) {
+            char *str = strdup(optarg);
+            size_t slen = strlen(optarg);
+            if(unescape_message_data)
+                unescape(str, &slen);
+            if(append_data(str, slen,
+                    &conf.first_message_data, &conf.first_message_size) != 0) {
                 exit(EX_USAGE);
             }
+            free(str);
             break;
-            }
-        case 'f':
+        case 'f':   /* --message-file */
             if(conf.message_data) {
                 fprintf(stderr, "--message-file: Message is already specified.\n");
                 exit(EX_USAGE);
@@ -256,6 +268,8 @@ int main(int argc, char **argv) {
                                            &conf.message_size) != 0) {
                 exit(EX_DATAERR);
             }
+            if(unescape_message_data)
+                unescape(conf.message_data, &conf.message_size);
             break;
         case 'F':
             if(conf.first_message_data) {
@@ -265,6 +279,8 @@ int main(int argc, char **argv) {
                                            &conf.first_message_size) != 0) {
                 exit(EX_DATAERR);
             }
+            if(unescape_message_data)
+                unescape(conf.message_data, &conf.message_size);
             break;
         case 'w': {
             int n = atoi(optarg);
@@ -292,7 +308,7 @@ int main(int argc, char **argv) {
             engine_params.channel_bandwidth_Bps = Bps;
             break;
             }
-        case 'M': {
+        case 'R': {
             double rate = parse_with_multipliers(option, optarg,
                         k_multiplier,
                         sizeof(k_multiplier)/sizeof(k_multiplier[0]));
@@ -758,9 +774,8 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
 }
 
 static int
-append_string(const char *str, char **data, size_t *size) {
-    size_t old_size = (*size);
-    size_t str_size = strlen(str);
+append_data(const char *str, size_t str_size, char **data, size_t *dsize) {
+    size_t old_size = (*dsize);
     size_t new_size = old_size + str_size;
     char *p = malloc(new_size + 1);
     assert(p);
@@ -768,7 +783,7 @@ append_string(const char *str, char **data, size_t *size) {
     memcpy(&p[old_size], str, str_size);
     p[new_size] = '\0';
     *data = p;
-    *size = new_size;
+    *dsize = new_size;
     return 0;
 }
 
@@ -830,6 +845,69 @@ struct addresses detect_listen_addresses(int listen_port) {
     return addresses;
 }
 
+static void
+unescape(char *data, size_t *initial_data_size) {
+    char *r = data;
+    char *w = data;
+    size_t data_size = initial_data_size ? *initial_data_size : strlen(data);
+    char *end = data + data_size;
+
+    for(; r < end; r++, w++) {
+        switch(*r) {
+        default:
+            *w = *r;
+            break;
+        case '\\':
+            r++;
+            switch(*r) {
+            case 'n': *w = '\n'; break;
+            case 'r': *w = '\r'; break;
+            case 'f': *w = '\f'; break;
+            case 'b': *w = '\b'; break;
+            case 'x': {
+                /* Do not parse more than 2 symbols (ff) */
+                char digits[3];
+                char *endptr = (r+3) < end ? (r+3) : end;
+                memcpy(digits, r+1, endptr-r-1);    /* Ignore leading 'x' */
+                digits[2] = '\0';
+                char *digits_end = digits;
+                unsigned long l = strtoul(digits, &digits_end, 16);
+                if(digits_end == digits) {
+                    *w++ = '\\';
+                    *w = *r;
+                } else {
+                    r += (digits_end - digits);
+                    *w = (l & 0xff);
+                }
+                }
+                break;
+            case '0': {
+                char digits[5];
+                char *endptr = (r+4) < end ? (r+4) : end;
+                memcpy(digits, r, endptr-r);
+                digits[4] = '\0';
+                char *digits_end = digits;
+                unsigned long l = strtoul(digits, &digits_end, 8);
+                if(digits_end == digits) {
+                    *w = '\0';
+                } else {
+                    r += (digits_end - digits) - 1;
+                    *w = (l & 0xff);
+                }
+                }
+                break;
+            default:
+                *w++ = '\\';
+                *w = *r;
+            }
+        }
+    }
+    *w = '\0';
+
+    if(initial_data_size)
+        *initial_data_size = (w - data);
+}
+
 /*
  * Display the Usage screen.
  */
@@ -847,6 +925,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
+    "  -e, --unescape-message-args Unescape the following {-m|-f|--first-*} arguments\n"
     "  --first-message <string>    Send this message first, once\n"
     "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"

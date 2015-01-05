@@ -23,6 +23,7 @@
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
+      -e, --unescape-message-args Unescape the following {-m|-f|--first-*} arguments
       --first-message <string>    Send this message first, once
       --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
