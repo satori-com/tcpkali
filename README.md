@@ -41,6 +41,8 @@
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
 
+      --latency-marker <string>   Measure latency using a per-message marker
+
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)

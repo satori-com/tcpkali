@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -72,6 +72,7 @@ static struct option cli_long_options[] = {
     { "first-message", 1, 0, '1' },
     { "first-message-file", 1, 0, 'F' },
     { "help", 0, 0, 'h' },
+    { "latency-marker", 1, 0, 'L' },
     { "listen-port", 1, 0, 'l' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
@@ -371,7 +372,15 @@ int main(int argc, char **argv) {
             conf.websocket_enable = 1;
             engine_params.websocket_enable = 1;
             break;
+        case 'L':
+            if(strlen(optarg) != 1) {
+                fprintf(stderr, "--latency-marker: Single-character marker expected, %d characters given\n", (int)strlen(optarg));
+                exit(EX_USAGE);
+            }
+            engine_params.latency_marker = optarg[0];
+            break;
         default:
+            fprintf(stderr, "%s: unknown option\n", option);
             usage(argv[0], &default_config);
             exit(EX_USAGE);
         }
@@ -451,6 +460,18 @@ int main(int argc, char **argv) {
                                 conf.first_hostport, conf.first_path);
         message_size_with_framing += conf.websocket_enable
             ? websocket_frame_header(conf.message_size, 0, 0) : 0;
+    }
+
+    /*
+     * Check that the message contains exactly a single instance
+     * of latency marker.
+     */
+    if(engine_params.latency_marker) {
+        if(engine_params.data.header_size == engine_params.data.total_size
+            || (argc - optind == 0)) {
+            fprintf(stderr, "--latency-marker is given, but no messages are supposed to be sent; die confused");
+            exit(EX_USAGE);
+        }
     }
 
     /*
@@ -944,7 +965,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
     "\n"
-    "And variable multipliers are:\n"
+    "  --latency-marker <string>   Measure latency using a per-message marker\n"
+    "\n"
+    "Variable units and recognized multipliers:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
     "  <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
