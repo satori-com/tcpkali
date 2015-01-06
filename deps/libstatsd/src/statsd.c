@@ -23,6 +23,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <errno.h>
 
 #if defined (_WIN32)
@@ -43,8 +44,8 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 
 //Define the private functions
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size);
-static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int delta, double sampleRate);
-static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int delta, double sampleRate);
+static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64_t delta, double sampleRate);
+static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate);
 
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size){
    return inet_ntop(af, src, dst, size);
@@ -65,7 +66,7 @@ static const char *networkToPresentation(int af, const void *src, char *dst, siz
    @return STATSD_SUCCESS on success, STATSD_BAD_STATS_TYPE if the type is 
       not recognized. STATSD_UDP_SEND if the sendto() failed.
 */
-static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int delta, double sampleRate){
+static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64_t delta, double sampleRate){
    //See if we randomly fall under the sample rate
    if (sampleRate > 0 && sampleRate < 1 && (double)((double)stats->random() / RAND_MAX) >= sampleRate){
       return STATSD_SUCCESS;
@@ -111,7 +112,7 @@ static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int d
 
    @return The length of the stat string, or -1 on error
 */
-static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int delta, double sampleRate){
+static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate){
    char* statType = NULL;
    char bucketName [128];
    int statLength = 0;
@@ -144,10 +145,10 @@ static int buildStatString(char* stat, const char* nameSpace, const char* bucket
 
    //Do we have a sample rate?
    if (sampleRate > 0.0 && sampleRate < 1.0){
-      sprintf(stat, "%s:%d|%s|@%.2f", bucketName, delta, statType, sampleRate);
+      sprintf(stat, "%s:%"PRId64"|%s|@%.2f", bucketName, delta, statType, sampleRate);
    }
    else {
-      sprintf(stat, "%s:%d|%s", bucketName, delta, statType);
+      sprintf(stat, "%s:%"PRId64"|%s", bucketName, delta, statType);
    }
 
    statLength = strlen(stat);
@@ -319,7 +320,7 @@ int ADDCALL statsd_decrement(Statsd* stats, const char* bucket){
    @return STATSD_SUCCESS on success, an error if there is a problem.
    @see sendToServer
 */
-int ADDCALL statsd_count(Statsd* stats, const char* bucket, int count, double sampleRate){
+int ADDCALL statsd_count(Statsd* stats, const char* bucket, int64_t count, double sampleRate){
    return sendToServer(stats, bucket, STATSD_COUNT, count, sampleRate);
 }
 
@@ -338,7 +339,7 @@ int ADDCALL statsd_count(Statsd* stats, const char* bucket, int count, double sa
    @return STATSD_SUCCESS on success, an error if there is a problem.
    @see sendToServer
 */
-int ADDCALL statsd_gauge(Statsd* stats, const char* bucket, int value, double sampleRate){
+int ADDCALL statsd_gauge(Statsd* stats, const char* bucket, int64_t value, double sampleRate){
    return sendToServer(stats, bucket, STATSD_GAUGE, value, sampleRate);
 }
 
@@ -357,7 +358,7 @@ int ADDCALL statsd_gauge(Statsd* stats, const char* bucket, int value, double sa
    @return STATSD_SUCCESS on success, an error if there is a problem.
    @see sendToServer
 */
-int ADDCALL statsd_set(Statsd* stats, const char* bucket, int value, double sampleRate){
+int ADDCALL statsd_set(Statsd* stats, const char* bucket, int64_t value, double sampleRate){
    return sendToServer(stats, bucket, STATSD_SET, value, sampleRate);
 }
 
@@ -410,7 +411,7 @@ int ADDCALL statsd_resetBatch(Statsd* statsd){
    
    @return STATSD_SUCCESS if everything was successful. 
 */
-int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int value, double sampleRate){
+int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int64_t value, double sampleRate){
    //See if we randomly fall under the sample rate
    if (sampleRate > 0 && sampleRate < 1 && (double)((double)statsd->random() / RAND_MAX) >= sampleRate){
       return STATSD_SUCCESS;

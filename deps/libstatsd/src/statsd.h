@@ -107,12 +107,12 @@ ADDAPI void ADDCALL statsd_release(Statsd* statsd);
 ADDAPI int ADDCALL statsd_init(Statsd* statsd, const char* server, int port, const char* nameSpace, const char* bucket);
 ADDAPI int ADDCALL statsd_increment(Statsd* statsd, const char* bucket);
 ADDAPI int ADDCALL statsd_decrement(Statsd* statsd, const char* bucket);
-ADDAPI int ADDCALL statsd_count(Statsd* statsd, const char* bucket, int count, double sampleRate);
-ADDAPI int ADDCALL statsd_gauge(Statsd* statsd, const char* bucket, int value, double sampleRate);
-ADDAPI int ADDCALL statsd_set(Statsd* statsd, const char* bucket, int value, double sampleRate);
+ADDAPI int ADDCALL statsd_count(Statsd* statsd, const char* bucket, int64_t count, double sampleRate);
+ADDAPI int ADDCALL statsd_gauge(Statsd* statsd, const char* bucket, int64_t value, double sampleRate);
+ADDAPI int ADDCALL statsd_set(Statsd* statsd, const char* bucket, int64_t value, double sampleRate);
 ADDAPI int ADDCALL statsd_timing(Statsd* statsd, const char* bucket, int timing, double sampleRate);
 ADDAPI int ADDCALL statsd_resetBatch(Statsd* statsd);
-ADDAPI int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int value, double sampleRate);
+ADDAPI int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int64_t value, double sampleRate);
 ADDAPI int ADDCALL statsd_sendBatch(Statsd* statsd);
 
 #ifdef __cplusplus
