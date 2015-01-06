@@ -52,7 +52,7 @@ struct engine_params {
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data */
     struct transport_data_spec data;
-    char latency_marker;    /* --latency-marker */
+    char *latency_marker;    /* --latency-marker */
 };
 
 struct engine *engine_start(struct engine_params);

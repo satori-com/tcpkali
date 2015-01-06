@@ -87,6 +87,9 @@ struct connection {
     struct {
         struct ring_buffer *sent_timestamps;
         unsigned incomplete_message_bytes_sent;
+        /* Number of initial bytes of the marker which match the tail
+         * of the incomplete message. */
+        unsigned marker_match_prefix;
     } latency;
 };
 
@@ -698,6 +701,7 @@ static void start_new_connection(TK_P) {
     }
 
     if(largs->params.latency_marker && largs->params.data.single_message_size) {
+        memset(&conn->latency, 0, sizeof(conn->latency));
         conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
     }
 
@@ -853,7 +857,7 @@ void debug_dump_data(const void *data, size_t size) {
     }
     *b++ = '\0';
     assert((size_t)(b - buffer) <= sizeof(buffer));
-    fprintf(stderr, "Data(%ld): ➧%s⬅︎\n", (long)size, buffer);
+    fprintf(stderr, "\033[KData(%ld): ➧%s⬅︎\n", (long)size, buffer);
 }
 
 static void devnull_cb(TK_P_ tk_io *w, int revents) {
@@ -974,20 +978,78 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         return;
 
     struct loop_arguments *largs = tk_userdata(TK_A);
-    double now = tk_now(TK_A);
 
-    for(p = buf, bend = buf + size; p < bend; p++) {
-        if(*p == largs->params.latency_marker) {
-            double ts;
-            int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
-            if(got) {
-                /* Do something with the latency here. */
+    char *lm = largs->params.latency_marker;
+    size_t lm_length = strlen(lm);
+    int num_markers_found = 0;
+
+    if(conn->latency.marker_match_prefix) {
+        if(size > lm_length - conn->latency.marker_match_prefix)
+            bend = buf + lm_length - conn->latency.marker_match_prefix;
+        else
+            bend = buf + size;
+        for(p = buf; p < bend; p++) {
+            if(*p != lm[conn->latency.marker_match_prefix++])
+                break;
+        }
+        if(p == bend) {
+            if(conn->latency.marker_match_prefix == lm_length) {
+                conn->latency.marker_match_prefix = 0;
+                /* Found the full marker */
+                num_markers_found++;
             } else {
-                fprintf(stderr, "More messages received than sent. "
-                            "Choose a different --latency-marker.\n"
-                            "Use --verbose 3 to dump received message data.\n");
-                exit(1);
+                /* The message is still incomplete */
+                return;
             }
+        }
+    }
+
+    if(size < lm_length) {
+        bend = buf;
+    } else {
+        bend = buf + (size - lm_length);
+    }
+
+    /* Go over they haystack while knowing that haystack's tail is always
+     * greater than the latency marker. */
+    for(p = buf; p < bend; p++) {
+        if(memcmp(p, largs->params.latency_marker, lm_length) == 0) {
+            num_markers_found++;
+            p += lm_length - 1;
+        }
+    }
+
+    /*
+     * The last few bytes of the buffer are shorter than the latency marker.
+     * Try to see whether it is a prefix of the latency marker.
+     */
+    size_t buf_tail = size - (p - buf);
+    if(buf_tail > 0) {
+        if(memcmp(p, largs->params.latency_marker, buf_tail) == 0) {
+            if(buf_tail == lm_length) {
+                num_markers_found++;
+            } else {
+                conn->latency.marker_match_prefix = buf_tail;
+            }
+        }
+    }
+
+    /*
+     * Now, for all found markers extract and use the corresponding
+     * end-to-end message latency.
+     */
+    double now = tk_now(TK_A);
+    while(num_markers_found--) {
+        double ts;
+        int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
+        if(got) {
+            /* Do something with the latency here. */
+            //printf("latency: %g\n", now-ts);
+        } else {
+            fprintf(stderr, "More messages received than sent. "
+                        "Choose a different --latency-marker.\n"
+                        "Use --verbose 3 to dump received message data.\n");
+            exit(1);
         }
     }
 

@@ -373,11 +373,11 @@ int main(int argc, char **argv) {
             engine_params.websocket_enable = 1;
             break;
         case 'L':
-            if(strlen(optarg) != 1) {
-                fprintf(stderr, "--latency-marker: Single-character marker expected, %d characters given\n", (int)strlen(optarg));
+            if(strlen(optarg) == 0) {
+                fprintf(stderr, "--latency-marker: Non-empty marker expected\n", (int)strlen(optarg));
                 exit(EX_USAGE);
             }
-            engine_params.latency_marker = optarg[0];
+            engine_params.latency_marker = strdup(optarg);
             break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
