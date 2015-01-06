@@ -374,7 +374,7 @@ int main(int argc, char **argv) {
             break;
         case 'L':
             if(strlen(optarg) == 0) {
-                fprintf(stderr, "--latency-marker: Non-empty marker expected\n", (int)strlen(optarg));
+                fprintf(stderr, "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
             }
             engine_params.latency_marker = strdup(optarg);

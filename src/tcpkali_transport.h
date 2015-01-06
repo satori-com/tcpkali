@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 

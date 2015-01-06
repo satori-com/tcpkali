@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -47,6 +47,8 @@
 #include <sched.h>
 #endif
 
+#include "hdr_histogram.h"
+
 #include "tcpkali.h"
 #include "tcpkali_ring.h"
 #include "tcpkali_atomic.h"
@@ -86,6 +88,7 @@ struct connection {
     /* Latency */
     struct {
         struct ring_buffer *sent_timestamps;
+        struct hdr_histogram *histogram;
         unsigned incomplete_message_bytes_sent;
         /* Number of initial bytes of the marker which match the tail
          * of the incomplete message. */
@@ -118,6 +121,7 @@ struct loop_arguments {
     unsigned long worker_connections_accepted;
     unsigned long worker_connection_failures;
     unsigned long worker_connection_timeouts;
+    struct hdr_histogram *histogram;
 };
 
 /*
@@ -255,6 +259,14 @@ struct engine *engine_start(struct engine_params params) {
         loop_args->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
         loop_args->address_offset = n;
         loop_args->thread_no = n;
+        if(params.latency_marker) {
+            int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
+            int ret = hdr_init(
+                1, /* 1/10 milliseconds is the lowest storable value. */
+                10 * decims_in_1s,  /* 10 seconds is a max storable value */
+                3, &loop_args->histogram);
+            assert(ret == 0);
+        }
         int rc;
 
         int private_pipe[2];
@@ -278,6 +290,7 @@ struct engine *engine_start(struct engine_params params) {
 void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent, size_t initial_data_received) {
     size_t connecting, conn_in, conn_out, conn_counter;
     engine_connections(eng, &connecting, &conn_in, &conn_out, &conn_counter);
+    struct hdr_histogram *histogram = 0;
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
@@ -291,6 +304,18 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
             eng->loops[n].worker_data_sent;
         eng->total_data_received +=
             eng->loops[n].worker_data_received;
+        if(eng->loops[n].histogram) {
+            if(!histogram) {
+                int ret;
+                ret = hdr_init(eng->loops[n].histogram->lowest_trackable_value,
+                         eng->loops[n].histogram->highest_trackable_value,
+                         eng->loops[n].histogram->significant_figures,
+                         &histogram);
+                assert(ret == 0);
+            }
+            int64_t n = hdr_add(histogram, eng->loops[n].histogram);
+            assert(n == 0);
+        }
     }
     eng->n_workers = 0;
 
@@ -318,6 +343,13 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
         8 * (epoch_data_received / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
+    if(histogram) {
+        printf("Latency at percentiles: %.1f/%.1f/%.1f (90/95/99%%)\n",
+            hdr_value_at_percentile(histogram, 0.90) / 10.0,
+            hdr_value_at_percentile(histogram, 0.95) / 10.0,
+            hdr_value_at_percentile(histogram, 0.99) / 10.0);
+        free(histogram);
+    }
     printf("Test duration: %g s.\n", test_duration);
 }
 
@@ -580,6 +612,21 @@ static void *single_engine_loop_thread(void *argp) {
         largs->worker_connection_timeouts,
         (unsigned long)largs->worker_data_sent,
         (unsigned long)largs->worker_data_received);
+    if(largs->histogram) {
+        DEBUG(DBG_DETAIL,
+            "  %.1f latency_90_ms\n"
+            "  %.1f latency_95_ms\n"
+            "  %.1f latency_99_ms\n"
+            "  %.1f latency_mean_ms\n"
+            "  %.1f latency_max_ms\n",
+            hdr_value_at_percentile(largs->histogram, 0.90) / 10.0,
+            hdr_value_at_percentile(largs->histogram, 0.95) / 10.0,
+            hdr_value_at_percentile(largs->histogram, 0.99) / 10.0,
+            hdr_mean(largs->histogram) / 10.0,
+            hdr_max(largs->histogram) / 10.0);
+        if(largs->params.verbosity_level >= DBG_DATA)
+            hdr_percentiles_print(largs->histogram, stderr, 5, 10, CLASSIC);
+    }
 
     return 0;
 }
@@ -703,6 +750,11 @@ static void start_new_connection(TK_P) {
     if(largs->params.latency_marker && largs->params.data.single_message_size) {
         memset(&conn->latency, 0, sizeof(conn->latency));
         conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
+        int ret = hdr_init(largs->histogram->lowest_trackable_value,
+                         largs->histogram->highest_trackable_value,
+                         largs->histogram->significant_figures,
+                         &conn->latency.histogram);
+        assert(ret == 0);
     }
 
     int want_write = (largs->params.data.total_size || want_catch_connect);
@@ -956,9 +1008,20 @@ static void update_io_interest(TK_P_ struct connection *conn, int events) {
 #endif
 }
 
-static void latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
+static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct transport_data_spec *data, const void *ptr, size_t wrote) {
     if(!conn->latency.sent_timestamps)
         return;
+
+    void *data_start = data->ptr + data->header_size;
+    if(ptr < data_start) {
+        /* Ignore the --first-message in our calculations. */
+        if(wrote > (size_t)(data_start - ptr)) {
+            wrote -= (data_start - ptr);
+            ptr = data_start;
+        } else {
+            return;
+        }
+    }
 
     struct loop_arguments *largs = tk_userdata(TK_A);
 
@@ -1044,7 +1107,12 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
         if(got) {
             /* Do something with the latency here. */
-            //printf("latency: %g\n", now-ts);
+            bool b;
+            b = hdr_record_value(conn->latency.histogram, 10000 * (now - ts));
+            if(!b) {
+                fprintf(stderr, "Latency value %g is too large, "
+                                "can't record.\n", now - ts);
+            }
         } else {
             fprintf(stderr, "More messages received than sent. "
                         "Choose a different --latency-marker.\n"
@@ -1170,7 +1238,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
             if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, tk_now(TK_A));
-            latency_record_outgoing_ts(TK_A_ conn, wrote);
+            latency_record_outgoing_ts(TK_A_ conn, &largs->params.data, position, wrote);
         }
     }
 
@@ -1270,6 +1338,11 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 
     ring_buffer_free(conn->latency.sent_timestamps);
     conn->latency.sent_timestamps = 0;
+    if(conn->latency.histogram) {
+        int64_t n = hdr_add(largs->histogram, conn->latency.histogram);
+        assert(n == 0);
+        free(conn->latency.histogram);
+    }
 
     switch(conn->conn_type) {
     case CONN_OUTGOING:

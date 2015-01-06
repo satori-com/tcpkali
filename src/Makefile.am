@@ -3,7 +3,8 @@ bin_PROGRAMS = tcpkali
 
 tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
-                   -I$(top_srcdir)/deps/libstatsd/src
+                   -I$(top_srcdir)/deps/libstatsd/src \
+                   -I$(top_srcdir)/deps/HdrHistogram
 tcpkali_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 tcpkali_SOURCES = \
                 tcpkali_dns.c tcpkali_dns.h               \
@@ -19,7 +20,8 @@ tcpkali_SOURCES = \
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
                 $(top_builddir)/deps/libcows/libcows.la \
-                $(top_builddir)/deps/libstatsd/src/libstatsd.la
+                $(top_builddir)/deps/libstatsd/src/libstatsd.la \
+                $(top_builddir)/deps/HdrHistogram/libhdr_histogram.la
 
 check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
 check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
