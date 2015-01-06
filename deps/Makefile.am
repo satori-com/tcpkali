@@ -1,3 +1,3 @@
 
-SUBDIRS = libev libcows libstatsd
+SUBDIRS = libev libcows libstatsd HdrHistogram
 

@@ -60,5 +60,6 @@ AC_CONFIG_FILES([Makefile
                  deps/libstatsd/Makefile
                  deps/libstatsd/man/Makefile
                  deps/libstatsd/src/Makefile
+                 deps/HdrHistogram/Makefile
                 ])
 AC_OUTPUT
