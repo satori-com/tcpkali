@@ -779,26 +779,58 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
         return;
     if(!sf) sf = &empty_feedback;
 
-    statsd_count(statsd, "connections.opened", sf->opened, 1);
-    statsd_gauge(statsd, "connections.total", sf->conns_in + sf->conns_out, 1);
-    statsd_gauge(statsd, "connections.total.in", sf->conns_in, 1);
-    statsd_gauge(statsd, "connections.total.out", sf->conns_out, 1);
-    statsd_gauge(statsd, "traffic.bitrate", sf->bps_in + sf->bps_out, 1);
-    statsd_gauge(statsd, "traffic.bitrate.in", sf->bps_in, 1);
-    statsd_gauge(statsd, "traffic.bitrate.out", sf->bps_out, 1);
-    statsd_count(statsd, "traffic.data", sf->rcvd + sf->sent, 1);
-    statsd_count(statsd, "traffic.data.rcvd", sf->rcvd, 1);
-    statsd_count(statsd, "traffic.data.sent", sf->sent, 1);
-    if(sf->histogram) {
-        int latency_95 = hdr_value_at_percentile(sf->histogram, 0.95) / 10.0;
-        int latency_99 = hdr_value_at_percentile(sf->histogram, 0.99) / 10.0;
-        int latency_99_5 = hdr_value_at_percentile(sf->histogram, 0.995) / 10.0;
-        statsd_gauge(statsd, "latency.mean", hdr_mean(sf->histogram)/10.0, 1);
-        statsd_gauge(statsd, "latency.95%", latency_95, 1);
-        statsd_gauge(statsd, "latency.99%", latency_99, 1);
-        statsd_gauge(statsd, "latency.99.5%", latency_99_5, 1);
-        statsd_gauge(statsd, "latency.max", hdr_max(sf->histogram)/10.0, 1);
+    statsd_resetBatch(statsd);
+
+#define SBATCH(t, str, value) do {                              \
+        int ret = statsd_addToBatch(statsd, t, str, value, 1);  \
+        assert(ret == STATSD_SUCCESS);                          \
+    } while(0)
+
+    SBATCH(STATSD_COUNT, "connections.opened", sf->opened);
+    SBATCH(STATSD_GAUGE, "connections.total", sf->conns_in + sf->conns_out);
+    SBATCH(STATSD_GAUGE, "connections.total.in", sf->conns_in);
+    SBATCH(STATSD_GAUGE, "connections.total.out", sf->conns_out);
+    SBATCH(STATSD_GAUGE, "traffic.bitrate", sf->bps_in + sf->bps_out);
+    SBATCH(STATSD_GAUGE, "traffic.bitrate.in", sf->bps_in);
+    SBATCH(STATSD_GAUGE, "traffic.bitrate.out", sf->bps_out);
+    SBATCH(STATSD_COUNT, "traffic.data", sf->rcvd + sf->sent);
+    SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->rcvd);
+    SBATCH(STATSD_COUNT, "traffic.data.sent", sf->sent);
+
+    if(sf->histogram || sf == &empty_feedback) {
+
+        struct {
+            unsigned p50;
+            unsigned p95;
+            unsigned p99;
+            unsigned p99_5;
+            unsigned mean;
+            unsigned max;
+        } lat;
+
+        if(sf->histogram) {
+            lat.p50 = hdr_value_at_percentile(sf->histogram, 0.50) / 10.0;
+            lat.p95 = hdr_value_at_percentile(sf->histogram, 0.95) / 10.0;
+            lat.p99 = hdr_value_at_percentile(sf->histogram, 0.99) / 10.0;
+            lat.p99_5 = hdr_value_at_percentile(sf->histogram, 0.995) / 10.0;
+            lat.mean = hdr_mean(sf->histogram)/10.0;
+            lat.max = hdr_max(sf->histogram)/10.0;
+            assert(lat.p95 < 1000000);
+            assert(lat.mean < 1000000);
+            assert(lat.max < 1000000);
+        } else {
+            memset(&lat, 0, sizeof(lat));
+        }
+
+        SBATCH(STATSD_GAUGE, "latency.mean", lat.mean);
+        SBATCH(STATSD_GAUGE, "latency.50", lat.p50);
+        SBATCH(STATSD_GAUGE, "latency.95", lat.p95);
+        SBATCH(STATSD_GAUGE, "latency.99", lat.p99);
+        SBATCH(STATSD_GAUGE, "latency.99.5", lat.p99_5);
+        SBATCH(STATSD_GAUGE, "latency.max", lat.max);
     }
+
+    statsd_sendBatch(statsd);
 }
 
 static void
