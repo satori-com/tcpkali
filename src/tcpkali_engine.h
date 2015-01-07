@@ -27,6 +27,8 @@
 #ifndef TCPKALI_ENGINE_H
 #define TCPKALI_ENGINE_H
 
+#include "hdr_histogram.h"
+
 #include "tcpkali_transport.h"
 
 long number_of_cpus();
@@ -61,7 +63,9 @@ struct engine *engine_start(struct engine_params);
 /*
  * Report the number of opened connections by categories.
  */
-void engine_connections(struct engine *, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
+void engine_get_connection_stats(struct engine *,
+    size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
+struct hdr_histogram *engine_get_latency_stats(struct engine *);
 void engine_traffic(struct engine *, size_t *sent, size_t *received);
 
 

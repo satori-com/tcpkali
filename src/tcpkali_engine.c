@@ -106,8 +106,9 @@ struct loop_arguments {
     tk_timer stats_timer;
     tk_timer channel_lifetime_timer;
     int global_control_pipe_rd_nbio;    /* Non-blocking pipe anyone could read from. */
-    int private_control_pipe_rd;   /* Private blocking pipe for this worker (read side). */
-    int private_control_pipe_wr;   /* Private blocking pipe for this worker (write side). */
+    int global_feedback_pipe_wr;    /* Blocking pipe for progress reporting. */
+    int private_control_pipe_rd;    /* Private blocking pipe for this worker (read side). */
+    int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
     atomic64_t worker_data_sent;
@@ -122,6 +123,9 @@ struct loop_arguments {
     unsigned long worker_connection_failures;
     unsigned long worker_connection_timeouts;
     struct hdr_histogram *histogram;
+    /* Reporting histogram should not be touched unless asked. */
+    struct hdr_histogram *reporting_histogram;
+    pthread_mutex_t       reporting_histogram_lock;
 };
 
 /*
@@ -139,6 +143,7 @@ struct engine {
     struct loop_arguments *loops;
     pthread_t *threads;
     int global_control_pipe_wr;
+    int global_feedback_pipe_rd;
     int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
     size_t total_data_sent;
@@ -222,13 +227,20 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
+    /* Global control pipe. Engine -> workers. */
     int rc = pipe(fildes);
     assert(rc == 0);
+    int gctl_pipe_rd = fildes[0];
+    int gtcl_pipe_wr = fildes[1];
+    set_nbio(gctl_pipe_rd, 1);
 
-    int rd_pipe = fildes[0];
-    int wr_pipe = fildes[1];
-    set_nbio(rd_pipe, 1);
+    /* Global feedback pipe. Engine <- workers. */
+    rc = pipe(fildes);
+    assert(rc == 0);
+    int gfbk_pipe_rd = fildes[0];
+    int gfbk_pipe_wr = fildes[1];
 
+    /* Figure out number of asynchronous workers to start. */
     int n_workers = params.requested_workers;
     if(!n_workers) {
         long n_cpus = number_of_cpus();
@@ -250,7 +262,8 @@ struct engine *engine_start(struct engine_params params) {
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
-    eng->global_control_pipe_wr = wr_pipe;
+    eng->global_control_pipe_wr = gtcl_pipe_wr;
+    eng->global_feedback_pipe_rd = gfbk_pipe_rd;
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *loop_args = &eng->loops[n];
@@ -267,14 +280,15 @@ struct engine *engine_start(struct engine_params params) {
                 3, &loop_args->histogram);
             assert(ret == 0);
         }
-        int rc;
+        pthread_mutex_init(&loop_args->reporting_histogram_lock, 0);
 
         int private_pipe[2];
-        rc = pipe(private_pipe);
+        int rc = pipe(private_pipe);
         assert(rc == 0);
         loop_args->private_control_pipe_rd = private_pipe[0];
         loop_args->private_control_pipe_wr = private_pipe[1];
-        loop_args->global_control_pipe_rd_nbio = rd_pipe;
+        loop_args->global_control_pipe_rd_nbio = gctl_pipe_rd;
+        loop_args->global_feedback_pipe_wr = gfbk_pipe_wr;
 
         rc = pthread_create(&eng->threads[n], 0,
                             single_engine_loop_thread, loop_args);
@@ -289,8 +303,9 @@ struct engine *engine_start(struct engine_params params) {
  */
 void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent, size_t initial_data_received) {
     size_t connecting, conn_in, conn_out, conn_counter;
-    engine_connections(eng, &connecting, &conn_in, &conn_out, &conn_counter);
     struct hdr_histogram *histogram = 0;
+
+    engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out, &conn_counter);
 
     /* Terminate all threads. */
     for(int n = 0; n < eng->n_workers; n++) {
@@ -367,11 +382,12 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 /*
  * Get number of connections opened by all of the workers.
  */
-void engine_connections(struct engine *eng, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter) {
+void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter) {
     size_t c_conn = 0;
     size_t c_in = 0;
     size_t c_out = 0;
     size_t c_count = 0;
+
     for(int n = 0; n < eng->n_workers; n++) {
         c_conn  += eng->loops[n].outgoing_connecting;
         c_out   += eng->loops[n].outgoing_established;
@@ -382,6 +398,54 @@ void engine_connections(struct engine *eng, size_t *connecting, size_t *incoming
     *incoming = c_in;
     *outgoing = c_out;
     *counter = c_count;
+}
+
+struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
+
+    if(!eng->loops[0].histogram)
+        return 0;
+
+    struct hdr_histogram *histogram;
+
+    /*
+     * If histogram is requested, we first need to ask each worker to
+     * assemble that information among its connections.
+     */
+    for(int n = 0; n < eng->n_workers; n++) {
+        int fd = eng->loops[n].private_control_pipe_wr;
+        int wrote = write(fd, "h", 1);
+        assert(wrote == 1);
+    }
+    /* Gather feedback. */
+    for(int n = 0; n < eng->n_workers; n++) {
+        char c;
+        int rd = read(eng->global_feedback_pipe_rd, &c, 1);
+        assert(rd == 1);
+        assert(c == '.');
+    }
+
+    /* There's going to be no wait or contention here due
+     * to the pipe-driven command-response logic. However,
+     * we still lock the reporting histogram to pretend that
+     * we correctly deal with memory barriers (which we don't
+     * have to on x86).
+     */
+    pthread_mutex_lock(&eng->loops[0].reporting_histogram_lock);
+    int ret = hdr_init(
+            eng->loops[0].reporting_histogram->lowest_trackable_value,
+            eng->loops[0].reporting_histogram->highest_trackable_value,
+            eng->loops[0].reporting_histogram->significant_figures,
+            &histogram);
+    pthread_mutex_unlock(&eng->loops[0].reporting_histogram_lock);
+    assert(ret == 0);
+
+    for(int n = 0; n < eng->n_workers; n++) {
+        pthread_mutex_lock(&eng->loops[0].reporting_histogram_lock);
+        hdr_add(histogram, eng->loops[0].reporting_histogram);
+        pthread_mutex_unlock(&eng->loops[0].reporting_histogram_lock);
+    }
+
+    return histogram;
 }
 
 void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
@@ -631,6 +695,37 @@ static void *single_engine_loop_thread(void *argp) {
     return 0;
 }
 
+static void update_reporting_histogram(struct loop_arguments *largs) {
+    assert(largs->histogram);
+    pthread_mutex_lock(&largs->reporting_histogram_lock);
+    if(largs->reporting_histogram) {
+        hdr_reset(largs->reporting_histogram);
+    } else {
+        int ret = hdr_init(largs->histogram->lowest_trackable_value,
+                         largs->histogram->highest_trackable_value,
+                         largs->histogram->significant_figures,
+                         &largs->reporting_histogram);
+        assert(ret == 0);
+    }
+    /*
+     * 1. Copy accumulated worker-bound histogram data.
+     */
+    hdr_add(largs->reporting_histogram, largs->histogram);
+    /*
+     * 2. There are connections with accumulated data,
+     *    process a few of them (all would be expensive)
+     *    and add their data as well.
+     * FYI: 10 hdr_adds() take ~0.2ms.
+     */
+    struct connection *conn;
+    int nmax = 10;
+    TAILQ_FOREACH(conn, &largs->open_conns, hook) {
+        if(nmax-- == 0) break;
+        hdr_add(largs->reporting_histogram, conn->latency.histogram);
+    }
+    pthread_mutex_unlock(&largs->reporting_histogram_lock);
+}
+
 /*
  * Receive a control event from the pipe.
  */
@@ -651,6 +746,11 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         break;
     case 'T':
         tk_stop(TK_A);
+        break;
+    case 'h':
+        update_reporting_histogram(largs);
+        int wrote = write(largs->global_feedback_pipe_wr, ".", 1);
+        assert(wrote == 1);
         break;
     default:
         DEBUG(DBG_ALWAYS,

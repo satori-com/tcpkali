@@ -132,6 +132,20 @@ enum work_phase {
 };
 
 /*
+ * What we are sending to statsd?
+ */
+typedef struct {
+    size_t opened;
+    size_t conns_in;
+    size_t conns_out;
+    size_t bps_in;
+    size_t bps_out;
+    size_t rcvd;
+    size_t sent;
+    struct hdr_histogram *histogram;
+} statsd_feedback;
+
+/*
  * Bunch of utility functions defined at the end of this file.
  */
 static void usage(char *argv0, struct tcpkali_config *);
@@ -142,7 +156,7 @@ static int read_in_file(const char *filename, char **data, size_t *size);
 static int append_data(const char *str, size_t str_size, char **data, size_t *data_size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
-static void report_to_statsd(Statsd *statsd, size_t opened, size_t conns_in, size_t conns_out, size_t bps_in, size_t bps_out, size_t rcvd, size_t sent);
+static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
 static void unescape(char *data, size_t *initial_data_size);
 
 static struct multiplier k_multiplier[] = {
@@ -544,7 +558,7 @@ int main(int argc, char **argv) {
                             conf.statsd_port,
                             conf.statsd_namespace, NULL);
         /* Clear up traffic numbers, for better graphing. */
-        report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
+        report_to_statsd(statsd, 0);
     } else {
         statsd = 0;
     }
@@ -599,7 +613,7 @@ int main(int argc, char **argv) {
                             conf.max_connections==1?"":"s",
                             conf.test_duration);
             /* Level down graphs/charts. */
-            report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
+            report_to_statsd(statsd, 0);
             exit(1);
         }
     }
@@ -629,7 +643,7 @@ int main(int argc, char **argv) {
         checkpoint.initial_data_received);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
-    report_to_statsd(statsd, 0, 0, 0, 0, 0, 0, 0);
+    report_to_statsd(statsd, 0);
 
     return 0;
 }
@@ -671,9 +685,11 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         usleep(timeout_us);
         tk_now_update(TK_DEFAULT);
         now = tk_now(TK_DEFAULT);
+        int update_stats = (now - checkpoint->last_update) >= 0.25;
+
         size_t connecting, conns_in, conns_out, conns_counter;
-        engine_connections(eng, &connecting,
-                                &conns_in, &conns_out, &conns_counter);
+        engine_get_connection_stats(eng, &connecting,
+                              &conns_in, &conns_out, &conns_counter);
         conn_deficit = max_connections - (connecting + conns_out);
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
@@ -687,11 +703,11 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         pacefier_emitted(&keepup_pace, connect_rate, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
-        if((now - checkpoint->last_update) < 0.25) {
-            continue;
-        } else {
+        if(update_stats) {
             checkpoint->last_update = now;
             /* Fall through and do the chekpoint update. */
+        } else {
+            continue;
         }
 
         /*
@@ -711,46 +727,75 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
 
+        struct hdr_histogram *histogram = engine_get_latency_stats(eng);
         report_to_statsd(statsd,
-            to_start, conns_in, conns_out, bps_in, bps_out, rcvd, sent);
+            &(statsd_feedback){
+                .opened = to_start,
+                .conns_in = conns_in,
+                .conns_out = conns_out,
+                .bps_in = bps_in,
+                .bps_out = bps_out,
+                .rcvd = rcvd,
+                .sent = sent,
+                .histogram = histogram
+            });
 
         if(print_stats) {
             if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
                 print_connections_line(conns_out, max_connections,
                                        conns_counter);
             } else {
+                char latency_buf[64];
+                if(histogram) {
+                    snprintf(latency_buf, sizeof(latency_buf),
+                            " (%.1fms @ 95%%)",
+                            hdr_value_at_percentile(histogram, 0.95)/10.0
+                    );
+                } else {
+                    latency_buf[1] = '\0';
+                }
                 fprintf(stderr,
                     "%s  Traffic %.3f↓, %.3f↑ Mbps "
-                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)" ANSI_CLEAR_LINE "\r",
+                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s" ANSI_CLEAR_LINE "\r",
                     time_progress(checkpoint->epoch_start, now, epoch_end),
                     bps_in/1000000.0, bps_out/1000000.0,
                     (long)conns_in, (long)conns_out,
-                    (long)connecting, (long)conns_counter
+                    (long)connecting, (long)conns_counter,
+                    latency_buf
                 );
             }
         }
 
+        free(histogram);
     }
 
     return (now >= epoch_end || *term_flag) ? -1 : 0;
 }
 
+static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
+    static statsd_feedback empty_feedback;
 
-static void report_to_statsd(Statsd *statsd, size_t opened,
-                size_t conns_in, size_t conns_out,
-                size_t bps_in, size_t bps_out,
-                size_t rcvd, size_t sent) {
-    if(statsd) {
-        statsd_count(statsd, "connections.opened", opened, 1);
-        statsd_gauge(statsd, "connections.total", conns_in + conns_out, 1);
-        statsd_gauge(statsd, "connections.total.in", conns_in, 1);
-        statsd_gauge(statsd, "connections.total.out", conns_out, 1);
-        statsd_gauge(statsd, "traffic.bitrate", bps_in + bps_out, 1);
-        statsd_gauge(statsd, "traffic.bitrate.in", bps_in, 1);
-        statsd_gauge(statsd, "traffic.bitrate.out", bps_out, 1);
-        statsd_count(statsd, "traffic.data", rcvd + sent, 1);
-        statsd_count(statsd, "traffic.data.rcvd", rcvd, 1);
-        statsd_count(statsd, "traffic.data.sent", sent, 1);
+    if(!statsd)
+        return;
+    if(!sf) sf = &empty_feedback;
+
+    statsd_count(statsd, "connections.opened", sf->opened, 1);
+    statsd_gauge(statsd, "connections.total", sf->conns_in + sf->conns_out, 1);
+    statsd_gauge(statsd, "connections.total.in", sf->conns_in, 1);
+    statsd_gauge(statsd, "connections.total.out", sf->conns_out, 1);
+    statsd_gauge(statsd, "traffic.bitrate", sf->bps_in + sf->bps_out, 1);
+    statsd_gauge(statsd, "traffic.bitrate.in", sf->bps_in, 1);
+    statsd_gauge(statsd, "traffic.bitrate.out", sf->bps_out, 1);
+    statsd_count(statsd, "traffic.data", sf->rcvd + sf->sent, 1);
+    statsd_count(statsd, "traffic.data.rcvd", sf->rcvd, 1);
+    statsd_count(statsd, "traffic.data.sent", sf->sent, 1);
+    if(sf->histogram) {
+        int latency_95 = hdr_value_at_percentile(sf->histogram, 0.95) / 10.0;
+        int latency_99 = hdr_value_at_percentile(sf->histogram, 0.99) / 10.0;
+        int latency_99_5 = hdr_value_at_percentile(sf->histogram, 0.995) / 10.0;
+        statsd_count(statsd, "latency.95%", latency_95, 1);
+        statsd_count(statsd, "latency.99%", latency_99, 1);
+        statsd_count(statsd, "latency.99.5%", latency_99_5, 1);
     }
 }
 
