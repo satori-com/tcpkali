@@ -783,6 +783,10 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
 
 #define SBATCH(t, str, value) do {                              \
         int ret = statsd_addToBatch(statsd, t, str, value, 1);  \
+        if(ret == STATSD_BATCH_FULL) {                          \
+            statsd_sendBatch(statsd);                           \
+            ret = statsd_addToBatch(statsd, t, str, value, 1);  \
+        }                                                       \
         assert(ret == STATSD_SUCCESS);                          \
     } while(0)
 
