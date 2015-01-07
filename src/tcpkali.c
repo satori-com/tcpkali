@@ -793,9 +793,11 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
         int latency_95 = hdr_value_at_percentile(sf->histogram, 0.95) / 10.0;
         int latency_99 = hdr_value_at_percentile(sf->histogram, 0.99) / 10.0;
         int latency_99_5 = hdr_value_at_percentile(sf->histogram, 0.995) / 10.0;
-        statsd_count(statsd, "latency.95%", latency_95, 1);
-        statsd_count(statsd, "latency.99%", latency_99, 1);
-        statsd_count(statsd, "latency.99.5%", latency_99_5, 1);
+        statsd_gauge(statsd, "latency.mean", hdr_mean(sf->histogram)/10.0, 1);
+        statsd_gauge(statsd, "latency.95%", latency_95, 1);
+        statsd_gauge(statsd, "latency.99%", latency_99, 1);
+        statsd_gauge(statsd, "latency.99.5%", latency_99_5, 1);
+        statsd_gauge(statsd, "latency.max", hdr_max(sf->histogram)/10.0, 1);
     }
 }
 
