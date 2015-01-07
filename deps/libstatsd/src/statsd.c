@@ -45,7 +45,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 //Define the private functions
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size);
 static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64_t delta, double sampleRate);
-static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate);
+static ssize_t buildStatString(char* stat, size_t stat_size, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate);
 
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size){
    return inet_ntop(af, src, dst, size);
@@ -72,10 +72,8 @@ static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64
       return STATSD_SUCCESS;
    }
  
-   int dataLength = 0;
    char data[256];
-   memset(&data, 0, 256);
-
+   ssize_t dataLength = 0;
   
    //If the user has not specified a bucket, we will use the defualt
    //bucket instead.
@@ -83,16 +81,15 @@ static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64
       bucket = stats->bucket;
    }
    
-   dataLength = buildStatString(data, stats->nameSpace, bucket, type, delta, sampleRate);
-
-   if (dataLength < 0){
-      return -dataLength;
+   dataLength = buildStatString(data, sizeof(data), stats->nameSpace, bucket, type, delta, sampleRate);
+   if (dataLength < 0) {
+      return -1;
    }
 
    //Send the packet
    int sent = sendto(stats->socketFd, data, dataLength, 0, (const struct sockaddr*)&stats->destination, sizeof(struct sockaddr_in));
 
-   if (sent == -1){
+   if (sent == -1) {
       return STATSD_UDP_SEND;
    }
 
@@ -112,18 +109,8 @@ static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64
 
    @return The length of the stat string, or -1 on error
 */
-static int buildStatString(char* stat, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate){
+static ssize_t buildStatString(char* stat, size_t stat_size, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate){
    char* statType = NULL;
-   char bucketName [128];
-   int statLength = 0;
-
-   //Build up the bucket name, with the nameSpace.
-   if (nameSpace){
-      sprintf(bucketName, "%s.%s", nameSpace, bucket);
-   }
-   else {
-      sprintf(bucketName, "%s", bucket);
-   }
 
    //Figure out what type of message to generate
    switch(type){
@@ -144,15 +131,23 @@ static int buildStatString(char* stat, const char* nameSpace, const char* bucket
    }
 
    //Do we have a sample rate?
-   if (sampleRate > 0.0 && sampleRate < 1.0){
-      sprintf(stat, "%s:%"PRId64"|%s|@%.2f", bucketName, delta, statType, sampleRate);
+   int resulting_size;
+   if (sampleRate > 0.0 && sampleRate < 1.0) {
+      resulting_size = snprintf(stat, stat_size, "%s%s%s:%"PRId64"|%s|@%.2f\n",
+            nameSpace ? nameSpace : "", nameSpace ? "." : "",
+            bucket, delta, statType, sampleRate);
+   } else {
+      resulting_size = snprintf(stat, stat_size, "%s%s%s:%"PRId64"|%s\n",
+            nameSpace ? nameSpace : "", nameSpace ? "." : "",
+            bucket, delta, statType);
    }
-   else {
-      sprintf(stat, "%s:%"PRId64"|%s", bucketName, delta, statType);
+   if(resulting_size >= stat_size) {
+       if(stat_size >= 1)
+           stat[0] = '\0';
+       return -1;
    }
 
-   statLength = strlen(stat);
-   return statLength;
+   return resulting_size;
 }
 
 
@@ -393,7 +388,7 @@ int ADDCALL statsd_timing(Statsd* stats, const char* bucket, int timing, double 
    @return STATSD_SUCCESS
 */
 int ADDCALL statsd_resetBatch(Statsd* statsd){
-   memset(statsd->batch, 0, BATCH_MAX_SIZE);
+   statsd->batch[0] = '\0';
    statsd->batchIndex = 0;
    return STATSD_SUCCESS;
 }
@@ -412,31 +407,25 @@ int ADDCALL statsd_resetBatch(Statsd* statsd){
    @return STATSD_SUCCESS if everything was successful. 
 */
 int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int64_t value, double sampleRate){
-   //See if we randomly fall under the sample rate
-   if (sampleRate > 0 && sampleRate < 1 && (double)((double)statsd->random() / RAND_MAX) >= sampleRate){
-      return STATSD_SUCCESS;
-   }
+    //See if we randomly fall under the sample rate
+    if (sampleRate > 0 && sampleRate < 1 && (double)((double)statsd->random() / RAND_MAX) >= sampleRate){
+        return STATSD_SUCCESS;
+    }
  
-   char statsString[256];
-   if (!bucket){
-      bucket = statsd->bucket;
-   }
+    if (!bucket) {
+        bucket = statsd->bucket;
+    }
 
-   int strLength = buildStatString(statsString, statsd->nameSpace, bucket, type, value, sampleRate);
-   if (strLength < 0){
-      return -strLength;
-   }
+    ssize_t strLength = buildStatString(statsd->batch + statsd->batchIndex,
+                            sizeof(statsd->batch) - statsd->batchIndex,
+                            statsd->nameSpace, bucket, type, value, sampleRate);
+    if (strLength < 0) {
+        return STATSD_BATCH_FULL;
+    }
 
-   if (strLength + 1 + statsd->batchIndex < BATCH_MAX_SIZE){
-      strcat(statsd->batch, statsString);
-      strcat(statsd->batch, "\n");
-      statsd->batchIndex += strLength + 1;
-   }
-   else {
-      return STATSD_BATCH_FULL;
-   }
+    statsd->batchIndex += strLength;
 
-   return STATSD_SUCCESS;
+    return STATSD_SUCCESS;
 }
 
 /**
