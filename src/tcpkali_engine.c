@@ -344,10 +344,10 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
         8 * (epoch_data_received / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
     if(histogram) {
-        printf("Latency at percentiles: %.1f/%.1f/%.1f (90/95/99%%)\n",
-            hdr_value_at_percentile(histogram, 0.90) / 10.0,
+        printf("Latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
             hdr_value_at_percentile(histogram, 0.95) / 10.0,
-            hdr_value_at_percentile(histogram, 0.99) / 10.0);
+            hdr_value_at_percentile(histogram, 0.99) / 10.0,
+            hdr_value_at_percentile(histogram, 0.995) / 10.0);
         free(histogram);
     }
     printf("Test duration: %g s.\n", test_duration);
@@ -614,14 +614,14 @@ static void *single_engine_loop_thread(void *argp) {
         (unsigned long)largs->worker_data_received);
     if(largs->histogram) {
         DEBUG(DBG_DETAIL,
-            "  %.1f latency_90_ms\n"
             "  %.1f latency_95_ms\n"
             "  %.1f latency_99_ms\n"
+            "  %.1f latency_99_5_ms\n"
             "  %.1f latency_mean_ms\n"
             "  %.1f latency_max_ms\n",
-            hdr_value_at_percentile(largs->histogram, 0.90) / 10.0,
             hdr_value_at_percentile(largs->histogram, 0.95) / 10.0,
             hdr_value_at_percentile(largs->histogram, 0.99) / 10.0,
+            hdr_value_at_percentile(largs->histogram, 0.995) / 10.0,
             hdr_mean(largs->histogram) / 10.0,
             hdr_max(largs->histogram) / 10.0);
         if(largs->params.verbosity_level >= DBG_DATA)
