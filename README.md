@@ -14,6 +14,10 @@
  * Measures response latency percentiles using [HdrHistogram](https://github.com/HdrHistogram) (`--latency-marker`)
  * Sends stats to StatsD/DataDog (`--statsd`)
 
+# Quick example: testing a web server
+
+    tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" --message-rate 10 --latency-marker "HTTP/1.1" google.com:80
+
 # Build
 
     autoreconf -iv
