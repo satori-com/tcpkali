@@ -1,5 +1,18 @@
 
+# About
+
+`tcpkali` is a high performance load generator against TCP and WebSocket servers.
+
 [![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
+
+# Features
+
+ * Efficient multi-core operation; utilizes all available cores by default.
+ * Allows opening massive number of connections (`--connections`)
+ * Allows limiting a single connection throughput (`--channel-bandwidth` or `--message-rate`)
+ * Allows specifying the first and subsequent messages (`--message`, `--first-message`).
+ * Measures response latency percentiles using [HdrHistogram](https://github.com/HdrHistogram) (`--latency-marker`)
+ * Sends stats to StatsD/DataDog (`--statsd`)
 
 # Build
 
