@@ -764,7 +764,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                             hdr_value_at_percentile(histogram, 0.95)/10.0
                     );
                 } else {
-                    latency_buf[1] = '\0';
+                    latency_buf[0] = '\0';
                 }
                 fprintf(stderr,
                     "%s  Traffic %.3f↓, %.3f↑ Mbps "
