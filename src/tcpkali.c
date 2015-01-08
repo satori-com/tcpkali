@@ -77,6 +77,7 @@ static struct option cli_long_options[] = {
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'R' },
+    { "nagle", 1, 0, 'N' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
     { "statsd-server", 1, 0,    CLI_STATSD_OFFSET + 's' },
     { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
@@ -191,7 +192,8 @@ int main(int argc, char **argv) {
     struct engine_params engine_params = {
         .verbosity_level    = DBG_ERROR,
         .connect_timeout  = 1.0,
-        .channel_lifetime = INFINITY
+        .channel_lifetime = INFINITY,
+        .nagle_setting = NSET_UNSET
     };
     int unescape_message_data = 0;
 
@@ -335,6 +337,16 @@ int main(int argc, char **argv) {
             conf.message_rate = rate;
             break;
             }
+        case 'N':   /* --nagle {on|off} */
+            if(strcmp(optarg, "on"))    /* Enabling Nagle toggles off NODELAY */
+                engine_params.nagle_setting = NSET_NODELAY_OFF;
+            else if(strcmp(optarg, "off"))
+                engine_params.nagle_setting = NSET_NODELAY_ON;
+            else {
+                fprintf(stderr, "Expecting --nagle \"on\" or \"off\"\n");
+                exit(EX_USAGE);
+            }
+            break;
         case CLI_STATSD_OFFSET + 'e':
             conf.statsd_enable = 1;
             break;
@@ -1025,6 +1037,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -h, --help                  Print this help screen, then exit\n"
     "  --version                   Print version number, then exit\n"
     "  --verbose <level=1>         Verbosity level [0..%d]\n"
+    "  --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)\n"
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"

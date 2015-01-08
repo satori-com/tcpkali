@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>    /* for TCP_NODELAY */
 #include <unistd.h>
 #include <stddef.h> /* offsetof(3) */
 #include <fcntl.h>
@@ -784,6 +785,11 @@ static void start_new_connection(TK_P) {
         int on = ~0;
         int rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
         assert(rc != -1);
+        if(largs->params.nagle_setting != NSET_UNSET) {
+            int v = largs->params.nagle_setting;
+            rc = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
+            assert(rc != -1);
+        }
     }
 
     int conn_state;

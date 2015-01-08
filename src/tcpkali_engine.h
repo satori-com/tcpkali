@@ -48,6 +48,11 @@ struct engine_params {
         DBG_DATA,       /* Dump incoming and outgoing data as well */
         _DBG_MAX
     } verbosity_level;
+    enum {
+        NSET_UNSET = -1,
+        NSET_NODELAY_OFF = 0,  /* Enable Nagle */
+        NSET_NODELAY_ON = 1,   /* Disable Nagle */
+    } nagle_setting;
     double connect_timeout;
     double channel_lifetime;
     double epoch;
