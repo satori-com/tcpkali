@@ -38,7 +38,7 @@
 
       --ws, --websocket           Use RFC6455 WebSocket transport
       -c, --connections <N=1>     Connections to keep open to the destinations
-      -r, --connect-rate <R=100>  Limit number of new connections per second
+      --connect-rate <R=100>      Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
