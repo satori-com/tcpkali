@@ -66,7 +66,7 @@ static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "channel-bandwidth", 1, 0, 'b' },
     { "connections", 1, 0, 'c' },
-    { "connect-rate", 1, 0, 'r' },
+    { "connect-rate", 1, 0, 'R' },
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
     { "duration", 1, 0, 'T' },
     { "first-message", 1, 0, '1' },
@@ -76,7 +76,7 @@ static struct option cli_long_options[] = {
     { "listen-port", 1, 0, 'l' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
-    { "message-rate", 1, 0, 'R' },
+    { "message-rate", 1, 0, 'r' },
     { "nagle", 1, 0, 'N' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
     { "statsd-server", 1, 0,    CLI_STATSD_OFFSET + 's' },
@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:em:f:l:r:w:T:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:em:f:l:w:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 'r':
+        case 'R':
             conf.connect_rate = parse_with_multipliers(option, optarg,
                             k_multiplier,
                             sizeof(k_multiplier)/sizeof(k_multiplier[0]));
@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
             engine_params.channel_bandwidth_Bps = Bps;
             break;
             }
-        case 'R': {
+        case 'r': {
             double rate = parse_with_multipliers(option, optarg,
                         k_multiplier,
                         sizeof(k_multiplier)/sizeof(k_multiplier[0]));
@@ -1041,7 +1041,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
-    "  -r, --connect-rate <R=%g>  Limit number of new connections per second\n"
+    "  --connect-rate <R=%g>      Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
