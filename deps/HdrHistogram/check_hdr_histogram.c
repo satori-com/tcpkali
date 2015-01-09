@@ -12,9 +12,9 @@ int main() {
         int lowest;
         int highest;
     } trackable_values[] = {
-        { 80, 110 },
+        { 1, 100000 },
         { 1, 1000 },
-        { 1, 100000 }
+        { 1, 100 }
     };
 
     for(size_t tv = 0; tv < sizeof(trackable_values)/sizeof(trackable_values[0]); tv++) {
@@ -32,14 +32,20 @@ int main() {
         printf("Values:");
         for(size_t i=0; i < sizeof(measurements)/sizeof(measurements[0]); i++) {
             printf(" %d", measurements[i]);
-            hdr_record_value(h, measurements[i]);
+            bool b = hdr_record_value(h, measurements[i]);
+            assert(b == true);
         }
 
-        printf("\nPercentiles = %d/%d (50%%/90%%)\n",
+        printf("\nPercentiles = %d/%d/%d (50%%/90%%/99%%)\n",
             (int)hdr_value_at_percentile(h, 50.0),
-            (int)hdr_value_at_percentile(h, 90.0)
+            (int)hdr_value_at_percentile(h, 90.0),
+            (int)hdr_value_at_percentile(h, 99.0)
         );
         hdr_percentiles_print(h, stdout, 2, 1, CLASSIC);
+
+        assert(hdr_value_at_percentile(h, 50.0) == 95);
+        assert(hdr_value_at_percentile(h, 90.0) == 99);
+        assert(hdr_value_at_percentile(h, 99.0) == 100);
     }
 
     return 0;
