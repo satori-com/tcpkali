@@ -36,8 +36,8 @@ int main() {
         }
 
         printf("\nPercentiles = %d/%d (50%%/90%%)\n",
-            (int)hdr_value_at_percentile(h, 0.50),
-            (int)hdr_value_at_percentile(h, 0.90)
+            (int)hdr_value_at_percentile(h, 50.0),
+            (int)hdr_value_at_percentile(h, 90.0)
         );
         hdr_percentiles_print(h, stdout, 2, 1, CLASSIC);
     }
