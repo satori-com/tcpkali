@@ -10,3 +10,11 @@ libhdr_histogram_la_SOURCES = \
 	hdr_dbl_histogram.h
 
 libhdr_histogram_la_LDFLAGS = -lm
+
+check_hdr_histogram_SOURCES = check_hdr_histogram.c
+check_hdr_histogram_CFLAGS = -std=gnu99
+check_hdr_histogram_LDADD = libhdr_histogram.la
+
+TESTS = $(check_PROGRAMS)
+check_PROGRAMS = check_hdr_histogram
+
