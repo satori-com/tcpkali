@@ -1307,8 +1307,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         if(bw != 0) {
             size_t bytes = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
             size_t smallest_block_to_send = largs->params.minimal_write_size;
-            if(bytes == 0) {
-                double delay = (double)smallest_block_to_send/bw;
+            if(bytes < smallest_block_to_send) {
+                double delay = (double)(smallest_block_to_send-bytes)/bw;
                 if(delay > 1.0) delay = 1.0;
                 else if(delay < 0.001) delay = 0.001;
                 update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
