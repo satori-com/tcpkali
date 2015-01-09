@@ -761,7 +761,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 if(histogram) {
                     snprintf(latency_buf, sizeof(latency_buf),
                             " (%.1fms @ 95%%)",
-                            hdr_value_at_percentile(histogram, 0.95)/10.0
+                            hdr_value_at_percentile(histogram, 95.0)/10.0
                     );
                 } else {
                     latency_buf[0] = '\0';
@@ -825,10 +825,10 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
         } lat;
 
         if(sf->histogram) {
-            lat.p50 = hdr_value_at_percentile(sf->histogram, 0.50) / 10.0;
-            lat.p95 = hdr_value_at_percentile(sf->histogram, 0.95) / 10.0;
-            lat.p99 = hdr_value_at_percentile(sf->histogram, 0.99) / 10.0;
-            lat.p99_5 = hdr_value_at_percentile(sf->histogram, 0.995) / 10.0;
+            lat.p50 = hdr_value_at_percentile(sf->histogram, 50.0) / 10.0;
+            lat.p95 = hdr_value_at_percentile(sf->histogram, 95.0) / 10.0;
+            lat.p99 = hdr_value_at_percentile(sf->histogram, 99.0) / 10.0;
+            lat.p99_5 = hdr_value_at_percentile(sf->histogram, 99.5) / 10.0;
             lat.mean = hdr_mean(sf->histogram)/10.0;
             lat.max = hdr_max(sf->histogram)/10.0;
             assert(lat.p95 < 1000000);
