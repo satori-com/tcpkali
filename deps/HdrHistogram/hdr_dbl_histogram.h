@@ -27,5 +27,13 @@ int hdr_dbl_init(
     struct hdr_dbl_histogram** result);
 
 bool hdr_dbl_record_value(struct hdr_dbl_histogram* h, double value);
+bool hdr_dbl_record_corrected_value(struct hdr_dbl_histogram* h, double value, double expected_interval);
+/**
+ * Add the values from the addend histogram to the sum histogram.
+ */
+int64_t hdr_dbl_add(struct hdr_dbl_histogram* sum, struct hdr_dbl_histogram* addend);
+void hdr_dbl_reset(struct hdr_dbl_histogram* h);
+
+int64_t hdr_dbl_count_at_value(struct hdr_dbl_histogram* h, double value);
 
 #endif
