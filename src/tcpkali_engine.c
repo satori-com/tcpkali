@@ -329,8 +329,8 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
                          &histogram);
                 assert(ret == 0);
             }
-            int64_t n = hdr_add(histogram, eng->loops[n].histogram);
-            assert(n == 0);
+            int64_t nret = hdr_add(histogram, eng->loops[n].histogram);
+            assert(nret == 0);
         }
     }
     eng->n_workers = 0;
