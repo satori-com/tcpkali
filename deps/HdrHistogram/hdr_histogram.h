@@ -151,7 +151,37 @@ bool hdr_values_are_equivalent(struct hdr_histogram* h, int64_t a, int64_t b);
 int64_t hdr_lowest_equivalent_value(struct hdr_histogram* h, int64_t value);
 int64_t hdr_count_at_value(struct hdr_histogram* h, int64_t value);
 int64_t hdr_count_at_index(struct hdr_histogram* h, int32_t index);
-int64_t hdr_value_at_index(struct hdr_histogram *h, int32_t index);
+int64_t hdr_value_at_index(struct hdr_histogram* h, int32_t index);
+
+struct hdr_iter_percentiles
+{
+    bool seen_last_value;
+    int32_t ticks_per_half_distance;
+    double percentile_to_iterate_to;
+    double percentile;
+};
+
+struct hdr_iter_recorded
+{
+    int64_t count_added_in_this_iteration_step;
+};
+
+struct hdr_iter_linear
+{
+    int64_t value_units_per_bucket;
+    int64_t count_added_in_this_iteration_step;
+    int64_t next_value_reporting_level;
+    int64_t next_value_reporting_level_lowest_equivalent;
+};
+
+struct hdr_iter_log
+{
+    int64_t value_units_first_bucket;
+    double log_base;
+    int64_t count_added_in_this_iteration_step;
+    int64_t next_value_reporting_level;
+    int64_t next_value_reporting_level_lowest_equivalent;
+};
 
 /**
  * The basic iterator.  This is the equivlent of the
@@ -168,6 +198,16 @@ struct hdr_iter
     int64_t count_to_index;
     int64_t value_from_index;
     int64_t highest_equivalent_value;
+
+    union
+    {
+        struct hdr_iter_percentiles percentiles;
+        struct hdr_iter_recorded recorded;
+        struct hdr_iter_linear linear;
+        struct hdr_iter_log log;
+    } specifics;
+
+    bool (*_next_fp)(struct hdr_iter* iter);
 };
 
 /**
@@ -177,6 +217,34 @@ struct hdr_iter
  * @param h The histogram to iterate over
  */
 void hdr_iter_init(struct hdr_iter* iter, struct hdr_histogram* h);
+
+/**
+ * Initialise the iterator for use with percentiles.
+ */
+void hdr_iter_percentile_init(struct hdr_iter* iter, struct hdr_histogram* h, int32_t ticks_per_half_distance);
+
+/**
+ * Initialise the iterator for use with recorded values.
+ */
+void hdr_iter_recorded_init(struct hdr_iter* iter, struct hdr_histogram* h);
+
+/**
+ * Initialise the iterator for use with linear values.
+ */
+void hdr_iter_linear_init(
+        struct hdr_iter* iter,
+        struct hdr_histogram* h,
+        int64_t value_units_per_bucket);
+
+/**
+ * Initialise the iterator for use with logarithmic values
+ */
+void hdr_iter_log_init(
+        struct hdr_iter* iter,
+        struct hdr_histogram* h,
+        int64_t value_units_first_bucket,
+        double log_base);
+
 /**
  * Iterate to the next value for the iterator.  If there are no more values
  * available return faluse.
@@ -185,38 +253,6 @@ void hdr_iter_init(struct hdr_iter* iter, struct hdr_histogram* h);
  * @return 'false' if there are no values remaining for this iterator.
  */
 bool hdr_iter_next(struct hdr_iter* iter);
-
-/**
- * Iterator for percentile values.  Equivalent to the PercentileIterator
- * from the Java implementation.
- */
-struct hdr_percentile_iter
-{
-    struct hdr_iter iter;
-    bool seen_last_value;
-    int32_t ticks_per_half_distance;
-    double percentile_to_iterate_to;
-    double percentile;
-};
-
-/**
- * Initialise the percentiles.
- *
- * @param percentiles 'This' pointer
- * @param h The histogram to iterate over
- * @param ticks_per_half_distance The number of iteration steps per half-distance to 100%
- */
-void hdr_percentile_iter_init(struct hdr_percentile_iter* percentiles,
-                               struct hdr_histogram* h,
-                               int32_t ticks_per_half_distance);
-
-/**
- * Iterate to the next percentile step, defined by the ticks_per_half_distance.
- *
- * @param percentiles 'This' pointer
- * @return 'false' if there are no values remaining for this iterator.
- */
-bool hdr_percentile_iter_next(struct hdr_percentile_iter* percentiles);
 
 typedef enum {
     CLASSIC,
@@ -238,102 +274,6 @@ typedef enum {
 int hdr_percentiles_print(
     struct hdr_histogram* h, FILE* stream, int32_t ticks_per_half_distance,
     double value_scale, format_type format);
-
-/**
- * Iterator for recorded values.  Will only return when it encounters a value
- * that has a non-zero count.  Equivalent to the the RecordedValueIterator from the
- * Java implementation.
- */
-struct hdr_recorded_iter
-{
-    struct hdr_iter iter;
-    int64_t count_added_in_this_iteration_step;
-};
-
-/**
- * Initialise the recorded values iterator
- *
- * @param recorded 'This' pointer
- * @param h The histogram to iterate over
- */
-void hdr_recorded_iter_init(struct hdr_recorded_iter* recorded, struct hdr_histogram* h);
-
-/**
- * Iterate to the next recorded value
- *
- * @param recorded 'This' pointer
- * @return 'false' if there are no values remaining for this iterator.
- */
-bool hdr_recorded_iter_next(struct hdr_recorded_iter* recorded);
-
-/**
- * An iterator to get (dis)aggregated counts for a series of linear value steps.  The
- * linear step can either group multiple values or have multiple steps within a single recorded
- * value.
- */
-struct hdr_linear_iter
-{
-    struct hdr_iter iter;
-    int64_t value_units_per_bucket;
-    int64_t count_added_in_this_iteration_step;
-    int64_t next_value_reporting_level;
-    int64_t next_value_reporting_level_lowest_equivalent;
-};
-
-/**
- * Initialise the linear iterator
- *
- * @param 'This' pointer
- * @param h The histogram to iterate over
- * @param value_unit_per_bucket The size of each linear step
- */
-void hdr_linear_iter_init(
-    struct hdr_linear_iter* linear,
-    struct hdr_histogram* h,
-    int64_t value_units_per_bucket);
-
-/**
- * Iterate to the next linear step.
- *
- * @param 'This' pointer
- */
-bool hdr_linear_iter_next(struct hdr_linear_iter* linear);
-
-/**
- * An iterator to get (dis)aggregated counts for a series of logarithmic value steps.  The
- * log step can either group multiple values or have multiple steps within a single recorded
- * value.
- */
-struct hdr_log_iter
-{
-    struct hdr_iter iter;
-    int64_t value_units_first_bucket;
-    double log_base;
-    int64_t count_added_in_this_iteration_step;
-    int64_t next_value_reporting_level;
-    int64_t next_value_reporting_level_lowest_equivalent;
-};
-
-/**
- * Initialise the logarithmic iterator
- *
- * @param logarithmic 'This' pointer
- * @param h Histogram to iterate over
- * @param value_units_first_bucket The size of the first bucket in the iteration
- * @param log_base The factor to multiply by at each step
- */
-void hdr_log_iter_init(
-    struct hdr_log_iter* logarithmic,
-    struct hdr_histogram* h,
-    int64_t value_units_first_bucket,
-    double log_base);
-
-/**
- * Iterate to the next logarithmic step
- *
- * @param logarithmic 'This' pointer
- */
-bool hdr_log_iter_next(struct hdr_log_iter* logarithmic);
 
 /**
 * Internal allocation methods, used by hdr_dbl_histogram.
