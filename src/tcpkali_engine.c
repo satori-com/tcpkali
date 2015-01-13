@@ -1212,10 +1212,8 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         double ts;
         int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
         if(got) {
-            int64_t v = 10000 * (now - ts);
-            if(v > conn->latency.histogram->highest_trackable_value
-                /* hdr_record_value asserts when v > highest_trackable_value */
-                || hdr_record_value(conn->latency.histogram, v) == false) {
+            int64_t latency = 10000 * (now - ts);
+            if(hdr_record_value(conn->latency.histogram, latency) == false) {
                 fprintf(stderr, "Latency value %g is too large, "
                                 "can't record.\n", now - ts);
             }

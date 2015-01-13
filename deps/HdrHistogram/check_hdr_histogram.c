@@ -3,6 +3,30 @@
 #include <assert.h>
 #include "hdr_histogram.h"
 
+/*
+ * Regression test against
+ * https://github.com/HdrHistogram/HdrHistogram_c/issues/6
+ */
+static void check_out_of_range() {
+    struct hdr_histogram *h;
+    int ret = hdr_init(1, 1000, 4, &h);
+    assert(ret == 0);
+    assert(h);
+
+    enum {
+        EXPECT_TRUE,
+        EXPECT_FALSE,
+    } state = EXPECT_TRUE;
+    for(int i = 0; i < 50000; i++) {
+        bool b = hdr_record_value(h, i);
+        if(state == EXPECT_TRUE) {
+            state = (b == true) ? EXPECT_TRUE : EXPECT_FALSE;
+        } else {
+            assert(b == false);
+        }
+    }
+}
+
 int main() {
     int measurements[] = {
         90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
@@ -47,6 +71,8 @@ int main() {
         assert(hdr_value_at_percentile(h, 90.0) == 99);
         assert(hdr_value_at_percentile(h, 99.0) == 100);
     }
+
+    check_out_of_range();
 
     return 0;
 }
