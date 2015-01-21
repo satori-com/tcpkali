@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:em:f:l:w:T:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:em:f:r:l:w:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {

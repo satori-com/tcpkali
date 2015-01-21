@@ -16,7 +16,7 @@
 
 # Quick example: testing a web server
 
-    tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" --message-rate 10 --latency-marker "HTTP/1.1" google.com:80
+    tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 --latency-marker "HTTP/1.1" google.com:80
 
 # Build
 
@@ -51,7 +51,7 @@
       --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
       -f, --message-file <name>   Read message to send from a file
-      --message-rate <R>          Messages per second to send in a connection
+      -r, --message-rate <R>      Messages per second to send in a connection
 
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
