@@ -1,4 +1,6 @@
 
+ACLOCAL_AMFLAGS = -I m4
+
 SUBDIRS = doc deps src test
 
 ##
