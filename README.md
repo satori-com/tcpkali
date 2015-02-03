@@ -3,7 +3,7 @@
 
 `tcpkali` is a high performance load generator against TCP and WebSocket servers.
 
-[![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
+![tcpkali mascot](doc/images/tcpkali-mascot.png)
 
 # Features
 
@@ -23,6 +23,8 @@
     autoreconf -iv
     ./configure
     make
+
+[![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
 
 # Install
 

@@ -1,5 +1,5 @@
 
-SUBDIRS = deps src test
+SUBDIRS = doc deps src test
 
 ##
 ## Building RPM.

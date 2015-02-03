@@ -54,6 +54,7 @@ AC_ARG_WITH([libuv],
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
+                 doc/Makefile
                  deps/Makefile
                  deps/libev/Makefile
                  deps/libcows/Makefile
