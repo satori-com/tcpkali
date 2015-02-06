@@ -128,7 +128,6 @@
 
     # If using netfilter on Linux:
     net.netfilter.nf_conntrack_max=N
-    net.netfilter.nf_conntrack_max=N/4
 
 # Readings
 
