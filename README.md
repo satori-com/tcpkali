@@ -1,7 +1,7 @@
 
 # About
 
-`tcpkali` is a high performance load generator against TCP and WebSocket servers.
+`tcpkali` is a high performance TCP and WebSocket load generator and sink.
 
 ![tcpkali mascot](doc/images/tcpkali-mascot.png)
 
