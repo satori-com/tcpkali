@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -37,29 +37,29 @@ pacefier_init(struct pacefier *p, double now) {
 }
 
 /*
- * Get the number of events we can emit now, since we've advanced our time
+ * Get the number of events we can move now, since we've advanced our time
  * forward a little.
  */
 static inline size_t
 pacefier_allow(struct pacefier *p, double events_per_second, double now) {
     double elapsed = now - p->previous_ts;
-    ssize_t emit_events = elapsed * events_per_second;  /* Implicit rounding */
-    if(emit_events > 0)
-        return emit_events;
+    ssize_t move_events = elapsed * events_per_second;  /* Implicit rounding */
+    if(move_events > 0)
+        return move_events;
     else
         return 0;
 }
 
 /*
- * Record the actually emitted events.
+ * Record the actually moved events.
  */
 static inline void
-pacefier_emitted(struct pacefier *p, double events_per_second, size_t emitted, double now) {
+pacefier_moved(struct pacefier *p, double events_per_second, size_t moved, double now) {
     /*
      * The number of allowed events is almost always less
      * than what's actually computed.
      */
-    p->previous_ts += emitted/events_per_second;
+    p->previous_ts += moved/events_per_second;
     /*
      * If the process cannot keep up with the pace, it will result in
      * previous_ts shifting in the past more and more with time.

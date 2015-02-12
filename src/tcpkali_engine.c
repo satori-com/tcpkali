@@ -255,8 +255,8 @@ struct engine *engine_start(struct engine_params params) {
      * instead of sending short messages one by one.
      */
     replicate_payload(&params.data, 64*1024);
-    if(params.minimal_write_size == 0)
-        params.minimal_write_size = 1460; /* ~MTU */
+    if(params.minimal_move_size == 0)
+        params.minimal_move_size = 1460; /* ~MTU */
     params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
 
     struct engine *eng = calloc(1, sizeof(*eng));
@@ -1304,7 +1304,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         size_t bw = largs->params.channel_bandwidth_Bps;
         if(bw != 0) {
             size_t bytes = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
-            size_t smallest_block_to_send = largs->params.minimal_write_size;
+            size_t smallest_block_to_send = largs->params.minimal_move_size;
             if(bytes < smallest_block_to_send) {
                 double delay = (double)(smallest_block_to_send-bytes)/bw;
                 if(delay > 1.0) delay = 1.0;
@@ -1341,7 +1341,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         } else {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
-            if(bw) pacefier_emitted(&conn->bw_pace, bw, wrote, tk_now(TK_A));
+            if(bw) pacefier_moved(&conn->bw_pace, bw, wrote, tk_now(TK_A));
             latency_record_outgoing_ts(TK_A_ conn, &largs->params.data, position, wrote);
         }
     }

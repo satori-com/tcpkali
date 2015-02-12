@@ -40,7 +40,7 @@ struct engine_params {
     struct addresses listen_addresses;
     size_t requested_workers;       /* Number of threads to start */
     size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
-    size_t minimal_write_size;
+    size_t minimal_move_size;       /* Number of bytes to read/write at once */
     enum {
         DBG_ALWAYS,
         DBG_ERROR,

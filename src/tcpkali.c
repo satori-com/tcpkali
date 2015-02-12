@@ -528,7 +528,7 @@ int main(int argc, char **argv) {
         }
         engine_params.channel_bandwidth_Bps = message_bandwidth;
         /* Write in msize blocks unless they're large, then use default. */
-        engine_params.minimal_write_size = msize < 1460 ? msize : 0;
+        engine_params.minimal_move_size = msize < 1460 ? msize : 0;
     }
 
     if(optind == argc && conf.listen_port == 0) {
@@ -712,7 +712,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
             to_start = conn_deficit;
         }
         engine_initiate_new_connections(eng, to_start);
-        pacefier_emitted(&keepup_pace, connect_rate, allowed, now);
+        pacefier_moved(&keepup_pace, connect_rate, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
         if(update_stats) {
