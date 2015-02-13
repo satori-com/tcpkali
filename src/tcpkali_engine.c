@@ -906,8 +906,18 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
-        update_io_interest(TK_A_ conn,
-            TK_READ | (largs->params.data.total_size ? TK_WRITE : 0));
+        switch(conn->conn_type) {
+        case CONN_INCOMING:
+            update_io_interest(TK_A_ conn, TK_READ);
+            break;
+        case CONN_OUTGOING:
+            update_io_interest(TK_A_ conn,
+                TK_READ | (largs->params.data.total_size ? TK_WRITE : 0));
+            break;
+        case CONN_ACCEPTOR:
+            assert(conn->conn_type != CONN_ACCEPTOR);
+            break;
+        }
         break;
     case CSTATE_CONNECTING:
         /* Timed out in the connection establishment phase. */
@@ -1018,6 +1028,46 @@ void debug_dump_data(const void *data, size_t size) {
     fprintf(stderr, "\033[KData(%ld): ➧%s⬅︎\n", (long)size, buffer);
 }
 
+static enum {
+    LB_UNLIMITED,   /* Not limiting bandwidth, proceed. */
+    LB_PROCEED,     /* Use pacefier_moved() afterwards. */
+    LB_GO_SLEEP,    /* Not allowed to move data.        */
+} limit_channel_bandwidth(TK_P_ struct connection *conn, size_t *suggested_move_size) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
+    size_t bw = largs->params.channel_bandwidth_Bps;
+    if(!bw) return LB_UNLIMITED;
+
+    size_t smallest_block_to_move = largs->params.minimal_move_size;
+    size_t allowed_to_move = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
+
+    if(allowed_to_move < smallest_block_to_move) {
+        /*     allowed     smallest_blk
+           |------^-------------^-------> */
+        double delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
+        if(delay > 1.0) delay = 1.0;
+        else if(delay < 0.001) delay = 0.001;
+        update_io_interest(TK_A_ conn, 0); /* no r/w interest */
+#ifdef  USE_LIBUV
+        uv_timer_init(TK_A_ &conn->timer);
+        uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
+#else
+        ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
+        ev_timer_start(TK_A_ &conn->timer);
+#endif
+        return LB_GO_SLEEP;
+    } else {
+        /*   smallest_blk  allowed
+           |------^-----------^----> */
+        if(*suggested_move_size > allowed_to_move) {
+            /*   smallest_blk  allowed   suggested
+               |------^-----------^----------^-------> */
+            *suggested_move_size = allowed_to_move
+                        - (allowed_to_move % smallest_block_to_move);
+        }
+        return LB_PROCEED;
+    }
+}
+
 static void devnull_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
@@ -1025,7 +1075,15 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
     if(revents & TK_READ) {
         char buf[16384];
         for(;;) {
-            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
+            size_t recv_size = sizeof(buf);
+            int record_moved = 0;
+            switch(limit_channel_bandwidth(TK_A_ conn, &recv_size)) {
+            case LB_UNLIMITED: record_moved = 0; break;
+            case LB_PROCEED:   record_moved = 1; break;
+            case LB_GO_SLEEP: return;
+            }
+
+            ssize_t rd = read(tk_fd(w), buf, recv_size);
             switch(rd) {
             case -1:
                 switch(errno) {
@@ -1040,6 +1098,10 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
+                if(record_moved)
+                    pacefier_moved(&conn->bw_pace,
+                                   largs->params.channel_bandwidth_Bps,
+                                   rd, tk_now(TK_A));
                 conn->data_received += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
@@ -1294,6 +1356,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
     if(revents & TK_WRITE) {
         const void *position;
         size_t available_length;
+        int record_moved = 0;
+
         largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
         if(!available_length) {
             /* Only the header was sent. Now, silence. */
@@ -1301,29 +1365,14 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
             return;
         }
-        size_t bw = largs->params.channel_bandwidth_Bps;
-        if(bw != 0) {
-            size_t bytes = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
-            size_t smallest_block_to_send = largs->params.minimal_move_size;
-            if(bytes < smallest_block_to_send) {
-                double delay = (double)(smallest_block_to_send-bytes)/bw;
-                if(delay > 1.0) delay = 1.0;
-                else if(delay < 0.001) delay = 0.001;
-                update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
-#ifdef  USE_LIBUV
-                uv_timer_init(TK_A_ &conn->timer);
-                uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
-#else
-                ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
-                ev_timer_start(TK_A_ &conn->timer);
-#endif
-                return;
-            } else if((size_t)bytes < available_length
-                    && available_length > smallest_block_to_send) {
-                /* Do not send more than approx 1 MTU. */
-                available_length = smallest_block_to_send;
-            }
+
+        /* Adjust (available_length) to avoid sending too much stuff. */
+        switch(limit_channel_bandwidth(TK_A_ conn, &available_length)) {
+        case LB_UNLIMITED: record_moved = 0; break;
+        case LB_PROCEED:   record_moved = 1; break;
+        case LB_GO_SLEEP:  return;
         }
+
         ssize_t wrote = write(tk_fd(w), position, available_length);
         if(wrote == -1) {
             char buf[INET6_ADDRSTRLEN+64];
@@ -1341,7 +1390,10 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         } else {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
-            if(bw) pacefier_moved(&conn->bw_pace, bw, wrote, tk_now(TK_A));
+            if(record_moved)
+                pacefier_moved(&conn->bw_pace,
+                               largs->params.channel_bandwidth_Bps,
+                               wrote, tk_now(TK_A));
             latency_record_outgoing_ts(TK_A_ conn, &largs->params.data, position, wrote);
         }
     }
