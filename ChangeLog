@@ -1,6 +1,7 @@
 
 0.5?:
     * --channel-bandwidth limit is now applicable to sink mode (--listen-port).
+    * Maximum storable latency increased from 10s to 100s.
 
 0.4: 2015-Feb-03
     * Initial release.

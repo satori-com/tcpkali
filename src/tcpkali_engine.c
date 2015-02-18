@@ -267,32 +267,35 @@ struct engine *engine_start(struct engine_params params) {
     eng->global_feedback_pipe_rd = gfbk_pipe_rd;
 
     for(int n = 0; n < eng->n_workers; n++) {
-        struct loop_arguments *loop_args = &eng->loops[n];
-        TAILQ_INIT(&loop_args->open_conns);
-        loop_args->params = params;
-        loop_args->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(loop_args->remote_stats[0]));
-        loop_args->address_offset = n;
-        loop_args->thread_no = n;
+        struct loop_arguments *largs = &eng->loops[n];
+        TAILQ_INIT(&largs->open_conns);
+        largs->params = params;
+        largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
+        largs->address_offset = n;
+        largs->thread_no = n;
         if(params.latency_marker) {
             int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
-                10 * decims_in_1s,  /* 10 seconds is a max storable value */
-                3, &loop_args->histogram);
+                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                3, &largs->histogram);
             assert(ret == 0);
+            DEBUG(DBG_DETAIL,
+                "Initialized HdrHistogram with size %ld\n",
+                    (long)hdr_get_memory_size(largs->histogram));
         }
-        pthread_mutex_init(&loop_args->reporting_histogram_lock, 0);
+        pthread_mutex_init(&largs->reporting_histogram_lock, 0);
 
         int private_pipe[2];
         int rc = pipe(private_pipe);
         assert(rc == 0);
-        loop_args->private_control_pipe_rd = private_pipe[0];
-        loop_args->private_control_pipe_wr = private_pipe[1];
-        loop_args->global_control_pipe_rd_nbio = gctl_pipe_rd;
-        loop_args->global_feedback_pipe_wr = gfbk_pipe_wr;
+        largs->private_control_pipe_rd = private_pipe[0];
+        largs->private_control_pipe_wr = private_pipe[1];
+        largs->global_control_pipe_rd_nbio = gctl_pipe_rd;
+        largs->global_feedback_pipe_wr = gfbk_pipe_wr;
 
         rc = pthread_create(&eng->threads[n], 0,
-                            single_engine_loop_thread, loop_args);
+                            single_engine_loop_thread, largs);
         assert(rc == 0);
     }
 
