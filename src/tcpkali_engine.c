@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -72,8 +73,8 @@ struct connection {
     tk_timer timer;
     struct pacefier bw_pace;
     off_t write_offset;
-    size_t data_sent;
-    size_t data_received;
+    atomic_wide_t data_sent;
+    atomic_wide_t data_received;
     float channel_eol_point;    /* End of life time, since epoch */
     enum type {
         CONN_OUTGOING,
@@ -112,8 +113,8 @@ struct loop_arguments {
     int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
-    atomic64_t worker_data_sent;
-    atomic64_t worker_data_received;
+    atomic_wide_t worker_data_sent      __attribute__((aligned(sizeof(atomic_wide_t))));
+    atomic_wide_t worker_data_received  __attribute__((aligned(sizeof(atomic_wide_t))));
     atomic_t outgoing_connecting;
     atomic_t outgoing_established;
     atomic_t incoming_established;
@@ -147,8 +148,8 @@ struct engine {
     int global_feedback_pipe_rd;
     int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
-    size_t total_data_sent;
-    size_t total_data_received;
+    atomic_wide_t total_data_sent;
+    atomic_wide_t total_data_received;
 };
 
 /*
@@ -228,6 +229,9 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
+    /* Check that worker_data_sent is properly aligned for atomicity */
+    assert(((long)(&((struct loop_arguments *)0)->worker_data_sent) & 7) == 0);
+
     /* Global control pipe. Engine -> workers. */
     int rc = pipe(fildes);
     assert(rc == 0);
@@ -305,7 +309,7 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent, size_t initial_data_received) {
+void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_data_sent, atomic_wide_t initial_data_received) {
     size_t connecting, conn_in, conn_out, conn_counter;
     struct hdr_histogram *histogram = 0;
 
@@ -341,18 +345,18 @@ void engine_terminate(struct engine *eng, double epoch, size_t initial_data_sent
     /* Data snd/rcv after ramp-up (since epoch) */
     double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
-    size_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
-    size_t epoch_data_received = eng->total_data_received-initial_data_received;
-    size_t epoch_data_transmitted = epoch_data_sent + epoch_data_received;
+    atomic_wide_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
+    atomic_wide_t epoch_data_received = eng->total_data_received-initial_data_received;
+    atomic_wide_t epoch_data_transmitted = epoch_data_sent + epoch_data_received;
 
     char buf[64];
 
-    printf("Total data sent:     %s (%ld bytes)\n",
+    printf("Total data sent:     %s (%" PRIu64 " bytes)\n",
         express_bytes(epoch_data_sent, buf, sizeof(buf)),
-        (long)epoch_data_sent);
-    printf("Total data received: %s (%ld bytes)\n",
+        (uint64_t)epoch_data_sent);
+    printf("Total data received: %s (%" PRIu64 " bytes)\n",
         express_bytes(epoch_data_received, buf, sizeof(buf)),
-        (long)epoch_data_received);
+        (uint64_t)epoch_data_received);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
@@ -452,12 +456,12 @@ struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
     return histogram;
 }
 
-void engine_traffic(struct engine *eng, size_t *sent, size_t *received) {
+void engine_traffic(struct engine *eng, atomic_wide_t *sent, atomic_wide_t *received) {
     *sent = 0;
     *received = 0;
     for(int n = 0; n < eng->n_workers; n++) {
-        *sent += eng->loops[n].worker_data_sent;
-        *received += eng->loops[n].worker_data_received;
+        *sent += atomic_wide_get(&eng->loops[n].worker_data_sent);
+        *received += atomic_wide_get(&eng->loops[n].worker_data_received);
     }
 }
 

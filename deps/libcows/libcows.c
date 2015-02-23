@@ -40,6 +40,7 @@
 #include "libcows_frame.h"
 
 #include "libcows.h"
+#include "config.h"
 
 /*
  * Kick off writing of the output chain.
@@ -357,10 +358,17 @@ static void libcows_queue_hdr(libcows_ctx *ctx, size_t size) {
     } else {
         fhdr_buf[0] = *(unsigned char *)&frame;
         fhdr_buf[1] = 127;
+#if SIZEOF_SIZE_T == 4
+        fhdr_buf[2] = 0;
+        fhdr_buf[3] = 0;
+        fhdr_buf[4] = 0;
+        fhdr_buf[5] = 0;
+#else
         fhdr_buf[2] = size >> 56;
         fhdr_buf[3] = size >> 48;
         fhdr_buf[4] = size >> 40;
         fhdr_buf[5] = size >> 32;
+#endif
         fhdr_buf[6] = size >> 24;
         fhdr_buf[7] = size >> 16;
         fhdr_buf[8] = size >> 8;

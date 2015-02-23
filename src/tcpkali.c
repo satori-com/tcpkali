@@ -121,10 +121,10 @@ static struct tcpkali_config {
 struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
     double last_update;   /* Last we updated the checkpoint structure */
-    size_t initial_data_sent;
-    size_t initial_data_received;
-    size_t last_data_sent;
-    size_t last_data_received;
+    atomic_wide_t initial_data_sent;
+    atomic_wide_t initial_data_received;
+    atomic_wide_t last_data_sent;
+    atomic_wide_t last_data_received;
 };
 
 enum work_phase {
