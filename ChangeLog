@@ -1,6 +1,7 @@
 
 0.5?:
     * --channel-bandwidth limit is now applicable to sink mode (--listen-port).
+    * Build and run on 32-bit platforms.
 
 0.4: 2015-Feb-03
     * Initial release.

@@ -27,30 +27,56 @@
 #ifndef TCPKALI_ATOMIC_H
 #define TCPKALI_ATOMIC_H
 
+#ifndef UNUSED
+#define UNUSED  __attribute__((unused))
+#endif
+
+#if defined(__GNUC__) && (__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 || __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
+
+typedef uint32_t atomic_t;
+#ifdef  __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+typedef uint64_t atomic_wide_t;
+#else
+#warning "This compiler does not have 64-bit compare_and_swap, results might be broken"
+typedef uint32_t atomic_wide_t;
+#endif
+
+static inline void UNUSED
+atomic_add(atomic_wide_t *i, uint64_t v) { __sync_add_and_fetch(i, v); }
+
+static atomic_wide_t UNUSED
+atomic_wide_get(atomic_wide_t *i) { return __sync_add_and_fetch(i, 0); }
+
+static inline void UNUSED
+atomic_increment(atomic_t *i) { __sync_add_and_fetch(i, 1); }
+
+static inline void UNUSED
+atomic_decrement(atomic_t *i) { __sync_add_and_fetch(i, -1); }
+
+#else   /* No builtin atomics, emulate */
+
+static inline void UNUSED
+atomic_increment(atomic_t *i) { asm volatile("lock incl %0" : "+m" (*i)); }
+
+static inline void UNUSED
+atomic_decrement(atomic_t *i) { asm volatile("lock decl %0" : "+m" (*i)); }
 
 #if SIZEOF_SIZE_T == 4
 typedef uint32_t atomic_t;
 typedef uint32_t atomic_wide_t;
-
-static inline void __attribute__((unused)) atomic_add(atomic_wide_t *i, uint64_t v) {
+static inline void UNUSED atomic_add(atomic_wide_t *i, uint64_t v) {
     asm volatile("lock addl %1, %0" : "+m" (*i) : "r" (v));
 }
-
+static atomic_wide_t UNUSED atomic_wide_get(atomic_wide_t *i) { return *i; }
 #elif SIZEOF_SIZE_T == 8
 typedef uint32_t atomic_t;
 typedef uint64_t atomic_wide_t;
-
-static inline void __attribute__((unused)) atomic_add(atomic_wide_t *i, uint64_t v) {
+static inline void UNUSED atomic_add(atomic_wide_t *i, uint64_t v) {
     asm volatile("lock addq %1, %0" : "+m" (*i) : "r" (v));
 }
+static atomic_wide_t atomic_wide_get(atomic_wide_t *i) { return *i; }
 #endif  /* SIZEOF_SIZE_T */
 
-static inline void __attribute__((unused)) atomic_increment(atomic_t *i) {
-    asm volatile("lock incl %0" : "+m" (*i));
-}
-
-static inline void __attribute__((unused)) atomic_decrement(atomic_t *i) {
-    asm volatile("lock decl %0" : "+m" (*i));
-}
+#endif  /* Builtin atomics */
 
 #endif  /* TCPKALI_ATOMIC_H */
