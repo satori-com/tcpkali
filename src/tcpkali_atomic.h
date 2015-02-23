@@ -55,12 +55,6 @@ atomic_decrement(atomic_t *i) { __sync_add_and_fetch(i, -1); }
 
 #else   /* No builtin atomics, emulate */
 
-static inline void UNUSED
-atomic_increment(atomic_t *i) { asm volatile("lock incl %0" : "+m" (*i)); }
-
-static inline void UNUSED
-atomic_decrement(atomic_t *i) { asm volatile("lock decl %0" : "+m" (*i)); }
-
 #if SIZEOF_SIZE_T == 4
 typedef uint32_t atomic_t;
 typedef uint32_t atomic_wide_t;
@@ -74,8 +68,14 @@ typedef uint64_t atomic_wide_t;
 static inline void UNUSED atomic_add(atomic_wide_t *i, uint64_t v) {
     asm volatile("lock addq %1, %0" : "+m" (*i) : "r" (v));
 }
-static atomic_wide_t atomic_wide_get(atomic_wide_t *i) { return *i; }
+static atomic_wide_t UNUSED atomic_wide_get(atomic_wide_t *i) { return *i; }
 #endif  /* SIZEOF_SIZE_T */
+
+static inline void UNUSED
+atomic_increment(atomic_t *i) { asm volatile("lock incl %0" : "+m" (*i)); }
+
+static inline void UNUSED
+atomic_decrement(atomic_t *i) { asm volatile("lock decl %0" : "+m" (*i)); }
 
 #endif  /* Builtin atomics */
 
