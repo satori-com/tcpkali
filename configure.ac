@@ -32,6 +32,8 @@ AX_CHECK_COMPILE_FLAG([-fno-strict-aliasing], [TK_CFLAGS="$TK_CFLAGS -fno-strict
 dnl Apply TK_CFLAGS only for tcpkali sources, not third-party dependencies.
 AC_SUBST(TK_CFLAGS)
 
+AC_CHECK_SIZEOF([size_t])
+
 AC_CHECK_HEADERS(sched.h uv.h)
 AC_CHECK_FUNCS(sched_getaffinity)
 

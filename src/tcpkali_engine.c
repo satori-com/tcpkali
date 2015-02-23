@@ -112,8 +112,8 @@ struct loop_arguments {
     int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
-    atomic64_t worker_data_sent;
-    atomic64_t worker_data_received;
+    atomic_wide_t worker_data_sent      __attribute__((aligned(sizeof(atomic_wide_t))));
+    atomic_wide_t worker_data_received  __attribute__((aligned(sizeof(atomic_wide_t))));
     atomic_t outgoing_connecting;
     atomic_t outgoing_established;
     atomic_t incoming_established;
@@ -227,6 +227,9 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
+
+    /* Check that worker_data_sent is properly aligned for atomicity */
+    assert(((long)(&((struct loop_arguments *)0)->worker_data_sent) & 7) == 0);
 
     /* Global control pipe. Engine -> workers. */
     int rc = pipe(fildes);
