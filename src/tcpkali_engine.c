@@ -728,8 +728,11 @@ static void update_reporting_histogram(struct loop_arguments *largs) {
     struct connection *conn;
     int nmax = 10;
     TAILQ_FOREACH(conn, &largs->open_conns, hook) {
-        if(nmax-- == 0) break;
-        hdr_add(largs->reporting_histogram, conn->latency.histogram);
+        if(conn->latency.histogram) {
+            /* Only active connections might histograms */
+            hdr_add(largs->reporting_histogram, conn->latency.histogram);
+            if(--nmax == 0) break;
+        }
     }
     pthread_mutex_unlock(&largs->reporting_histogram_lock);
 }
