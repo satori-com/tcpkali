@@ -45,11 +45,17 @@ void ring_buffer_init(struct ring_buffer *, size_t unit_size);
     }                                       \
   } while(0)
 
-#define ring_buffer_add(rb, datum)   do {       \
+/*
+ * Add a specified element to the ring.
+ * Returns non-zero value if the ring has grown because of it.
+ */
+#define ring_buffer_add(rb, datum)   ({         \
         typeof(datum) d = datum;                \
         void *np = ring_buffer_next_right(rb);  \
+        int grown = 0;                          \
         if(!np) {                               \
             ring_buffer_grow(rb);               \
+            grown = 1;                          \
             np = ring_buffer_next_right(rb);    \
             assert(np);                         \
         }                                       \
@@ -57,7 +63,8 @@ void ring_buffer_init(struct ring_buffer *, size_t unit_size);
         typeof(d) *p = rb->right;               \
         rb->right = np;                         \
         *p = d;                                 \
-    } while(0)
+        grown;                                  \
+    })
 
 #define ring_buffer_get(rb, datump) ({      \
     typeof(datump) p = rb->ptr;             \

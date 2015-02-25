@@ -448,9 +448,9 @@ struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
     assert(ret == 0);
 
     for(int n = 0; n < eng->n_workers; n++) {
-        pthread_mutex_lock(&eng->loops[0].reporting_histogram_lock);
-        hdr_add(histogram, eng->loops[0].reporting_histogram);
-        pthread_mutex_unlock(&eng->loops[0].reporting_histogram_lock);
+        pthread_mutex_lock(&eng->loops[n].reporting_histogram_lock);
+        hdr_add(histogram, eng->loops[n].reporting_histogram);
+        pthread_mutex_unlock(&eng->loops[n].reporting_histogram_lock);
     }
 
     return histogram;
@@ -703,7 +703,15 @@ static void *single_engine_loop_thread(void *argp) {
     return 0;
 }
 
-static void update_reporting_histogram(struct loop_arguments *largs) {
+/*
+ * Each worker maintains two histogram data structures:
+ *  1) the working one, which is not protected by mutex and directly
+ *     writable by connections, when they die.
+ *  2) the reporting_histogram, which is protected by the mutex and
+ *     is only updated from time to time. This one is used for reporting
+ *     to external observers.
+ */
+static void worker_update_reporting_histogram(struct loop_arguments *largs) {
     assert(largs->histogram);
     pthread_mutex_lock(&largs->reporting_histogram_lock);
     if(largs->reporting_histogram) {
@@ -759,7 +767,7 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         tk_stop(TK_A);
         break;
     case 'h':
-        update_reporting_histogram(largs);
+        worker_update_reporting_histogram(largs);
         int wrote = write(largs->global_feedback_pipe_wr, ".", 1);
         assert(wrote == 1);
         break;
@@ -1207,8 +1215,24 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct tra
     size_t whole_msgs = (sent / largs->params.data.single_message_size);
     conn->latency.incomplete_message_bytes_sent =
         sent % largs->params.data.single_message_size;
+    int ring_grown = 0;
     for(double now = tk_now(TK_A); whole_msgs; whole_msgs--) {
-        ring_buffer_add(conn->latency.sent_timestamps, now);
+        ring_grown |= ring_buffer_add(conn->latency.sent_timestamps, now);
+    }
+    if(ring_grown) {
+        /*
+         * Ring has grown [even more]; check that we aren't recording send
+         * timestamps without actually receiving any data back.
+         */
+        const unsigned MEGABYTE = 1024 * 1024;
+        if(conn->latency.sent_timestamps->size > 10 * MEGABYTE) {
+            fprintf(stderr,
+                "Sending messages too fast, "
+                    "not receiving them back fast enough.\n"
+                "Check that the --latency-marker data is being received back.\n"
+                "Use --verbose 3 to dump received message data.\n");
+            exit(1);
+        }
     }
 }
 
