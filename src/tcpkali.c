@@ -489,8 +489,8 @@ int main(int argc, char **argv) {
     }
 
     /*
-     * Check that the message contains exactly a single instance
-     * of latency marker.
+     * Check that we will actually send messages
+     * if we are also told to measure latency.
      */
     if(engine_params.latency_marker) {
         if(engine_params.data.header_size == engine_params.data.total_size
