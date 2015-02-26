@@ -1051,7 +1051,8 @@ static enum {
     LB_UNLIMITED,   /* Not limiting bandwidth, proceed. */
     LB_PROCEED,     /* Use pacefier_moved() afterwards. */
     LB_GO_SLEEP,    /* Not allowed to move data.        */
-} limit_channel_bandwidth(TK_P_ struct connection *conn, size_t *suggested_move_size) {
+} limit_channel_bandwidth(TK_P_ struct connection *conn,
+                          size_t *suggested_move_size) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     size_t bw = largs->params.channel_bandwidth_Bps;
     if(!bw) return LB_UNLIMITED;
@@ -1065,7 +1066,16 @@ static enum {
         double delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
         if(delay > 1.0) delay = 1.0;
         else if(delay < 0.001) delay = 0.001;
-        update_io_interest(TK_A_ conn, 0); /* no r/w interest */
+        switch(conn->conn_type) {
+        case CONN_OUTGOING:
+            update_io_interest(TK_A_ conn, TK_READ);
+            break;
+        case CONN_INCOMING:
+            update_io_interest(TK_A_ conn, 0);
+            break;
+        case CONN_ACCEPTOR:
+            assert(!"Unreachable");
+        }
 #ifdef  USE_LIBUV
         uv_timer_init(TK_A_ &conn->timer);
         uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
