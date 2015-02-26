@@ -277,7 +277,7 @@ struct engine *engine_start(struct engine_params params) {
         largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
         largs->thread_no = n;
-        if(params.latency_marker) {
+        if(params.latency_marker_data) {
             int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
@@ -871,7 +871,8 @@ static void start_new_connection(TK_P) {
 #endif
     }
 
-    if(largs->params.latency_marker && largs->params.data.single_message_size) {
+    if(largs->params.latency_marker_data
+    && largs->params.data.single_message_size) {
         memset(&conn->latency, 0, sizeof(conn->latency));
         conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
         int ret = hdr_init(largs->histogram->lowest_trackable_value,
@@ -1244,13 +1245,13 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
 
     struct loop_arguments *largs = tk_userdata(TK_A);
 
-    char *lm = largs->params.latency_marker;
-    size_t lm_length = strlen(lm);
+    uint8_t *lm = largs->params.latency_marker_data;
+    size_t lm_size = largs->params.latency_marker_size;
     int num_markers_found = 0;
 
     if(conn->latency.marker_match_prefix) {
-        if(size > lm_length - conn->latency.marker_match_prefix)
-            bend = buf + lm_length - conn->latency.marker_match_prefix;
+        if(size > lm_size - conn->latency.marker_match_prefix)
+            bend = buf + lm_size - conn->latency.marker_match_prefix;
         else
             bend = buf + size;
         for(p = buf; p < bend; p++) {
@@ -1258,7 +1259,7 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
                 break;
         }
         if(p == bend) {
-            if(conn->latency.marker_match_prefix == lm_length) {
+            if(conn->latency.marker_match_prefix == lm_size) {
                 conn->latency.marker_match_prefix = 0;
                 /* Found the full marker */
                 num_markers_found++;
@@ -1269,18 +1270,18 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         }
     }
 
-    if(size < lm_length) {
+    if(size < lm_size) {
         bend = buf;
     } else {
-        bend = buf + (size - lm_length);
+        bend = buf + (size - lm_size);
     }
 
     /* Go over they haystack while knowing that haystack's tail is always
      * greater than the latency marker. */
     for(p = buf; p < bend; p++) {
-        if(memcmp(p, largs->params.latency_marker, lm_length) == 0) {
+        if(memcmp(p, lm, lm_size) == 0) {
             num_markers_found++;
-            p += lm_length - 1;
+            p += lm_size - 1;
         }
     }
 
@@ -1290,8 +1291,8 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
      */
     size_t buf_tail = size - (p - buf);
     if(buf_tail > 0) {
-        if(memcmp(p, largs->params.latency_marker, buf_tail) == 0) {
-            if(buf_tail == lm_length) {
+        if(memcmp(p, lm, buf_tail) == 0) {
+            if(buf_tail == lm_size) {
                 num_markers_found++;
             } else {
                 conn->latency.marker_match_prefix = buf_tail;

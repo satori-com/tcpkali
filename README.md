@@ -48,19 +48,19 @@
       -w, --workers <N=24>        Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
 
-      -e, --unescape-message-args Unescape the following {-m|-f|--first-*} arguments
+      -e, --unescape-message-args Unescape the message data arguments
       --first-message <string>    Send this message first, once
       --first-message-file <name> Read the first message from a file
       -m, --message <string>      Message to repeatedly send to the remote
       -f, --message-file <name>   Read message to send from a file
       -r, --message-rate <R>      Messages per second to send in a connection
 
+      --latency-marker <string>   Measure latency using a per-message marker
+
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
-
-      --latency-marker <string>   Measure latency using a per-message marker
 
     And variable multipliers are:
       <R>:  k (1000, as in "5k" is 5000)

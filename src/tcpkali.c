@@ -158,7 +158,7 @@ static int append_data(const char *str, size_t str_size, char **data, size_t *da
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
-static void unescape(char *data, size_t *initial_data_size);
+static void unescape(void *data, size_t *initial_data_size);
 
 static struct multiplier k_multiplier[] = {
     { "k", 1000 }
@@ -399,11 +399,15 @@ int main(int argc, char **argv) {
             engine_params.websocket_enable = 1;
             break;
         case 'L':
-            if(strlen(optarg) == 0) {
+            engine_params.latency_marker_data = (uint8_t *)strdup(optarg);
+            engine_params.latency_marker_size = strlen(optarg);
+            if(unescape_message_data)
+                unescape(engine_params.latency_marker_data,
+                        &engine_params.latency_marker_size);
+            if(engine_params.latency_marker_size == 0) {
                 fprintf(stderr, "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
             }
-            engine_params.latency_marker = strdup(optarg);
             break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
@@ -492,7 +496,7 @@ int main(int argc, char **argv) {
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
-    if(engine_params.latency_marker) {
+    if(engine_params.latency_marker_data) {
         if(engine_params.data.header_size == engine_params.data.total_size
             || (argc - optind == 0)) {
             fprintf(stderr, "--latency-marker is given, but no messages are supposed to be sent; die confused");
@@ -963,7 +967,7 @@ struct addresses detect_listen_addresses(int listen_port) {
 }
 
 static void
-unescape(char *data, size_t *initial_data_size) {
+unescape(void *data, size_t *initial_data_size) {
     char *r = data;
     char *w = data;
     size_t data_size = initial_data_size ? *initial_data_size : strlen(data);
@@ -1022,7 +1026,7 @@ unescape(char *data, size_t *initial_data_size) {
     *w = '\0';
 
     if(initial_data_size)
-        *initial_data_size = (w - data);
+        *initial_data_size = (w - (char *)data);
 }
 
 /*
@@ -1049,19 +1053,19 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  -T, --duration <T=10s>      Load test for the specified amount of time\n"
     "\n"
-    "  -e, --unescape-message-args Unescape the following {-m|-f|--first-*} arguments\n"
+    "  -e, --unescape-message-args Unescape the message data arguments\n"
     "  --first-message <string>    Send this message first, once\n"
     "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
     "  --message-rate <R>          Messages per second to send in a connection\n"
     "\n"
+    "  --latency-marker <string>   Measure latency using a per-message marker\n"
+    "\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>        StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
-    "\n"
-    "  --latency-marker <string>   Measure latency using a per-message marker\n"
     "\n"
     "Variable units and recognized multipliers:\n"
     "  <R>:  k (1000, as in \"5k\" is 5000)\n"
