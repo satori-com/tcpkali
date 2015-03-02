@@ -104,7 +104,7 @@
  * malloc():
  *
  *   struct StreamBMH *ctx;
- *   SBMH_ALLOC_AND_INIT(ctx, "my needle");
+ *   SBMH_ALLOC_AND_INIT(ctx, occ, "my needle");
  *   if (ctx == NULL) {
  *      // error...
  *   }
@@ -190,10 +190,14 @@
 #endif
 
 
-#include <cstddef>
-#include <cstring>
-#include <cassert>
-#include <algorithm>
+#include <sys/types.h>
+#include <string.h>
+#include <assert.h>
+
+typedef enum { sbmh_false, sbmh_true } sbmh_bool;
+#define ssize_t(v)      ((ssize_t)(v))
+#define size_t(v)       ((size_t)(v))
+#define sbmh_size_t(v)  ((sbmh_size_t)(v))
 
 
 // namespace Passenger {
@@ -223,7 +227,7 @@ struct StreamBMH_Occ {
 
 struct StreamBMH {
 	/***** Public but read-only fields *****/
-	bool          found;
+	sbmh_bool     found;
 	
 	/***** Public fields; feel free to populate *****/
 	sbmh_data_cb  callback;
@@ -238,12 +242,12 @@ struct StreamBMH {
 };
 
 #define SBMH_SIZE(needle_len) (sizeof(struct StreamBMH) + (needle_len) - 1)
-#define SBMH_ALLOC_AND_INIT(sbmh, needle) \
+#define SBMH_ALLOC_AND_INIT(sbmh, occ, needle) \
 	do { \
 		size_t needle_len = strlen((const char *) needle); \
 		sbmh = (struct StreamBMH *) malloc(SBMH_SIZE(needle_len)); \
-		sbmh_init(sbmh, (const unsigned char *) needle, needle_len); \
-	} while (false)
+		sbmh_init(sbmh, occ, (const unsigned char *) needle, needle_len); \
+	} while (0)
 
 #if 0
 	#include <string>
@@ -253,22 +257,22 @@ struct StreamBMH {
 	#define SBMH_DEBUG1(format, arg1) printf(format, arg1)
 	#define SBMH_DEBUG2(format, arg1, arg2) printf(format, arg1, arg2)
 #else
-	#define SBMH_DEBUG(format) do { /* nothing */ } while (false)
-	#define SBMH_DEBUG1(format, arg1) do { /* nothing */ } while (false)
-	#define SBMH_DEBUG2(format, arg1, arg2) do { /* nothing */ } while (false)
+	#define SBMH_DEBUG(format) do { /* nothing */ } while (0)
+	#define SBMH_DEBUG1(format, arg1) do { /* nothing */ } while (0)
+	#define SBMH_DEBUG2(format, arg1, arg2) do { /* nothing */ } while (0)
 #endif
 
 /* Accessor for the lookbehind field. */
 #define _SBMH_LOOKBEHIND(ctx) ((unsigned char *) ctx + sizeof(struct StreamBMH))
 
 
-inline void
+static inline void
 sbmh_reset(struct StreamBMH *restrict ctx) {
-	ctx->found = false;
+	ctx->found = sbmh_false;
 	ctx->lookbehind_size = 0;
 }
 
-inline void
+static inline void
 sbmh_init(struct StreamBMH *restrict ctx, struct StreamBMH_Occ *restrict occ,
 	const unsigned char *restrict needle, sbmh_size_t needle_len)
 {
@@ -300,7 +304,7 @@ sbmh_init(struct StreamBMH *restrict ctx, struct StreamBMH_Occ *restrict occ,
 	}
 }
 
-inline char
+static inline char
 sbmh_lookup_char(const struct StreamBMH *restrict ctx,
 	const unsigned char *restrict data, ssize_t pos)
 {
@@ -311,7 +315,7 @@ sbmh_lookup_char(const struct StreamBMH *restrict ctx,
 	}
 }
 
-inline bool
+static inline sbmh_bool
 sbmh_memcmp(const struct StreamBMH *restrict ctx,
 	const unsigned char *restrict needle,
 	const unsigned char *restrict data,
@@ -326,13 +330,13 @@ sbmh_memcmp(const struct StreamBMH *restrict ctx,
 		if (data_ch == needle_ch) {
 			i++;
 		} else {
-			return false;
+			return sbmh_false;
 		}
 	}
-	return true;
+	return sbmh_true;
 }
 
-inline size_t
+static inline size_t
 sbmh_feed(struct StreamBMH *restrict ctx, const struct StreamBMH_Occ *restrict occtable,
 	const unsigned char *restrict needle, sbmh_size_t needle_len,
 	const unsigned char *restrict data, size_t len)
@@ -377,7 +381,7 @@ sbmh_feed(struct StreamBMH *restrict ctx, const struct StreamBMH_Occ *restrict o
 			
 			if (ch == last_needle_char
 			 && sbmh_memcmp(ctx, needle, data, pos, needle_len - 1)) {
-				ctx->found = true;
+				ctx->found = sbmh_true;
 				ctx->lookbehind_size = 0;
 				if (pos > -ctx->lookbehind_size && ctx->callback != NULL) {
 					ctx->callback(ctx, lookbehind,
@@ -463,7 +467,7 @@ sbmh_feed(struct StreamBMH *restrict ctx, const struct StreamBMH_Occ *restrict o
 		     && unlikely( memcmp(needle, data + pos, needle_len - 1) == 0 )
 		)) {
 			SBMH_DEBUG1("[sbmh] found at position %d\n", (int) pos);
-			ctx->found = true;
+			ctx->found = sbmh_true;
 			if (pos > 0 && ctx->callback != NULL) {
 				ctx->callback(ctx, data, pos);
 			}
@@ -501,7 +505,8 @@ sbmh_feed(struct StreamBMH *restrict ctx, const struct StreamBMH_Occ *restrict o
 	
 	/* Everything until pos is guaranteed not to contain needle data. */
 	if (pos > 0 && ctx->callback != NULL) {
-		ctx->callback(ctx, data, std::min(size_t(pos), len));
+		size_t m = size_t(pos) < len ? size_t(pos) : len;
+		ctx->callback(ctx, data, m);
 	}
 	
 	return len;
