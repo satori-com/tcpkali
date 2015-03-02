@@ -886,13 +886,12 @@ static void start_new_connection(TK_P) {
     }
 
     int want_write = (largs->params.data.total_size || want_catch_connect);
+    int want_events = TK_READ | (want_write ? TK_WRITE : 0);
 #ifdef  USE_LIBUV
     uv_poll_init(TK_A_ &conn->watcher, sockfd);
-    uv_poll_start(&conn->watcher, TK_READ | (want_write ? TK_WRITE : 0),
-        connection_cb_uv);
+    uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
 #else
-    ev_io_init(&conn->watcher, connection_cb, sockfd,
-        TK_READ | (want_write ? TK_WRITE : 0));
+    ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
     ev_io_start(TK_A_ &conn->watcher);
 #endif
 }
@@ -1344,7 +1343,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         /*
-         * Extended channel lifetimes managed out-of-band, but zero
+         * Extended channel lifetimes are managed elsewhere, but zero
          * lifetime can be managed here very quickly.
          */
         if(largs->params.channel_lifetime == 0.0) {
