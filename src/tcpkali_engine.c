@@ -80,11 +80,15 @@ struct connection {
         CONN_OUTGOING,
         CONN_INCOMING,
         CONN_ACCEPTOR,
-    } conn_type:8;
+    } conn_type:2;
     enum state {
         CSTATE_CONNECTED,
         CSTATE_CONNECTING,
-    } conn_state:8;
+    } conn_state:1;
+    enum {
+        WSTATE_SENDING_HTTP_UPGRADE,
+        WSTATE_WS_ESTABLISHED,
+    } ws_state:1;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     TAILQ_ENTRY(connection) hook;
     /* Latency */
@@ -179,7 +183,6 @@ static void expire_channel_lives(TK_P_ tk_timer *w, int revents);
 static void setup_channel_lifetime_timer(TK_P_ double first_timeout);
 static void update_io_interest(TK_P_ struct connection *conn, int events);
 static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
-static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
@@ -1211,7 +1214,7 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct tra
     if(!conn->latency.sent_timestamps)
         return;
 
-    void *data_start = data->ptr + data->header_size;
+    void *data_start = data->ptr + data->once_size;
     if(ptr < data_start) {
         /* Ignore the --first-message in our calculations. */
         if(wrote > (size_t)(data_start - ptr)) {
@@ -1336,6 +1339,41 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
 
 }
 
+/*
+ * Compute the largest amount of data we can send to the channel
+ * using a single write() call.
+ */
+static void largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn, const void **position, size_t *available_length) {
+    off_t *current_offset = &conn->write_offset;
+    size_t accessible_size = largs->params.data.total_size;
+    size_t available = accessible_size - *current_offset;
+
+    /* The first bunch of bytes sent on the WebSocket connection
+     * should be limited by the HTTP upgrade headers.
+     * We then wait for the server reply.
+     */
+    if(conn->data_received == 0
+            && conn->data_sent <= largs->params.data.ws_hdr_size
+            && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
+            && largs->params.websocket_enable) {
+        accessible_size = largs->params.data.ws_hdr_size;
+        size_t available = accessible_size - *current_offset;
+        *position = largs->params.data.ptr + *current_offset;
+        *available_length = available;
+        return;
+    }
+
+    if(available) {
+        *position = largs->params.data.ptr + *current_offset;
+        *available_length = available;
+    } else {
+        size_t off = largs->params.data.once_size;
+        *position = largs->params.data.ptr + off;
+        *available_length = accessible_size - off;
+        *current_offset = off;
+    }
+}
+
 static void connection_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
@@ -1390,6 +1428,20 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
+                /*
+                 * If this is a first packet from the remote server,
+                 * and we're in a WebSocket mode where we should wait for
+                 * the server response before sending rest, unblock our WRITE
+                 * side.
+                 */
+                if(conn->data_received == 0
+                && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
+                && largs->params.websocket_enable
+                && largs->params.data.ws_hdr_size
+                        != largs->params.data.total_size) {
+                    conn->ws_state = WSTATE_WS_ESTABLISHED;
+                    update_io_interest(TK_A_ conn, TK_READ | TK_WRITE);
+                }
                 conn->data_received += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
@@ -1405,10 +1457,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         size_t available_length;
         int record_moved = 0;
 
-        largest_contiguous_chunk(largs, &conn->write_offset, &position, &available_length);
+        largest_contiguous_chunk(largs, conn, &position, &available_length);
         if(!available_length) {
             /* Only the header was sent. Now, silence. */
-            assert(largs->params.data.total_size == largs->params.data.header_size);
+            assert(largs->params.data.total_size == largs->params.data.once_size
+                || largs->params.websocket_enable);
             update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
             return;
         }
@@ -1445,25 +1498,6 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         }
     }
 
-}
-
-/*
- * Compute the largest amount of data we can send to the channel
- * using a single write() call.
- */
-static void largest_contiguous_chunk(struct loop_arguments *largs, off_t *current_offset, const void **position, size_t *available_length) {
-
-    size_t total_size = largs->params.data.total_size;
-    size_t available = total_size - *current_offset;
-    if(available) {
-        *position = largs->params.data.ptr + *current_offset;
-        *available_length = available;
-    } else {
-        size_t off = largs->params.data.header_size;
-        *position = largs->params.data.ptr + off;
-        *available_length = total_size - off;
-        *current_offset = off;
-    }
 }
 
 /*

@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
      * if we are also told to measure latency.
      */
     if(engine_params.latency_marker_data) {
-        if(engine_params.data.header_size == engine_params.data.total_size
+        if(engine_params.data.once_size == engine_params.data.total_size
             || (argc - optind == 0)) {
             fprintf(stderr, "--latency-marker is given, but no messages are supposed to be sent; die confused");
             exit(EX_USAGE);

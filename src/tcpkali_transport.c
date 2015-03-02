@@ -85,13 +85,16 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
         assert((wsp - ws_framing_prefixes)
             <= (ssize_t)sizeof(ws_framing_prefixes));
 
-        return add_transport_framing(ws_iovs,
+        struct transport_data_spec data;
+        data = add_transport_framing(ws_iovs,
             http_hdr_iovs + 2*iovh,
             http_hdr_iovs + 2*iovl, 0, 0, 0);
+        data.ws_hdr_size = http_headers_size;
+        return data;
     } else {
         /* Straight plain flat TCP with no framing and back-to-back messages. */
         char *p;
-        size_t header_size = iovecs_length(iovs, iovh);
+        size_t once_size = iovecs_length(iovs, iovh);
         size_t total_size = iovecs_length(iovs, iovl);
         p = malloc(total_size + 1);
         assert(p);
@@ -99,9 +102,10 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
         struct transport_data_spec data;
         memset(&data, 0, sizeof(data));
         data.ptr = p;
-        data.header_size = header_size;
+        data.ws_hdr_size = 0;
+        data.once_size = once_size;
         data.total_size = total_size;
-        data.single_message_size = total_size - header_size;
+        data.single_message_size = total_size - once_size;
 
         for(size_t i = 0; i < iovl; i++) {
             memcpy(p, iovs[i].iov_base, iovs[i].iov_len);
@@ -119,7 +123,7 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
  * replicate it several times so the total buffer exceeds target_size.
  */
 void replicate_payload(struct transport_data_spec *data, size_t target_size) {
-    size_t payload_size = data->total_size - data->header_size;
+    size_t payload_size = data->total_size - data->once_size;
 
     if(!payload_size) {
         /* Can't blow up an empty buffer. */
@@ -129,16 +133,16 @@ void replicate_payload(struct transport_data_spec *data, size_t target_size) {
         /* The optimum target_size is size(L2)/k */
         size_t n = ceil(((double)target_size)/payload_size);
         size_t new_payload_size = n * payload_size;
-        size_t header_offset = data->header_size;
-        char *p = realloc(data->ptr, header_offset + new_payload_size + 1);
-        void *msg_data = p + header_offset;
+        size_t once_offset = data->once_size;
+        char *p = realloc(data->ptr, once_offset + new_payload_size + 1);
+        void *msg_data = p + once_offset;
         assert(p);
         for(size_t i = 1; i < n; i++) {
-            memcpy(&p[header_offset + i * payload_size], msg_data, payload_size);
+            memcpy(&p[once_offset + i * payload_size], msg_data, payload_size);
         }
-        p[header_offset + new_payload_size] = '\0';
+        p[once_offset + new_payload_size] = '\0';
         data->ptr = p;
-        data->total_size = header_offset + new_payload_size;
+        data->total_size = once_offset + new_payload_size;
     }
 }
 
