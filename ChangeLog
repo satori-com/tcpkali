@@ -3,6 +3,7 @@
     * Maximum storable latency increased from 10s to 100s.
     * -e (--unescape-message-args) now affect --latency-marker string as well.
     * --websocket now awaits response after sending HTTP upgrade headers.
+    * Add WebSocket masking on client->server communication (mandated by RFC).
 
 0.4.2:  2015-Feb-23
     * --channel-bandwidth limit is now applicable to sink mode (--listen-port).

@@ -72,15 +72,18 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
 
     *buf++ = *(uint8_t *)&first_byte;
 
+    /* Mask MUST be present in C->S (RFC) */
+    const unsigned char mask_flag = 0x80;
+
     if(payload_size <= 125) {
-        *buf++ = payload_size;
+        *buf++ = mask_flag | payload_size;
     } else if(payload_size <= 65535) {
-        *buf++ = 126;
+        *buf++ = mask_flag | 126;
         uint16_t network_order_size = htons(payload_size);
         memcpy(buf, &network_order_size, 2);
         buf += 2;
     } else if(sizeof(payload_size) <= sizeof(uint32_t)) {
-        *buf++ = 127;
+        *buf++ = mask_flag | 127;
         memset(buf, 0, 4);
         buf += 4;
         uint32_t network_order_size = htonl(payload_size);
@@ -88,12 +91,18 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
         buf += 4;
     } else {
         /* (>>32) won't work if payload_size is uint32. */
-        *buf++ = 127;
+        *buf++ = mask_flag | 127;
         uint32_t hi = htonl(payload_size >> 32);
         memcpy(buf, &hi, 4);
         buf += 4;
         uint32_t lo = htonl(payload_size & 0xffffffff);
         memcpy(buf, &lo, 4);
+        buf += 4;
+    }
+
+    /* Add 4-byte 0-valued XOR mask (for debugging) */
+    if(mask_flag) {
+        memset(buf, 0, 4);
         buf += 4;
     }
 
