@@ -371,6 +371,9 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
             hdr_value_at_percentile(histogram, 95.0) / 10.0,
             hdr_value_at_percentile(histogram, 99.0) / 10.0,
             hdr_value_at_percentile(histogram, 99.5) / 10.0);
+        printf("Mean and max latencies: %.1f/%.1f (mean/max)\n",
+            hdr_mean(histogram) / 10.0,
+            hdr_max(histogram) / 10.0);
         free(histogram);
     }
     printf("Test duration: %g s.\n", test_duration);
