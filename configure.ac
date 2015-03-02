@@ -64,5 +64,6 @@ AC_CONFIG_FILES([Makefile
                  deps/libstatsd/man/Makefile
                  deps/libstatsd/src/Makefile
                  deps/HdrHistogram/Makefile
+                 deps/boyer-moore-horspool/Makefile
                 ])
 AC_OUTPUT
