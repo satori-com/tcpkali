@@ -49,7 +49,8 @@
 #include <sched.h>
 #endif
 
-#include "hdr_histogram.h"
+#include <StreamBoyerMooreHorspool.h>
+#include <hdr_histogram.h>
 
 #include "tcpkali.h"
 #include "tcpkali_ring.h"
@@ -100,6 +101,8 @@ struct connection {
          * of the incomplete message. */
         unsigned marker_match_prefix;
     } latency;
+    /* Boyer-Moore-Horspool substring search algorithm data */
+    struct StreamBMH     *sbmh_ctx;
 };
 
 struct loop_arguments {
@@ -272,6 +275,14 @@ struct engine *engine_start(struct engine_params params) {
     eng->n_workers = n_workers;
     eng->global_control_pipe_wr = gtcl_pipe_wr;
     eng->global_feedback_pipe_rd = gfbk_pipe_rd;
+
+    /*
+     * Initialize the Boyer-Moore-Horspool occurrences table once.
+     */
+    if(params.latency_marker_data) {
+        sbmh_init(NULL, &params.sbmh_occ,
+            params.latency_marker_data, params.latency_marker_size);
+    }
 
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
@@ -879,6 +890,19 @@ static void start_new_connection(TK_P) {
 
     if(largs->params.latency_marker_data
     && largs->params.data.single_message_size) {
+        /*
+         * Initialize the Boyer-Moore-Horspool context for substring search.
+         */
+        conn->sbmh_ctx = malloc(SBMH_SIZE(largs->params.latency_marker_size));
+        assert(conn->sbmh_ctx);
+        sbmh_init(conn->sbmh_ctx, NULL,
+            largs->params.latency_marker_data,
+            largs->params.latency_marker_size);
+
+        /*
+         * Initialize the latency histogram by copying out the template
+         * parameter from the loop arguments.
+         */
         memset(&conn->latency, 0, sizeof(conn->latency));
         conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
         int ret = hdr_init(largs->histogram->lowest_trackable_value,
@@ -1264,56 +1288,72 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
     size_t lm_size = largs->params.latency_marker_size;
     int num_markers_found = 0;
 
-    if(conn->latency.marker_match_prefix) {
-        if(size > lm_size - conn->latency.marker_match_prefix)
-            bend = buf + lm_size - conn->latency.marker_match_prefix;
-        else
-            bend = buf + size;
-        for(p = buf; p < bend; p++) {
-            if(*p != lm[conn->latency.marker_match_prefix++])
+    const int use_bmh = 0;
+    if(use_bmh) {
+        for(; size > 0 ;) {
+            size_t analyzed = sbmh_feed(conn->sbmh_ctx, &largs->params.sbmh_occ, lm, lm_size, (unsigned char *)buf, size);
+            if(conn->sbmh_ctx->found == sbmh_true) {
+                buf += analyzed;
+                size -= analyzed;
+                num_markers_found++;
+                sbmh_reset(conn->sbmh_ctx);
+            } else {
                 break;
-        }
-        if(p == bend) {
-            if(conn->latency.marker_match_prefix == lm_size) {
-                conn->latency.marker_match_prefix = 0;
-                /* Found the full marker */
-                num_markers_found++;
-            } else {
-                /* The message is still incomplete */
-                return;
             }
         }
-    }
-
-    if(size < lm_size) {
-        bend = buf;
     } else {
-        bend = buf + (size - lm_size);
-    }
-
-    /* Go over they haystack while knowing that haystack's tail is always
-     * greater than the latency marker. */
-    for(p = buf; p < bend; p++) {
-        if(memcmp(p, lm, lm_size) == 0) {
-            num_markers_found++;
-            p += lm_size - 1;
+        if(conn->latency.marker_match_prefix) {
+            if(size > lm_size - conn->latency.marker_match_prefix)
+                bend = buf + lm_size - conn->latency.marker_match_prefix;
+            else
+                bend = buf + size;
+            for(p = buf; p < bend; p++) {
+                if(*p != lm[conn->latency.marker_match_prefix++])
+                    break;
+            }
+            if(p == bend) {
+                if(conn->latency.marker_match_prefix == lm_size) {
+                    conn->latency.marker_match_prefix = 0;
+                    /* Found the full marker */
+                    num_markers_found++;
+                } else {
+                    /* The message is still incomplete */
+                    return;
+                }
+            }
         }
-    }
 
-    /*
-     * The last few bytes of the buffer are shorter than the latency marker.
-     * Try to see whether it is a prefix of the latency marker.
-     */
-    size_t buf_tail = size - (p - buf);
-    if(buf_tail > 0) {
-        if(memcmp(p, lm, buf_tail) == 0) {
-            if(buf_tail == lm_size) {
+        if(size < lm_size) {
+            bend = buf;
+        } else {
+            bend = buf + (size - lm_size);
+        }
+
+        /* Go over they haystack while knowing that haystack's tail is always
+         * greater than the latency marker. */
+        for(p = buf; p < bend; p++) {
+            if(memcmp(p, lm, lm_size) == 0) {
                 num_markers_found++;
-            } else {
-                conn->latency.marker_match_prefix = buf_tail;
+                p += lm_size - 1;
+            }
+        }
+
+        /*
+         * The last few bytes of the buffer are shorter than the latency marker.
+         * Try to see whether it is a prefix of the latency marker.
+         */
+        size_t buf_tail = size - (p - buf);
+        if(buf_tail > 0) {
+            if(memcmp(p, lm, buf_tail) == 0) {
+                if(buf_tail == lm_size) {
+                    num_markers_found++;
+                } else {
+                    conn->latency.marker_match_prefix = buf_tail;
+                }
             }
         }
     }
+
 
     /*
      * Now, for all found markers extract and use the corresponding
@@ -1595,6 +1635,11 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
         break;
     }
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
+
+    /* Remove Boyer-Moore-Horspool string search context. */
+    if(conn->sbmh_ctx) {
+        free(conn->sbmh_ctx);
+    }
 
     tk_close(&conn->watcher, free_connection_by_handle);
 }

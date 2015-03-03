@@ -27,7 +27,8 @@
 #ifndef TCPKALI_ENGINE_H
 #define TCPKALI_ENGINE_H
 
-#include "hdr_histogram.h"
+#include <StreamBoyerMooreHorspool.h>
+#include <hdr_histogram.h>
 
 #include "tcpkali_transport.h"
 #include "tcpkali_atomic.h"
@@ -62,6 +63,7 @@ struct engine_params {
     struct transport_data_spec data;
     uint8_t *latency_marker_data;    /* --latency-marker */
     size_t   latency_marker_size;
+    struct StreamBMH_Occ sbmh_occ;  /* Streaming Boyer-Moore-Horspool */
 };
 
 struct engine *engine_start(struct engine_params);

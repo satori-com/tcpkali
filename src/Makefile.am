@@ -4,7 +4,8 @@ bin_PROGRAMS = tcpkali
 tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
                    -I$(top_srcdir)/deps/libstatsd/src \
-                   -I$(top_srcdir)/deps/HdrHistogram
+                   -I$(top_srcdir)/deps/HdrHistogram \
+                   -I$(top_srcdir)/deps/boyer-moore-horspool
 tcpkali_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 tcpkali_SOURCES = \
                 tcpkali_dns.c tcpkali_dns.h               \
