@@ -901,7 +901,6 @@ static void start_new_connection(TK_P) {
          * Initialize the latency histogram by copying out the template
          * parameter from the loop arguments.
          */
-        memset(&conn->latency, 0, sizeof(conn->latency));
         conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
         int ret = hdr_init(largs->histogram->lowest_trackable_value,
                          largs->histogram->highest_trackable_value,
