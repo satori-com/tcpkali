@@ -37,6 +37,7 @@
       -h, --help                  Print this help screen, then exit
       --version                   Print version number, then exit
       --verbose <level=1>         Verbosity level [0..3]
+      --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)
 
       --ws, --websocket           Use RFC6455 WebSocket transport
       -c, --connections <N=1>     Connections to keep open to the destinations
@@ -45,7 +46,7 @@
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
       -l, --listen-port <port>    Listen on the specified port
-      -w, --workers <N=24>        Number of parallel threads to use
+      -w, --workers <N>           Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
 
       -e, --unescape-message-args Unescape the message data arguments
@@ -62,7 +63,7 @@
       --statsd-port <port>        StatsD port to use (default is 8125)
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
 
-    And variable multipliers are:
+    Variable units and recognized multipliers:
       <R>:  k (1000, as in "5k" is 5000)
       <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
       <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
