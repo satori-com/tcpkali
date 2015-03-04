@@ -1058,7 +1058,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    "  --message-rate <R>          Messages per second to send in a connection\n"
+    "  -r, --message-rate <R>      Messages per second to send in a connection\n"
     "\n"
     "  --latency-marker <string>   Measure latency using a per-message marker\n"
     "\n"
