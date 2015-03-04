@@ -870,21 +870,6 @@ static void start_new_connection(TK_P) {
     pacefier_init(&conn->bw_pace, now);
     conn->remote_index = remote_index;
 
-    int want_catch_connect = (conn_state == CSTATE_CONNECTING
-                    && largs->params.connect_timeout > 0.0);
-    if(want_catch_connect) {
-#ifdef  USE_LIBUV
-        uv_timer_init(TK_A_ &conn->timer);
-        uint64_t delay = 1000 * largs->params.connect_timeout;
-        if(delay == 0) delay = 1;
-        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
-#else
-        ev_timer_init(&conn->timer, conn_timer_cb,
-                      largs->params.connect_timeout, 0.0);
-        ev_timer_start(TK_A_ &conn->timer);
-#endif
-    }
-
     if(largs->params.latency_marker_data
     && largs->params.data.single_message_size) {
         /*
@@ -907,6 +892,21 @@ static void start_new_connection(TK_P) {
                          largs->histogram->significant_figures,
                          &conn->latency.histogram);
         assert(ret == 0);
+    }
+
+    int want_catch_connect = (conn_state == CSTATE_CONNECTING
+                    && largs->params.connect_timeout > 0.0);
+    if(want_catch_connect) {
+#ifdef  USE_LIBUV
+        uv_timer_init(TK_A_ &conn->timer);
+        uint64_t delay = 1000 * largs->params.connect_timeout;
+        if(delay == 0) delay = 1;
+        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
+#else
+        ev_timer_init(&conn->timer, conn_timer_cb,
+                      largs->params.connect_timeout, 0.0);
+        ev_timer_start(TK_A_ &conn->timer);
+#endif
     }
 
     int want_write = (largs->params.data.total_size || want_catch_connect);
