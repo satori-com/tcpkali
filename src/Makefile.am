@@ -17,6 +17,7 @@ tcpkali_SOURCES = \
                 tcpkali_transport.c tcpkali_transport.h   \
                 tcpkali_mavg.h tcpkali_events.h           \
                 tcpkali_ring.c tcpkali_ring.h             \
+                tcpkali_terminfo.c tcpkali_terminfo.h     \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \

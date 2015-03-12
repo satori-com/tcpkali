@@ -58,6 +58,7 @@
 #include "tcpkali_events.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_websocket.h"
+#include "tcpkali_terminfo.h"
 
 #ifndef TAILQ_FOREACH_SAFE
 #define TAILQ_FOREACH_SAFE(var, head, field, tvar)             \
@@ -226,7 +227,7 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
 
 #define DEBUG(level, fmt, args...) do {         \
         if((int)largs->params.verbosity_level >= level)  \
-            fprintf(stderr, fmt, ##args);       \
+            fprintf(stderr, "%s" fmt, tcpkali_clear_eol(), ##args);       \
     } while(0)
 
 struct engine *engine_start(struct engine_params params) {
@@ -1070,7 +1071,7 @@ void debug_dump_data(const void *data, size_t size) {
     }
     *b++ = '\0';
     assert((size_t)(b - buffer) <= sizeof(buffer));
-    fprintf(stderr, "\033[KData(%ld): ➧%s⬅︎\n", (long)size, buffer);
+    fprintf(stderr, "%sData(%ld): ➧%s⬅︎\n", tcpkali_clear_eol(), (long)size, buffer);
 }
 
 static enum {

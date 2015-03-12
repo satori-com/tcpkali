@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -24,42 +24,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#define _BSD_SOURCE
-#define _POSIX_C_SOURCE 200112
-#define _XOPEN_SOURCE 600
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
+#ifndef TCPKALI_TERMINFO_H
+#define TCPKALI_TERMINFO_H
 
-#include "tcpkali_terminfo.h"
+void tcpkali_init_terminal(void);
 
-static int *flagvar;
-static void signal_handler(int __attribute__((unused)) sig) {
-    fprintf(stderr, "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
-    *flagvar = 1;
-}
+/*
+ * Capability "clr_eol":
+ * Return a string which clears the line until the end of it.
+ */
+const char *tcpkali_clear_eol(void);
 
-void
-block_term_signals() {
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigprocmask(SIG_BLOCK, &set, 0);
-}
-
-void
-flagify_term_signals(int *flag) {
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigprocmask(SIG_UNBLOCK, &set, 0);
-
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_mask = set;
-    act.sa_flags = SA_RESETHAND | SA_RESTART;
-    act.sa_handler = signal_handler;
-    flagvar = flag;
-    sigaction(SIGINT, &act, 0);
-}
-
+#endif  /* TCPKALI_TERMINFO_H */

@@ -53,8 +53,7 @@
 #include "tcpkali_websocket.h"
 #include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
-
-#define ANSI_CLEAR_LINE "\033[K"
+#include "tcpkali_terminfo.h"
 
 /*
  * Describe the command line options.
@@ -595,8 +594,8 @@ int main(int argc, char **argv) {
     int print_stats = isatty(1);
     if(print_stats) {
         setvbuf(stdout, 0, _IONBF, 0);
+        tcpkali_init_terminal();
     }
-    char *clear_line = print_stats ? ANSI_CLEAR_LINE : "";
 
     /*
      * Traffic in/out moving average, smoothing period is 3 seconds.
@@ -618,11 +617,11 @@ int main(int argc, char **argv) {
                                             &term_flag,
                                             PHASE_ESTABLISHING_CONNECTIONS,
                                             print_stats) == 0) {
-            fprintf(stderr, "%s", clear_line);
+            fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                 conf.max_connections);
         } else {
-            fprintf(stderr, "%s", clear_line);
+            fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Could not create %d connection%s"
                             " in allotted time (%gs)\n",
                             conf.max_connections,
@@ -653,7 +652,7 @@ int main(int argc, char **argv) {
             break;
     }
 
-    fprintf(stderr, "%s", clear_line);
+    fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
         checkpoint.initial_data_sent,
         checkpoint.initial_data_received);
@@ -772,12 +771,12 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 }
                 fprintf(stderr,
                     "%s  Traffic %.3f↓, %.3f↑ Mbps "
-                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s" ANSI_CLEAR_LINE "\r",
+                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
                     time_progress(checkpoint->epoch_start, now, epoch_end),
                     bps_in/1000000.0, bps_out/1000000.0,
                     (long)conns_in, (long)conns_out,
                     (long)connecting, (long)conns_counter,
-                    latency_buf
+                    latency_buf, tcpkali_clear_eol()
                 );
             }
         }
@@ -866,7 +865,7 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     }
     snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
         "| %d of %d (%d)", conns, max_conns, conns_counter);
-    fprintf(stderr, "%s" ANSI_CLEAR_LINE "\r", buf);
+    fprintf(stderr, "%s%s\r", buf, tcpkali_clear_eol());
 }
 
 static double

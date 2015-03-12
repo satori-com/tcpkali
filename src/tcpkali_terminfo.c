@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -24,42 +24,45 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#define _BSD_SOURCE
-#define _POSIX_C_SOURCE 200112
-#define _XOPEN_SOURCE 600
 #include <stdio.h>
-#include <string.h>
-#include <signal.h>
+#include <stdlib.h>
+
+#include "config.h"
+
+#ifdef  HAVE_CURSES_H
+#include <curses.h>
+#endif
+#ifdef  HAVE_TERM_H
+#include <term.h>
+#endif
 
 #include "tcpkali_terminfo.h"
 
-static int *flagvar;
-static void signal_handler(int __attribute__((unused)) sig) {
-    fprintf(stderr, "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
-    *flagvar = 1;
+static char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
+
+const char *tcpkali_clear_eol() {
+    return str_clear_eol;
+}
+
+#ifdef  HAVE_LIBNCURSES
+
+static void enable_cursor(void) {
+    printf("%s", tgetstr("ve", 0)); /* cursor_normal */
 }
 
 void
-block_term_signals() {
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigprocmask(SIG_BLOCK, &set, 0);
+tcpkali_init_terminal(void) {
+    /* Nicer visuals */
+    tgetent(0, getenv("TERM"));
+    str_clear_eol = tgetstr("ce", 0) ? : "";
+
+    /* Disable cursor */
+    printf("%s", tgetstr("vi", 0));
+    atexit(enable_cursor);
 }
 
-void
-flagify_term_signals(int *flag) {
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigprocmask(SIG_UNBLOCK, &set, 0);
+#else   /* !HAVE_LIBNCURSES */
 
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_mask = set;
-    act.sa_flags = SA_RESETHAND | SA_RESTART;
-    act.sa_handler = signal_handler;
-    flagvar = flag;
-    sigaction(SIGINT, &act, 0);
-}
+void tcpkali_init_terminal(void) { return; }
 
+#endif  /* HAVE_LIBNCURSES */
