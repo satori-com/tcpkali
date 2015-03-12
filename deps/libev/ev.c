@@ -480,7 +480,7 @@ struct signalfd_siginfo
  * This value is good at least till the year 4000.
  */
 #define MIN_INTERVAL  0.0001220703125 /* 1/2**13, good till 4000 */
-/*#define MIN_INTERVAL  0.00000095367431640625 /* 1/2**20, good till 2200 */
+/*#define MIN_INTERVAL  0.00000095367431640625 // 1/2**20, good till 2200 */
 
 #define MIN_TIMEJUMP  1. /* minimum timejump that gets detected (if monotonic clock available) */
 #define MAX_BLOCKTIME 59.743 /* never wait longer than this time (to detect time jumps) */
@@ -1026,7 +1026,7 @@ ecb_inline uint64_t ecb_rotr64 (uint64_t x, unsigned int count) { return (x << (
   #define ecb_unreachable() __builtin_unreachable ()
 #else
   /* this seems to work fine, but gcc always emits a warning for it :/ */
-  ecb_inline void ecb_unreachable (void) ecb_noreturn;
+  ecb_inline void ecb_noreturn ecb_unreachable (void);
   ecb_inline void ecb_unreachable (void) { }
 #endif
 
