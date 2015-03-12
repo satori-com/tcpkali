@@ -1511,6 +1511,22 @@ static void free_connection_by_handle(tk_io *w) {
 }
 
 /*
+ * Free internal structures associated with connection.
+ */
+static void connection_free_internals(struct connection *conn) {
+    /* Remove sent timestamps ring */
+    ring_buffer_free(conn->latency.sent_timestamps);
+
+    /* Remove latency histogram data */
+    if(conn->latency.histogram)
+        free(conn->latency.histogram);
+
+    /* Remove Boyer-Moore-Horspool string search context. */
+    if(conn->latency.sbmh_ctx)
+        free(conn->latency.sbmh_ctx);
+}
+
+/*
  * Close connection and update connection and data transfer counters.
  */
 static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason) {
@@ -1554,16 +1570,15 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     ev_io_stop(TK_A_ &conn->watcher);
 #endif
 
+    /* Propagate connection stats back to the worker */
     connection_flush_stats(TK_A_ conn);
 
-    ring_buffer_free(conn->latency.sent_timestamps);
-    conn->latency.sent_timestamps = 0;
     if(conn->latency.histogram) {
         int64_t n = hdr_add(largs->histogram, conn->latency.histogram);
         assert(n == 0);
-        free(conn->latency.histogram);
     }
 
+    /* Maintain a count of opened/closed connections */
     switch(conn->conn_type) {
     case CONN_OUTGOING:
         if(conn->conn_state == CSTATE_CONNECTING)
@@ -1577,12 +1592,10 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     case CONN_ACCEPTOR:
         break;
     }
+
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
 
-    /* Remove Boyer-Moore-Horspool string search context. */
-    if(conn->latency.sbmh_ctx) {
-        free(conn->latency.sbmh_ctx);
-    }
+    connection_free_internals(conn);
 
     tk_close(&conn->watcher, free_connection_by_handle);
 }

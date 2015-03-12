@@ -41,7 +41,7 @@ void ring_buffer_init(struct ring_buffer *, size_t unit_size);
 #define ring_buffer_free(rb)    do {        \
     if(rb) {                                \
         free(rb->ptr);                      \
-        memset(rb, 0, sizeof(*rb));         \
+        free(rb);                           \
     }                                       \
   } while(0)
 
