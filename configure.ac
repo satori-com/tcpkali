@@ -53,6 +53,26 @@ AC_ARG_WITH([libuv],
          [--with-libuv was given, but test for libuv failed])],
       [])])
 
+dnl Enable Address Sanitizer, if supported by the Clang compiler.
+dnl http://clang.llvm.org/docs/AddressSanitizer.html
+dnl https://code.google.com/p/address-sanitizer/wiki/HowToBuild
+AC_ARG_ENABLE([asan],
+    [AS_HELP_STRING([--enable-asan], [Enable Address Sanitizer])],
+    [enable_asan=$enableval], [enable_asan=no])
+  AS_IF([test "x$enable_asan" != xno], [
+    AX_CHECK_COMPILE_FLAG([-fsanitize=address],
+                          [CFLAGS="$CFLAGS -fsanitize=address"],
+                          [enable_asan=no], [${TK_CFLAGS}])
+    AS_IF([test "x$enable_asan" = xno], [
+        AC_MSG_FAILURE(
+            [--enable-asan is given, but not supported on this platform.
+ Check out https://code.google.com/p/address-sanitizer/wiki/HowToBuild])])
+    dnl Keep error messages nice.
+    AX_CHECK_COMPILE_FLAG([-fno-omit-frame-pointer],
+                          [CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
+                          [], [${TK_CFLAGS}])
+  ])
+
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
