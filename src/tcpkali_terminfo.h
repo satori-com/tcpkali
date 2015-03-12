@@ -35,4 +35,9 @@ void tcpkali_init_terminal(void);
  */
 const char *tcpkali_clear_eol(void);
 
+/*
+ * Terminal is UTF-8 aware
+ */
+int tcpkali_is_utf8();
+
 #endif  /* TCPKALI_TERMINFO_H */

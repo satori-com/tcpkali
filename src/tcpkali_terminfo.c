@@ -26,6 +26,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "config.h"
 
@@ -38,11 +39,11 @@
 
 #include "tcpkali_terminfo.h"
 
+static int int_utf8 = 0;
 static char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
 
-const char *tcpkali_clear_eol() {
-    return str_clear_eol;
-}
+const char *tcpkali_clear_eol() { return str_clear_eol; }
+int tcpkali_is_utf8() { return int_utf8; }
 
 #ifdef  HAVE_LIBNCURSES
 
@@ -52,8 +53,14 @@ static void enable_cursor(void) {
 
 void
 tcpkali_init_terminal(void) {
-    /* Nicer visuals */
-    tgetent(0, getenv("TERM"));
+    char *term = getenv("TERM");
+    if(!term) return;
+    tgetent(0, term);
+
+    if(strcasestr(getenv("LANG") ? : "", "utf-8"))
+        int_utf8 = 1;
+
+    /* Obtain the clear end of line string */
     str_clear_eol = tgetstr("ce", 0) ? : "";
 
     /* Disable cursor */

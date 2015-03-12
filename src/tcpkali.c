@@ -665,8 +665,10 @@ int main(int argc, char **argv) {
 
 static const char *time_progress(double start, double now, double stop) {
     const char *clocks[] = {
-        "🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"
+        "🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
+        "🕕  ", "🕖  ", "🕗  ", "🕘  ", "🕙  ", "🕚  "
     };
+    if(!tcpkali_is_utf8()) return "";
     double span = (stop - start) / (sizeof(clocks)/sizeof(clocks[0]));
     int pos = (now - start) / span;
     if(pos < 0) pos = 0;
@@ -770,7 +772,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                     latency_buf[0] = '\0';
                 }
                 fprintf(stderr,
-                    "%s  Traffic %.3f↓, %.3f↑ Mbps "
+                    "%sTraffic %.3f↓, %.3f↑ Mbps "
                     "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
                     time_progress(checkpoint->epoch_start, now, epoch_end),
                     bps_in/1000000.0, bps_out/1000000.0,
