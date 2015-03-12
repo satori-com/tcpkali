@@ -43,6 +43,7 @@ typedef uv_loop_t               tk_loop;
 #define tk_set_userdata(loop,p) ((loop)->data = (p))
 #define tk_loop_new()           uv_loop_new()
 #define tk_stop(loop)           uv_stop(loop)
+#define tk_io_stop(loop, p)     uv_poll_stop((p))
 #define tk_timer_stop(loop, t)  uv_timer_stop((t))
 
 #else       /* Use libev */
@@ -78,6 +79,7 @@ typedef struct ev_loop          tk_loop;
 #define tk_set_userdata         ev_set_userdata
 #define tk_loop_new()           ev_loop_new(EVFLAG_AUTO)
 #define tk_stop(loop)           ev_break((loop), EVBREAK_ALL)
+#define tk_io_stop(loop, p)     ev_io_stop((loop), (p))
 #define tk_timer_stop(loop, t)  ev_timer_stop((loop), (t))
 
 #endif  /* libuv vs libev */

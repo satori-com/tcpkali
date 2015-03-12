@@ -1092,16 +1092,8 @@ static enum {
         double delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
         if(delay > 1.0) delay = 1.0;
         else if(delay < 0.001) delay = 0.001;
-        switch(conn->conn_type) {
-        case CONN_OUTGOING:
-            update_io_interest(TK_A_ conn, TK_READ);
-            break;
-        case CONN_INCOMING:
-            update_io_interest(TK_A_ conn, 0);
-            break;
-        case CONN_ACCEPTOR:
-            assert(!"Unreachable");
-        }
+
+        tk_timer_stop(TK_A, &conn->timer);
 #ifdef  USE_LIBUV
         uv_timer_init(TK_A_ &conn->timer);
         uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
@@ -1135,7 +1127,9 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
             switch(limit_channel_bandwidth(TK_A_ conn, &recv_size)) {
             case LB_UNLIMITED: record_moved = 0; break;
             case LB_PROCEED:   record_moved = 1; break;
-            case LB_GO_SLEEP: return;
+            case LB_GO_SLEEP:
+                update_io_interest(TK_A_ conn, 0);
+                return;
             }
 
             ssize_t rd = read(tk_fd(w), buf, recv_size);
@@ -1453,7 +1447,9 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         switch(limit_channel_bandwidth(TK_A_ conn, &available_length)) {
         case LB_UNLIMITED: record_moved = 0; break;
         case LB_PROCEED:   record_moved = 1; break;
-        case LB_GO_SLEEP:  return;
+        case LB_GO_SLEEP:
+            update_io_interest(TK_A_ conn, TK_READ);
+            return;
         }
 
         ssize_t wrote = write(tk_fd(w), position, available_length);
@@ -1532,6 +1528,11 @@ static void connection_free_internals(struct connection *conn) {
 static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason) {
     char buf[256];
     struct loop_arguments *largs = tk_userdata(TK_A);
+
+    /* Stop I/O and timer notifications */
+    tk_io_stop(TK_A, &conn->watcher);
+    tk_timer_stop(TK_A, &conn->timer);
+
     switch(reason) {
     case CCR_LIFETIME:
     case CCR_CLEAN:
@@ -1562,13 +1563,6 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
         largs->worker_connection_timeouts++;
         break;
     }
-#ifdef  USE_LIBUV
-    uv_timer_stop(&conn->timer);
-    uv_poll_stop(&conn->watcher);
-#else
-    ev_timer_stop(TK_A_ &conn->timer);
-    ev_io_stop(TK_A_ &conn->watcher);
-#endif
 
     /* Propagate connection stats back to the worker */
     connection_flush_stats(TK_A_ conn);
