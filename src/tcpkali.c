@@ -78,7 +78,7 @@ static struct option cli_long_options[] = {
     { "message-rate", 1, 0, 'r' },
     { "nagle", 1, 0, 'N' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
-    { "statsd-server", 1, 0,    CLI_STATSD_OFFSET + 's' },
+    { "statsd-host", 1, 0,      CLI_STATSD_OFFSET + 'h' },
     { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
     { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
     { "unescape-message-args", 0, 0, 'e' },
@@ -95,7 +95,7 @@ static struct tcpkali_config {
     double connect_rate;     /* New connects per second. */
     double test_duration;    /* Seconds for the full test. */
     int   statsd_enable;
-    char *statsd_server;
+    char *statsd_host;
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
@@ -112,7 +112,7 @@ static struct tcpkali_config {
         .connect_rate = 100.0,
         .test_duration = 10.0,
         .statsd_enable = 0,
-        .statsd_server = "127.0.0.1",
+        .statsd_host = "127.0.0.1",
         .statsd_port = 8125,
         .statsd_namespace = "tcpkali"
     };
@@ -349,8 +349,8 @@ int main(int argc, char **argv) {
         case CLI_STATSD_OFFSET + 'e':
             conf.statsd_enable = 1;
             break;
-        case CLI_STATSD_OFFSET+'s':
-            conf.statsd_server = strdup(optarg);
+        case CLI_STATSD_OFFSET+'h':
+            conf.statsd_host = strdup(optarg);
             break;
         case CLI_STATSD_OFFSET+'n':
             conf.statsd_namespace = strdup(optarg);
@@ -569,7 +569,7 @@ int main(int argc, char **argv) {
      */
     Statsd *statsd;
     if(conf.statsd_enable) {
-        statsd_new(&statsd, conf.statsd_server,
+        statsd_new(&statsd, conf.statsd_host,
                             conf.statsd_port,
                             conf.statsd_namespace, NULL);
         /* Clear up traffic numbers, for better graphing. */
