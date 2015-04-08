@@ -55,6 +55,7 @@ struct engine_params {
         NSET_NODELAY_OFF = 0,  /* Enable Nagle */
         NSET_NODELAY_ON = 1,   /* Disable Nagle */
     } nagle_setting;
+    size_t sock_sndbuf_size;        /* SO_SNDBUF setting */
     double connect_timeout;
     double channel_lifetime;
     double epoch;

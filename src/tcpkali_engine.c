@@ -823,6 +823,20 @@ static void start_new_connection(TK_P) {
             rc = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
             assert(rc != -1);
         }
+        size_t size = largs->params.sock_sndbuf_size;
+        if(size) {
+            int rc = setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF,
+                                &size, sizeof(size));
+            assert(rc != -1);
+            if((int)largs->params.verbosity_level >= DBG_DETAIL) {
+                socklen_t size_size = sizeof(size);
+                int rc = getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF,
+                                &size, &size_size);
+                assert(rc != -1);
+                DEBUG(DBG_DETAIL, "setsockopt(%d, SO_SNDBUF, %ld) -> %ld\n",
+                    sockfd, (long)largs->params.sock_sndbuf_size, (long)size);
+            }
+        }
     }
 
     int conn_state;

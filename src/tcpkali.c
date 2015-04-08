@@ -77,6 +77,7 @@ static struct option cli_long_options[] = {
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'r' },
     { "nagle", 1, 0, 'N' },
+    { "sndbuf", 1, 0, 'S' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
     { "statsd-host", 1, 0,      CLI_STATSD_OFFSET + 'h' },
     { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
@@ -159,8 +160,8 @@ static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
 static void unescape(void *data, size_t *initial_data_size);
 
-static struct multiplier k_multiplier[] = {
-    { "k", 1000 }
+static struct multiplier km_multiplier[] = {
+    { "k", 1000 }, { "m", 1000000 }, { "M", 1000000 }
 };
 static struct multiplier s_multiplier[] = {
     { "ms", 0.001 }, { "millisecond", 0.001 }, { "milliseconds", 0.001 },
@@ -232,8 +233,8 @@ int main(int argc, char **argv) {
             break;
         case 'R':
             conf.connect_rate = parse_with_multipliers(option, optarg,
-                            k_multiplier,
-                            sizeof(k_multiplier)/sizeof(k_multiplier[0]));
+                            km_multiplier,
+                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
             if(conf.connect_rate <= 0) {
                 fprintf(stderr, "Expected positive --connect-rate=%s\n", optarg);
                 exit(EX_USAGE);
@@ -327,8 +328,8 @@ int main(int argc, char **argv) {
             }
         case 'r': {
             double rate = parse_with_multipliers(option, optarg,
-                        k_multiplier,
-                        sizeof(k_multiplier)/sizeof(k_multiplier[0]));
+                        km_multiplier,
+                        sizeof(km_multiplier)/sizeof(km_multiplier[0]));
             if(rate <= 0) {
                 fprintf(stderr, "Expecting --message-rate > 0\n");
                 exit(EX_USAGE);
@@ -344,6 +345,17 @@ int main(int argc, char **argv) {
             else {
                 fprintf(stderr, "Expecting --nagle \"on\" or \"off\"\n");
                 exit(EX_USAGE);
+            }
+            break;
+        case 'S': { /* --sndbuf */
+            long size = parse_with_multipliers(option, optarg,
+                        km_multiplier,
+                        sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            if(size <= 0) {
+                fprintf(stderr, "Expecting --sndbuf > 0\n");
+                exit(EX_USAGE);
+            }
+            engine_params.sock_sndbuf_size = size;
             }
             break;
         case CLI_STATSD_OFFSET + 'e':
@@ -1043,6 +1055,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --version                   Print version number, then exit\n"
     "  --verbose <level=1>         Verbosity level [0..%d]\n"
     "  --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)\n"
+    "  --sndbuf <N>                Send buffers (set SO_SNDBUF)\n"
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
@@ -1069,7 +1082,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
     "\n"
     "Variable units and recognized multipliers:\n"
-    "  <R>:  k (1000, as in \"5k\" is 5000)\n"
+    "  <R>:  k (1000, as in \"5k\" is 5000), m (millions)\n"
     "  <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
     "  <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
     (_DBG_MAX - 1),
