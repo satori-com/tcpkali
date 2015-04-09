@@ -38,6 +38,8 @@
       --version                   Print version number, then exit
       --verbose <level=1>         Verbosity level [0..3]
       --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)
+      --rcvbuf <S>                Receive buffers (set SO_RCVBUF)
+      --sndbuf <S>                Send buffers (set SO_SNDBUF)
 
       --ws, --websocket           Use RFC6455 WebSocket transport
       -c, --connections <N=1>     Connections to keep open to the destinations
@@ -64,9 +66,10 @@
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
 
     Variable units and recognized multipliers:
-      <R>:  k (1000, as in "5k" is 5000)
-      <Bw>: kbps, Mbps (bits per second), kBps, MBps (bytes per second)
-      <T>:  ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
+      <N, R>:  k (1000, as in "5k" is 5000), m (1000000)
+      <S>:     k (1024, as in "5k" is 5120), m (1024*1024)
+      <Bw>:    kbps, Mbps (bits per second), kBps, MBps (bytes per second)
+      <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
 
 # Examples
 

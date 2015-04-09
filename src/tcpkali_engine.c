@@ -187,6 +187,7 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
+static void set_socket_options(int fd, struct loop_arguments *largs);
 
 #ifdef  USE_LIBUV
 static void expire_channel_lives_uv(tk_timer *w) {
@@ -493,6 +494,39 @@ static void set_nbio(int fd, int onoff) {
         rc = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
     }
     assert(rc != -1);
+}
+
+#define SET_XXXBUF(fd, opt, value)  do {                    \
+    if((value))                                             \
+        set_socket_xxxbuf(fd, opt, #opt, value, largs);     \
+    } while(0)
+static void set_socket_xxxbuf(int fd, int opt, const char *opt_name, size_t value, struct loop_arguments *largs) {
+    int rc = setsockopt(fd, SOL_SOCKET, opt, &value, sizeof(value));
+    assert(rc != -1);
+    if(largs->params.verbosity_level >= DBG_DETAIL) {
+        size_t end_value = value;
+        socklen_t end_value_size = sizeof(end_value);
+        int rc = getsockopt(fd, SOL_SOCKET, SO_SNDBUF,
+                            &end_value, &end_value_size);
+        assert(rc != -1);
+        DEBUG(DBG_DETAIL, "setsockopt(%d, %s, %ld) -> %ld\n",
+              fd, opt_name, (long)value, (long)end_value);
+    }
+}
+
+static void set_socket_options(int fd, struct loop_arguments *largs) {
+    int on = ~0;
+    int rc = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+    assert(rc != -1);
+    if(largs->params.nagle_setting != NSET_UNSET) {
+        int v = largs->params.nagle_setting;
+        rc = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
+        assert(rc != -1);
+    }
+
+    SET_XXXBUF(fd, SO_RCVBUF, largs->params.sock_rcvbuf_size);
+
+    SET_XXXBUF(fd, SO_SNDBUF, largs->params.sock_sndbuf_size);
 }
 
 size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
@@ -815,28 +849,7 @@ static void start_new_connection(TK_P) {
         return; /* Come back later */
     } else {
         set_nbio(sockfd, 1);
-        int on = ~0;
-        int rc = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-        assert(rc != -1);
-        if(largs->params.nagle_setting != NSET_UNSET) {
-            int v = largs->params.nagle_setting;
-            rc = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
-            assert(rc != -1);
-        }
-        size_t size = largs->params.sock_sndbuf_size;
-        if(size) {
-            int rc = setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF,
-                                &size, sizeof(size));
-            assert(rc != -1);
-            if((int)largs->params.verbosity_level >= DBG_DETAIL) {
-                socklen_t size_size = sizeof(size);
-                int rc = getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF,
-                                &size, &size_size);
-                assert(rc != -1);
-                DEBUG(DBG_DETAIL, "setsockopt(%d, SO_SNDBUF, %ld) -> %ld\n",
-                    sockfd, (long)largs->params.sock_sndbuf_size, (long)size);
-            }
-        }
+        set_socket_options(sockfd, largs);
     }
 
     int conn_state;
@@ -1017,6 +1030,7 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     if(sockfd == -1)
         return;
     set_nbio(sockfd, 1);
+    set_socket_options(sockfd, largs);
 
     atomic_increment(&largs->connections_counter);
 

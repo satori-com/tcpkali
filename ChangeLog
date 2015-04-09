@@ -5,6 +5,8 @@
     * --websocket now awaits response after sending HTTP upgrade headers.
     * Add WebSocket masking on client->server communication (mandated by RFC).
     * Use Boyer-Moore-Horspool to search --latency-marker in the stream.
+    * Add --sndbuf and --rcvbuf command line options to adjust kernel buffers
+	  via setsockopt(SO_*BUF).
 
 0.4.2:  2015-Feb-23
     * --channel-bandwidth limit is now applicable to sink mode (--listen-port).
