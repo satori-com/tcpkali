@@ -56,7 +56,7 @@ AC_ARG_WITH([libuv],
 AC_CHECK_HEADERS(curses.h term.h)
 AC_CHECK_LIB([ncurses], [tgetent])
 
-dnl Enable Address Sanitizer, if supported by the Clang compiler.
+dnl Enable Address Sanitizer, if supported by gcc (4.8+) or clang.
 dnl http://clang.llvm.org/docs/AddressSanitizer.html
 dnl https://code.google.com/p/address-sanitizer/wiki/HowToBuild
 AC_ARG_ENABLE([asan],
@@ -74,6 +74,28 @@ AC_ARG_ENABLE([asan],
     AX_CHECK_COMPILE_FLAG([-fno-omit-frame-pointer],
                           [CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
                           [], [${TK_CFLAGS}])
+  ])
+
+dnl Enable Thread Sanitizer, if supported by clang.
+dnl http://clang.llvm.org/docs/ThreadSanitizer.html
+dnl https://code.google.com/p/address-sanitizer/wiki/HowToBuild
+AC_ARG_ENABLE([tsan],
+    [AS_HELP_STRING([--enable-tsan], [Enable Thread Sanitizer])],
+    [enable_tsan=$enableval], [enable_tsan=no])
+  AS_IF([test "x$enable_tsan" != xno], [
+    AX_CHECK_COMPILE_FLAG([-fsanitize=thread],
+                          [CFLAGS="$CFLAGS -fsanitize=thread"],
+                          [enable_tsan=no], [${TK_CFLAGS}])
+    AS_IF([test "x$enable_tsan" = xno], [
+        AC_MSG_FAILURE(
+            [--enable-tsan is given, but not supported on this platform.
+ Check out https://code.google.com/p/address-sanitizer/wiki/HowToBuild])])
+    dnl Keep error messages nice.
+    AX_CHECK_COMPILE_FLAG([-fno-omit-frame-pointer],
+                          [CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
+                          [], [${TK_CFLAGS}])
+    dnl -fsanitize=thread linking must be done with -pie or -shared
+    dnl We can't do anything about this message in GCC; use clang.
   ])
 
 AC_CONFIG_FILES([Makefile
