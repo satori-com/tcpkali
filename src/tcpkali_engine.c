@@ -413,10 +413,10 @@ void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t 
     size_t c_count = 0;
 
     for(int n = 0; n < eng->n_workers; n++) {
-        c_conn  += eng->loops[n].outgoing_connecting;
-        c_out   += eng->loops[n].outgoing_established;
-        c_in    += eng->loops[n].incoming_established;
-        c_count += eng->loops[n].connections_counter;
+        c_conn  += atomic_get(&eng->loops[n].outgoing_connecting);
+        c_out   += atomic_get(&eng->loops[n].outgoing_established);
+        c_in    += atomic_get(&eng->loops[n].incoming_established);
+        c_count += atomic_get(&eng->loops[n].connections_counter);
     }
     *connecting = c_conn;
     *incoming = c_in;
