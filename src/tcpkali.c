@@ -325,6 +325,13 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             engine_params.channel_bandwidth_Bps = Bps;
+            /*
+             * --channel-bandwidth intentionally disregards the message
+             * boundary, unlike --message-rate, which attempts to preserve it.
+             * Therefore, use --channel-bandwidth to split the message into
+             * smaller fragments, if needed.
+             */
+            engine_params.minimal_move_size = 1;
             break;
             }
         case 'r': {
