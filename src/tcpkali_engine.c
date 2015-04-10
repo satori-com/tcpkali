@@ -97,7 +97,7 @@ struct connection {
     struct {
         struct ring_buffer *sent_timestamps;
         struct hdr_histogram *histogram;
-        unsigned incomplete_message_bytes_sent;
+        unsigned message_bytes_credit;  /* See (EXPL:1) below. */
         /* Boyer-Moore-Horspool substring search algorithm data */
         struct StreamBMH     *sbmh_ctx;
     } latency;
@@ -900,6 +900,9 @@ static void start_new_connection(TK_P) {
 
     if(largs->params.latency_marker_data
     && largs->params.data.single_message_size) {
+        conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
+            = largs->params.data.single_message_size - 1;
+
         /*
          * Initialize the Boyer-Moore-Horspool context for substring search.
          */
@@ -1271,12 +1274,26 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct tra
 
     struct loop_arguments *largs = tk_userdata(TK_A);
 
-    size_t sent = wrote + conn->latency.incomplete_message_bytes_sent;
-    size_t whole_msgs = (sent / largs->params.data.single_message_size);
-    conn->latency.incomplete_message_bytes_sent =
-        sent % largs->params.data.single_message_size;
+    /*
+     * (EXPL:1)
+     * Arguably we should record timestamps only for the whole messages which
+     * were sent. However, in some cases (such as with echo servers) the server
+     * could start replying earlier than the whole message is received. This
+     * confuses the latency estimation code because the reply gets received
+     * before the message is fully sent to the remote system. For example,
+     *  tcpkali --message Foooooo --latency-marker F <ip>:echo
+     * would fail, because F is sometimes received before than the trailing
+     * ooo's get to be sent. Therefore we record the timestamp even after
+     * only the very first message byte is sent.
+     */
+
+    size_t msgsize = largs->params.data.single_message_size;
+    size_t pretend_sent = wrote + conn->latency.message_bytes_credit;
+    size_t messages = pretend_sent / msgsize;
+    conn->latency.message_bytes_credit =
+        pretend_sent % largs->params.data.single_message_size;
     int ring_grown = 0;
-    for(double now = tk_now(TK_A); whole_msgs; whole_msgs--) {
+    for(double now = tk_now(TK_A); messages; messages--) {
         ring_grown |= ring_buffer_add(conn->latency.sent_timestamps, now);
     }
     if(ring_grown) {
