@@ -1,6 +1,7 @@
 
 0.?:
-	* --enable-asan and --enable-tsan flags to enable address/thread sanitizer.
+    * --enable-asan and --enable-tsan flags to enable address/thread sanitizer.
+    * Do not account latencies for --first-message.
 
 0.4.9:	2015-Apr-09
     * Maximum storable latency increased from 10s to 100s.
