@@ -76,7 +76,7 @@ struct connection {
     struct pacefier bw_pace;
     off_t write_offset;
     atomic_wide_t data_sent;
-    atomic_wide_t data_received;
+    atomic_wide_t data_rcvd;
     float channel_eol_point;    /* End of life time, since epoch */
     enum type {
         CONN_OUTGOING,
@@ -119,7 +119,7 @@ struct loop_arguments {
     int thread_no;
     /* The following atomic members are accessed outside of worker thread */
     atomic_wide_t worker_data_sent      __attribute__((aligned(sizeof(atomic_wide_t))));
-    atomic_wide_t worker_data_received  __attribute__((aligned(sizeof(atomic_wide_t))));
+    atomic_wide_t worker_data_rcvd  __attribute__((aligned(sizeof(atomic_wide_t))));
     atomic_t outgoing_connecting;
     atomic_t outgoing_established;
     atomic_t incoming_established;
@@ -154,7 +154,7 @@ struct engine {
     int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
     atomic_wide_t total_data_sent;
-    atomic_wide_t total_data_received;
+    atomic_wide_t total_data_rcvd;
 };
 
 /*
@@ -322,7 +322,7 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_data_sent, atomic_wide_t initial_data_received) {
+void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_data_sent, atomic_wide_t initial_data_rcvd) {
     size_t connecting, conn_in, conn_out, conn_counter;
     struct hdr_histogram *histogram = 0;
 
@@ -338,8 +338,8 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
         pthread_join(eng->threads[n], &value);
         eng->total_data_sent +=
             eng->loops[n].worker_data_sent;
-        eng->total_data_received +=
-            eng->loops[n].worker_data_received;
+        eng->total_data_rcvd +=
+            eng->loops[n].worker_data_rcvd;
         if(eng->loops[n].histogram) {
             if(!histogram) {
                 int ret;
@@ -359,8 +359,8 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
     double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
     atomic_wide_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
-    atomic_wide_t epoch_data_received = eng->total_data_received-initial_data_received;
-    atomic_wide_t epoch_data_transmitted = epoch_data_sent + epoch_data_received;
+    atomic_wide_t epoch_data_rcvd = eng->total_data_rcvd-initial_data_rcvd;
+    atomic_wide_t epoch_data_transmitted = epoch_data_sent + epoch_data_rcvd;
 
     char buf[64];
 
@@ -368,8 +368,8 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
         express_bytes(epoch_data_sent, buf, sizeof(buf)),
         (uint64_t)epoch_data_sent);
     printf("Total data received: %s (%" PRIu64 " bytes)\n",
-        express_bytes(epoch_data_received, buf, sizeof(buf)),
-        (uint64_t)epoch_data_received);
+        express_bytes(epoch_data_rcvd, buf, sizeof(buf)),
+        (uint64_t)epoch_data_rcvd);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
@@ -377,7 +377,7 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
         (epoch_data_transmitted / test_duration) / conns / 1000.0
     );
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * (epoch_data_received / test_duration) / 1000000.0,
+        8 * (epoch_data_rcvd / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
     if(histogram) {
         printf("Latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
@@ -477,7 +477,7 @@ void engine_traffic(struct engine *eng, atomic_wide_t *sent, atomic_wide_t *rece
     *received = 0;
     for(int n = 0; n < eng->n_workers; n++) {
         *sent += atomic_wide_get(&eng->loops[n].worker_data_sent);
-        *received += atomic_wide_get(&eng->loops[n].worker_data_received);
+        *received += atomic_wide_get(&eng->loops[n].worker_data_rcvd);
     }
 }
 
@@ -598,9 +598,9 @@ static void stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
     struct connection *conn;
     TAILQ_FOREACH(conn, &largs->open_conns, hook) {
         atomic_add(&largs->worker_data_sent, conn->data_sent);
-        atomic_add(&largs->worker_data_received, conn->data_received);
+        atomic_add(&largs->worker_data_rcvd, conn->data_rcvd);
         conn->data_sent = 0;
-        conn->data_received = 0;
+        conn->data_rcvd = 0;
     }
 }
 
@@ -721,7 +721,7 @@ static void *single_engine_loop_thread(void *argp) {
             "  %lu connection_failures\n"
             "  ↳ %lu connection_timeouts\n"
             "  %lu worker_data_sent\n"
-            "  %lu worker_data_received\n",
+            "  %lu worker_data_rcvd\n",
         largs->thread_no,
         largs->incoming_established,
         largs->outgoing_established,
@@ -732,7 +732,7 @@ static void *single_engine_loop_thread(void *argp) {
         largs->worker_connection_failures,
         largs->worker_connection_timeouts,
         (unsigned long)largs->worker_data_sent,
-        (unsigned long)largs->worker_data_received);
+        (unsigned long)largs->worker_data_rcvd);
     if(largs->histogram) {
         DEBUG(DBG_DETAIL,
             "  %.1f latency_95_ms\n"
@@ -1205,7 +1205,7 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
                     pacefier_moved(&conn->bw_pace,
                                    largs->params.channel_bandwidth_Bps,
                                    rd, tk_now(TK_A));
-                conn->data_received += rd;
+                conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
                 }
@@ -1237,7 +1237,7 @@ static void devnull_websocket_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
-                conn->data_received += rd;
+                conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
                 }
@@ -1397,7 +1397,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
      * should be limited by the HTTP upgrade headers.
      * We then wait for the server reply.
      */
-    if(conn->data_received == 0
+    if(conn->data_rcvd == 0
             && conn->data_sent <= largs->params.data.ws_hdr_size
             && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
             && largs->params.websocket_enable) {
@@ -1479,7 +1479,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                  * the server response before sending rest, unblock our WRITE
                  * side.
                  */
-                if(conn->data_received == 0
+                if(conn->data_rcvd == 0
                 && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
                 && largs->params.websocket_enable
                 && largs->params.data.ws_hdr_size
@@ -1487,7 +1487,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     conn->ws_state = WSTATE_WS_ESTABLISHED;
                     update_io_interest(TK_A_ conn, TK_READ | TK_WRITE);
                 }
-                conn->data_received += rd;
+                conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data(buf, rd);
                 }
@@ -1669,9 +1669,9 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 static void connection_flush_stats(TK_P_ struct connection *conn) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     atomic_add(&largs->worker_data_sent, conn->data_sent);
-    atomic_add(&largs->worker_data_received, conn->data_received);
+    atomic_add(&largs->worker_data_rcvd, conn->data_rcvd);
     conn->data_sent = 0;
-    conn->data_received = 0;
+    conn->data_rcvd = 0;
 }
 
 /*
