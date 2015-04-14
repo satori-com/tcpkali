@@ -44,12 +44,14 @@ struct engine_params {
     size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
     size_t minimal_move_size;       /* Number of bytes to read/write at once */
     enum {
-        DBG_ALWAYS,
-        DBG_ERROR,
-        DBG_DETAIL,
-        DBG_DATA,       /* Dump incoming and outgoing data as well */
+        DBG_ALWAYS  = 0,
+        DBG_ERROR   = 0,
+        DBG_NORMAL  = 1,    /* Default verbosity level */
+        DBG_WARNING = 1,    /* Deliberately the same as "normal" */
+        DBG_DETAIL  = 2,    /* Increased verbosity */
+        DBG_DATA    = 3,    /* Dump incoming and outgoing data as well */
         _DBG_MAX
-    } verbosity_level;
+    } verbosity_level;      /* Default verbosity level is 1 */
     enum {
         NSET_UNSET = -1,
         NSET_NODELAY_OFF = 0,  /* Enable Nagle */

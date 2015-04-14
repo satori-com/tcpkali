@@ -843,7 +843,9 @@ static void start_new_connection(TK_P) {
     if(sockfd == -1) {
         switch(errno) {
         case ENFILE:
-            DEBUG(DBG_ERROR, "Cannot create socket, consider changing ulimit -n and/or kern.maxfiles/fs.file-max sysctls\n");
+            DEBUG(DBG_ERROR, "Cannot create socket, "
+                             "consider changing ulimit -n and/or "
+                             "kern.maxfiles/fs.file-max sysctls\n");
             exit(1);
         }
         return; /* Come back later */
@@ -863,7 +865,7 @@ static void start_new_connection(TK_P) {
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
             if(remote_stats->connection_failures == 1) {
-                DEBUG(DBG_ERROR, "Connection to %s is not done: %s\n",
+                DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)), strerror(errno));
             }
             close(sockfd);
@@ -1303,7 +1305,7 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct tra
          */
         const unsigned MEGABYTE = 1024 * 1024;
         if(conn->latency.sent_timestamps->size > 10 * MEGABYTE) {
-            fprintf(stderr,
+            DEBUG(DBG_ERROR,
                 "Sending messages too fast, "
                     "not receiving them back fast enough.\n"
                 "Check that the --latency-marker data is being received back.\n"
@@ -1438,7 +1440,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 case EAGAIN:
                     return;
                 default:
-                    DEBUG(DBG_ERROR, "Closing %s: %s\n",
+                    DEBUG(DBG_NORMAL, "Closing %s: %s\n",
                         format_sockaddr(remote, buf, sizeof(buf)),
                         strerror(errno));
                     close_connection(TK_A_ conn, CCR_REMOTE);
@@ -1507,7 +1509,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 break;
             case EPIPE:
             default:
-                DEBUG(DBG_ERROR, "Connection reset by %s\n",
+                DEBUG(DBG_WARNING, "Connection reset by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
@@ -1600,7 +1602,7 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     case CCR_TIMEOUT:
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
-        DEBUG(DBG_ERROR, "Connection to %s is being closed: %s\n",
+        DEBUG(DBG_NORMAL, "Connection to %s is being closed: %s\n",
                 format_sockaddr((struct sockaddr *)&largs->params
                     .remote_addresses.addrs[conn->remote_index],
                     buf, sizeof(buf)),
