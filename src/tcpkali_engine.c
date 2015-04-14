@@ -884,6 +884,26 @@ static void start_new_connection(TK_P) {
         conn_state = CSTATE_CONNECTED;
     }
 
+    /*
+     * Print the src/dst for a connection if verbosity level is high enough.
+     */
+    if(largs->params.verbosity_level >= DBG_DETAIL) {
+        char srcaddr_buf[INET6_ADDRSTRLEN+64];
+        char dstaddr_buf[INET6_ADDRSTRLEN+64];
+        struct sockaddr_storage srcaddr;
+        socklen_t addrlen = sizeof(srcaddr);
+        if(getsockname(sockfd, (struct sockaddr *)&srcaddr, &addrlen) == 0) {
+            DEBUG(DBG_DETAIL, "Connection %s -> %s opened as %d\n",
+                      format_sockaddr((struct sockaddr *)&srcaddr,
+                            srcaddr_buf, sizeof(srcaddr_buf)),
+                      format_sockaddr(sa, dstaddr_buf, sizeof(dstaddr_buf)),
+                      sockfd);
+        } else {
+            DEBUG(DBG_WARNING, "Can't getsockname(%d): %s",
+                               sockfd, strerror(errno));
+        }
+    }
+
     double now = tk_now(TK_A);
 
     struct connection *conn = calloc(1, sizeof(*conn));
