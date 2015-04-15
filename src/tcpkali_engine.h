@@ -79,14 +79,14 @@ struct engine *engine_start(struct engine_params);
 void engine_get_connection_stats(struct engine *,
     size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
 struct hdr_histogram *engine_get_latency_stats(struct engine *);
-void engine_traffic(struct engine *, atomic_wide_t *sent, atomic_wide_t *received);
+void engine_traffic(struct engine *, non_atomic_wide_t *sent, non_atomic_wide_t *received);
 
 
 size_t engine_initiate_new_connections(struct engine *, size_t n);
 
 void engine_terminate(struct engine *, double epoch_start,
-    atomic_wide_t initial_data_sent,       /* Data sent during ramp-up */
-    atomic_wide_t initial_data_received    /* Data received during ramp-up */
+    non_atomic_wide_t initial_data_sent,    /* Data sent during ramp-up */
+    non_atomic_wide_t initial_data_received /* Data received during ramp-up */
     );
 
 #endif  /* TCPKALI_ENGINE_H */

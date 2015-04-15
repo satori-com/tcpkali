@@ -31,56 +31,83 @@
 #define UNUSED  __attribute__((unused))
 #endif
 
+/*
+ * We introduce two atomic integer types, narrow (32-bit) and wide, which is
+ * hopefully 64-bit, if the system permits. We also introduce non-atomic
+ * types, to allow collecting data in the data type compatible with the
+ * atomic, but not provide atomicity guarantees. This two-tier typing is
+ * good for documentation and correctness.
+ */
 #if defined(__GNUC__) && (__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 || __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
 
-typedef uint32_t atomic_t;
 #ifdef  __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
-typedef uint64_t atomic_wide_t;
+typedef uint64_t non_atomic_wide_t;
 #else
+typedef uint32_t non_atomic_wide_t;
 #warning "This compiler does not have 64-bit compare_and_swap, results might be broken"
-typedef uint32_t atomic_wide_t;
 #endif
 
-static inline void UNUSED
-atomic_add(atomic_wide_t *i, uint64_t v) { __sync_add_and_fetch(i, v); }
-
-static atomic_wide_t UNUSED
-atomic_wide_get(atomic_wide_t *i) { return __sync_add_and_fetch(i, 0); }
+typedef struct { non_atomic_wide_t _atomic_val; } atomic_wide_t;
+typedef uint32_t non_atomic_narrow_t;
+typedef struct { non_atomic_narrow_t _atomic_val; } atomic_narrow_t;
 
 static inline void UNUSED
-atomic_increment(atomic_t *i) { __sync_add_and_fetch(i, 1); }
+atomic_add(atomic_wide_t *i, non_atomic_wide_t v) {
+    __sync_add_and_fetch(&i->_atomic_val, v);
+}
 
 static inline void UNUSED
-atomic_decrement(atomic_t *i) { __sync_add_and_fetch(i, -1); }
+atomic_increment(atomic_narrow_t *i) {
+    __sync_add_and_fetch(&i->_atomic_val, 1);
+}
 
-static inline atomic_t UNUSED
-atomic_get(atomic_t *i) { return __sync_add_and_fetch(i, 0); }
+static inline void UNUSED
+atomic_decrement(atomic_narrow_t *i) {
+    __sync_add_and_fetch(&i->_atomic_val, -1);
+}
+
+static inline non_atomic_narrow_t UNUSED
+atomic_get(atomic_narrow_t *i) {
+    return __sync_add_and_fetch(&i->_atomic_val, 0);
+}
+
+static non_atomic_wide_t UNUSED
+atomic_wide_get(atomic_wide_t *i) {
+    return __sync_add_and_fetch(&i->_atomic_val, 0);
+}
 
 #else   /* No builtin atomics, emulate */
 
 #if SIZEOF_SIZE_T == 4
-typedef uint32_t atomic_t;
+typedef uint32_t atomic_narrow_t;
 typedef uint32_t atomic_wide_t;
-static inline void UNUSED atomic_add(atomic_wide_t *i, uint64_t v) {
-    asm volatile("lock addl %1, %0" : "+m" (*i) : "r" (v));
+static inline void UNUSED
+atomic_add(atomic_wide_t *i, uint64_t v) {
+    asm volatile("lock addl %1, %0" : "+m" (i->_atomic_val) : "r" (v));
 }
-static atomic_wide_t UNUSED atomic_wide_get(atomic_wide_t *i) { return *i; }
-static atomic_t UNUSED atomic_get(atomic_t *i) { return *i; }
 #elif SIZEOF_SIZE_T == 8
-typedef uint32_t atomic_t;
+typedef uint32_t atomic_narrow_t;
 typedef uint64_t atomic_wide_t;
-static inline void UNUSED atomic_add(atomic_wide_t *i, uint64_t v) {
-    asm volatile("lock addq %1, %0" : "+m" (*i) : "r" (v));
+static inline void UNUSED
+atomic_add(atomic_wide_t *i, non_atomic_wide_t v) {
+    asm volatile("lock addq %1, %0" : "+m" (i->_atomic_val) : "r" (v));
 }
-static atomic_wide_t UNUSED atomic_wide_get(atomic_wide_t *i) { return *i; }
-static atomic_t UNUSED atomic_get(atomic_t *i) { return *i; }
 #endif  /* SIZEOF_SIZE_T */
 
-static inline void UNUSED
-atomic_increment(atomic_t *i) { asm volatile("lock incl %0" : "+m" (*i)); }
+static inline non_atomic_narrow_t UNUSED
+atomic_get(atomic_narrow_t *i) { return i->_atomic_val; }
+
+static inline non_atomic_wide_t UNUSED
+atomic_wide_get(atomic_wide_t *i) { return i->_atomic_val; }
 
 static inline void UNUSED
-atomic_decrement(atomic_t *i) { asm volatile("lock decl %0" : "+m" (*i)); }
+atomic_increment(atomic_narrow_t *i) {
+    asm volatile("lock incl %0" : "+m" (i->_atomic_val)); }
+
+static inline void UNUSED
+atomic_decrement(atomic_narrow_t *i) {
+    asm volatile("lock decl %0" : "+m" (i->_atomic_val));
+}
 
 #endif  /* Builtin atomics */
 

@@ -75,10 +75,10 @@ struct connection {
     tk_timer timer;
     struct pacefier bw_pace;
     off_t write_offset;
-    atomic_wide_t data_sent;
-    atomic_wide_t data_rcvd;
-    atomic_wide_t data_sent_reported;
-    atomic_wide_t data_rcvd_reported;
+    non_atomic_wide_t data_sent;
+    non_atomic_wide_t data_rcvd;
+    non_atomic_wide_t data_sent_reported;
+    non_atomic_wide_t data_rcvd_reported;
     float channel_eol_point;    /* End of life time, since epoch */
     enum type {
         CONN_OUTGOING,
@@ -109,8 +109,8 @@ struct loop_arguments {
     struct engine_params params;    /* A copy of engine parameters */
     unsigned int address_offset;    /* An offset into the params.remote_addresses[] */
     struct remote_stats {
-        atomic_t connection_attempts;
-        atomic_t connection_failures;
+        atomic_narrow_t connection_attempts;
+        atomic_narrow_t connection_failures;
     } *remote_stats;    /* Per-thread remote server stats */
     tk_timer stats_timer;
     tk_timer channel_lifetime_timer;
@@ -122,10 +122,10 @@ struct loop_arguments {
     /* The following atomic members are accessed outside of worker thread */
     atomic_wide_t worker_data_sent      __attribute__((aligned(sizeof(atomic_wide_t))));
     atomic_wide_t worker_data_rcvd  __attribute__((aligned(sizeof(atomic_wide_t))));
-    atomic_t outgoing_connecting;
-    atomic_t outgoing_established;
-    atomic_t incoming_established;
-    atomic_t connections_counter;
+    atomic_narrow_t outgoing_connecting;
+    atomic_narrow_t outgoing_established;
+    atomic_narrow_t incoming_established;
+    atomic_narrow_t connections_counter;
     TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
     unsigned long worker_connections_initiated;
     unsigned long worker_connections_accepted;
@@ -155,8 +155,8 @@ struct engine {
     int global_feedback_pipe_rd;
     int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
-    atomic_wide_t total_data_sent;
-    atomic_wide_t total_data_rcvd;
+    non_atomic_wide_t total_data_sent;
+    non_atomic_wide_t total_data_rcvd;
 };
 
 /*
@@ -324,7 +324,7 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_data_sent, atomic_wide_t initial_data_rcvd) {
+void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd) {
     size_t connecting, conn_in, conn_out, conn_counter;
     struct hdr_histogram *histogram = 0;
 
@@ -336,22 +336,21 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
         assert(rc == 1);
     }
     for(int n = 0; n < eng->n_workers; n++) {
+        struct loop_arguments *largs = &eng->loops[n];
         void *value;
         pthread_join(eng->threads[n], &value);
-        eng->total_data_sent +=
-            eng->loops[n].worker_data_sent;
-        eng->total_data_rcvd +=
-            eng->loops[n].worker_data_rcvd;
-        if(eng->loops[n].histogram) {
+        eng->total_data_sent += atomic_wide_get(&largs->worker_data_sent);
+        eng->total_data_rcvd += atomic_wide_get(&largs->worker_data_rcvd);
+        if(largs->histogram) {
             if(!histogram) {
                 int ret;
-                ret = hdr_init(eng->loops[n].histogram->lowest_trackable_value,
-                         eng->loops[n].histogram->highest_trackable_value,
-                         eng->loops[n].histogram->significant_figures,
+                ret = hdr_init(largs->histogram->lowest_trackable_value,
+                         largs->histogram->highest_trackable_value,
+                         largs->histogram->significant_figures,
                          &histogram);
                 assert(ret == 0);
             }
-            int64_t nret = hdr_add(histogram, eng->loops[n].histogram);
+            int64_t nret = hdr_add(histogram, largs->histogram);
             assert(nret == 0);
         }
     }
@@ -360,9 +359,9 @@ void engine_terminate(struct engine *eng, double epoch, atomic_wide_t initial_da
     /* Data snd/rcv after ramp-up (since epoch) */
     double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
-    atomic_wide_t epoch_data_sent     = eng->total_data_sent   - initial_data_sent;
-    atomic_wide_t epoch_data_rcvd = eng->total_data_rcvd-initial_data_rcvd;
-    atomic_wide_t epoch_data_transmitted = epoch_data_sent + epoch_data_rcvd;
+    non_atomic_wide_t epoch_data_sent = eng->total_data_sent-initial_data_sent;
+    non_atomic_wide_t epoch_data_rcvd = eng->total_data_rcvd-initial_data_rcvd;
+    non_atomic_wide_t epoch_data_transmitted = epoch_data_sent+epoch_data_rcvd;
 
     char buf[64];
 
@@ -474,7 +473,7 @@ struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
     return histogram;
 }
 
-void engine_traffic(struct engine *eng, atomic_wide_t *sent, atomic_wide_t *received) {
+void engine_traffic(struct engine *eng, non_atomic_wide_t *sent, non_atomic_wide_t *received) {
     *sent = 0;
     *received = 0;
     for(int n = 0; n < eng->n_workers; n++) {
@@ -713,16 +712,16 @@ static void *single_engine_loop_thread(void *argp) {
             "  %lu worker_data_sent\n"
             "  %lu worker_data_rcvd\n",
         largs->thread_no,
-        largs->incoming_established,
-        largs->outgoing_established,
-        largs->outgoing_connecting,
-        largs->connections_counter,
+        atomic_get(&largs->incoming_established),
+        atomic_get(&largs->outgoing_established),
+        atomic_get(&largs->outgoing_connecting),
+        atomic_get(&largs->connections_counter),
         largs->worker_connections_initiated,
         largs->worker_connections_accepted,
         largs->worker_connection_failures,
         largs->worker_connection_timeouts,
-        (unsigned long)largs->worker_data_sent,
-        (unsigned long)largs->worker_data_rcvd);
+        atomic_wide_get(&largs->worker_data_sent),
+        atomic_wide_get(&largs->worker_data_rcvd));
     if(largs->histogram) {
         DEBUG(DBG_DETAIL,
             "  %.1f latency_95_ms\n"
@@ -854,7 +853,7 @@ static void start_new_connection(TK_P) {
         default:
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
-            if(remote_stats->connection_failures == 1) {
+            if(atomic_get(&remote_stats->connection_failures) == 1) {
                 DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
                         format_sockaddr(sa, buf, sizeof(buf)), strerror(errno));
             }
@@ -976,8 +975,9 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     for(size_t attempts = 0; attempts < largs->params.remote_addresses.n_addrs; attempts++) {
         off = largs->address_offset++ % largs->params.remote_addresses.n_addrs;
         struct remote_stats *rs = &largs->remote_stats[off];
-        if(rs->connection_attempts > 10
-            && rs->connection_failures == rs->connection_attempts) {
+        if(atomic_get(&rs->connection_attempts) > 10
+            && atomic_get(&rs->connection_failures)
+                == atomic_get(&rs->connection_attempts)) {
             continue;
         } else {
             break;
