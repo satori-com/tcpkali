@@ -125,6 +125,8 @@ struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh
 void replicate_payload(struct transport_data_spec *data, size_t target_size) {
     size_t payload_size = data->total_size - data->once_size;
 
+    assert(!(data->flags & TDS_REPLICATED));
+
     if(!payload_size) {
         /* Can't blow up an empty buffer. */
     } else if(payload_size >= target_size) {
@@ -144,5 +146,11 @@ void replicate_payload(struct transport_data_spec *data, size_t target_size) {
         data->ptr = p;
         data->total_size = once_offset + new_payload_size;
     }
+
+    /*
+     * Always mark as replicated, even if we have not increased the size
+     * At least, replication procedure was applied.
+     */
+    data->flags |= TDS_REPLICATED;
 }
 

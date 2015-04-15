@@ -39,6 +39,9 @@ struct transport_data_spec {
     size_t once_size;       /* Part of data to send just once. */
     size_t total_size;
     size_t single_message_size;
+    enum flags {
+        TDS_REPLICATED = 0x01, /* total_size >= once_size+single_message_size */
+    } flags;
 };
 
 
