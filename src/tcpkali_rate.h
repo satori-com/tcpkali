@@ -67,7 +67,7 @@ typedef struct bandwidth_limit {
  */
 static inline UNUSED bandwidth_limit_t
 compute_bandwidth_limit(rate_spec_t rspec, size_t message_size) {
-    bandwidth_limit_t lim;
+    bandwidth_limit_t lim = { 0, 0 };
 
     /*
      * The message_size varies according to the \{expressions} which might
