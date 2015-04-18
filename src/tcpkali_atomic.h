@@ -27,9 +27,7 @@
 #ifndef TCPKALI_ATOMIC_H
 #define TCPKALI_ATOMIC_H
 
-#ifndef UNUSED
-#define UNUSED  __attribute__((unused))
-#endif
+#include "tcpkali_common.h"
 
 /*
  * We introduce two atomic integer types, narrow (32-bit) and wide, which is

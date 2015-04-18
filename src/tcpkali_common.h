@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -24,11 +24,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_H
-#define TCPKALI_H
+#ifndef TCPKALI_COMMON_H
+#define TCPKALI_COMMON_H
 
-#include "tcpkali_common.h"
-#include "tcpkali_dns.h"
-#include "tcpkali_engine.h"
+#include <config.h>
+#include <assert.h>
 
-#endif  /* TCPKALI_H */
+#define UNUSED  __attribute__((unused))
+
+#endif  /* TCPKALI_COMMON_H */
