@@ -43,14 +43,15 @@
 #ifdef  __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
 #define PRIaw   PRIu64
 typedef uint64_t non_atomic_wide_t;
+typedef uint32_t non_atomic_narrow_t;
 #else
 #define PRIaw   PRIu32
 typedef uint32_t non_atomic_wide_t;
+typedef uint32_t non_atomic_narrow_t;
 #warning "This compiler does not have 64-bit compare_and_swap, results might be broken"
 #endif
 
 typedef struct { non_atomic_wide_t _atomic_val; } atomic_wide_t;
-typedef uint32_t non_atomic_narrow_t;
 typedef struct { non_atomic_narrow_t _atomic_val; } atomic_narrow_t;
 
 static inline void UNUSED
@@ -87,21 +88,27 @@ atomic_wide_get(atomic_wide_t *i) {
 
 #if SIZEOF_SIZE_T == 4
 #define PRIaw   PRIu32
-typedef uint32_t atomic_narrow_t;
-typedef uint32_t atomic_wide_t;
-static inline void UNUSED
-atomic_add(atomic_wide_t *i, uint64_t v) {
-    asm volatile("lock addl %1, %0" : "+m" (i->_atomic_val) : "r" (v));
-}
+typedef uint32_t non_atomic_wide_t;
+typedef uint32_t non_atomic_narrow_t;
 #elif SIZEOF_SIZE_T == 8
 #define PRIaw   PRIu64
-typedef uint32_t atomic_narrow_t;
-typedef uint64_t atomic_wide_t;
-static inline void UNUSED
-atomic_add(atomic_wide_t *i, non_atomic_wide_t v) {
-    asm volatile("lock addq %1, %0" : "+m" (i->_atomic_val) : "r" (v));
-}
+typedef uint64_t non_atomic_wide_t;
+typedef uint32_t non_atomic_narrow_t;
 #endif  /* SIZEOF_SIZE_T */
+
+typedef struct { non_atomic_wide_t _atomic_val; } atomic_wide_t;
+typedef struct { non_atomic_narrow_t _atomic_val; } atomic_narrow_t;
+
+static inline void UNUSED
+atomic_add(atomic_wide_t *i, uint64_t v) {
+#if SIZEOF_SIZE_T == 4
+    asm volatile("lock addl %1, %0" : "+m" (i->_atomic_val) : "r" (v));
+#elif SIZEOF_SIZE_T == 8
+    asm volatile("lock addq %1, %0" : "+m" (i->_atomic_val) : "r" (v));
+#else
+#error "Weird platform, aborting"
+#endif  /* SIZEOF_SIZE_T */
+}
 
 static inline non_atomic_narrow_t UNUSED
 atomic_get(atomic_narrow_t *i) { return i->_atomic_val; }
