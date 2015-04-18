@@ -47,6 +47,7 @@
 
 #include "tcpkali.h"
 #include "tcpkali_mavg.h"
+#include "tcpkali_data.h"
 #include "tcpkali_pacefier.h"
 #include "tcpkali_events.h"
 #include "tcpkali_signals.h"
@@ -159,7 +160,6 @@ static int append_data(const char *str, size_t str_size, char **data, size_t *da
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
-static void unescape(void *data, size_t *initial_data_size);
 
 static struct multiplier km_multiplier[] = { { "k", 1000 }, { "m", 1000000 } };
 static struct multiplier kb_multiplier[] = { { "k", 1024 }, { "m", 1024*1024 } };
@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
             conf.message_data = strdup(optarg);
             conf.message_size = strlen(optarg);
             if(unescape_message_data)
-                unescape(conf.message_data, &conf.message_size);
+                unescape_data(conf.message_data, &conf.message_size);
             break;
         case '1':   /* --first-message */
             if(conf.first_message_data) {
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
             char *str = strdup(optarg);
             size_t slen = strlen(optarg);
             if(unescape_message_data)
-                unescape(str, &slen);
+                unescape_data(str, &slen);
             if(append_data(str, slen,
                     &conf.first_message_data, &conf.first_message_size) != 0) {
                 exit(EX_USAGE);
@@ -289,7 +289,7 @@ int main(int argc, char **argv) {
                 exit(EX_DATAERR);
             }
             if(unescape_message_data)
-                unescape(conf.message_data, &conf.message_size);
+                unescape_data(conf.message_data, &conf.message_size);
             break;
         case 'F':
             if(conf.first_message_data) {
@@ -300,7 +300,7 @@ int main(int argc, char **argv) {
                 exit(EX_DATAERR);
             }
             if(unescape_message_data)
-                unescape(conf.message_data, &conf.message_size);
+                unescape_data(conf.message_data, &conf.message_size);
             break;
         case 'w': {
             int n = atoi(optarg);
@@ -426,7 +426,7 @@ int main(int argc, char **argv) {
             char *data  = strdup(optarg);
             size_t size = strlen(optarg);
             if(unescape_message_data)
-                unescape(data, &size);
+                unescape_data(data, &size);
             if(size == 0) {
                 fprintf(stderr, "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
@@ -987,69 +987,6 @@ struct addresses detect_listen_addresses(int listen_port) {
                                addresses);
 
     return addresses;
-}
-
-static void
-unescape(void *data, size_t *initial_data_size) {
-    char *r = data;
-    char *w = data;
-    size_t data_size = initial_data_size ? *initial_data_size : strlen(data);
-    char *end = data + data_size;
-
-    for(; r < end; r++, w++) {
-        switch(*r) {
-        default:
-            *w = *r;
-            break;
-        case '\\':
-            r++;
-            switch(*r) {
-            case 'n': *w = '\n'; break;
-            case 'r': *w = '\r'; break;
-            case 'f': *w = '\f'; break;
-            case 'b': *w = '\b'; break;
-            case 'x': {
-                /* Do not parse more than 2 symbols (ff) */
-                char digits[3];
-                char *endptr = (r+3) < end ? (r+3) : end;
-                memcpy(digits, r+1, endptr-r-1);    /* Ignore leading 'x' */
-                digits[2] = '\0';
-                char *digits_end = digits;
-                unsigned long l = strtoul(digits, &digits_end, 16);
-                if(digits_end == digits) {
-                    *w++ = '\\';
-                    *w = *r;
-                } else {
-                    r += (digits_end - digits);
-                    *w = (l & 0xff);
-                }
-                }
-                break;
-            case '0': {
-                char digits[5];
-                char *endptr = (r+4) < end ? (r+4) : end;
-                memcpy(digits, r, endptr-r);
-                digits[4] = '\0';
-                char *digits_end = digits;
-                unsigned long l = strtoul(digits, &digits_end, 8);
-                if(digits_end == digits) {
-                    *w = '\0';
-                } else {
-                    r += (digits_end - digits) - 1;
-                    *w = (l & 0xff);
-                }
-                }
-                break;
-            default:
-                *w++ = '\\';
-                *w = *r;
-            }
-        }
-    }
-    *w = '\0';
-
-    if(initial_data_size)
-        *initial_data_size = (w - (char *)data);
 }
 
 /*

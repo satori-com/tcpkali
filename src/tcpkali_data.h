@@ -34,6 +34,13 @@
  */
 char *printable_data(char *buffer, size_t buf_size, const void *data, size_t data_size, int quote);
 
+/*
+ * Convert backslash-escaping back into corresponding bytes.
+ * Supports octal (\0377), hexadecimal (\xHH) and usual \[nrfb] escape codes.
+ * This function does in-place conversion.
+ */
+void unescape_data(void *data, size_t *initial_data_size);
+
 #define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)  (3 + 4*(size))
 
 #endif  /* TCPKALI_DATA_H */
