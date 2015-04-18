@@ -7,7 +7,7 @@
 
 # Features
 
- * Efficient multi-core operation; utilizes all available cores by default.
+ * Efficient multi-core operation (`--workers`); utilizes all available cores by default.
  * Allows opening massive number of connections (`--connections`)
  * Allows limiting a single connection throughput (`--channel-bandwidth` or `--message-rate`)
  * Allows specifying the first and subsequent messages (`--message`, `--first-message`).
