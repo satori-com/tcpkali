@@ -1,6 +1,9 @@
 
 bin_PROGRAMS = tcpkali
 
+AM_YFLAGS = -d
+AM_LFLAGS = -s
+
 tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
                    -I$(top_srcdir)/deps/libstatsd/src \
@@ -19,6 +22,8 @@ tcpkali_SOURCES = \
                 tcpkali_ring.c tcpkali_ring.h             \
                 tcpkali_terminfo.c tcpkali_terminfo.h     \
                 tcpkali_data.c tcpkali_data.h             \
+                tcpkali_expr_y.y tcpkali_expr_l.l         \
+                tcpkali_expr.c tcpkali_expr.h             \
                 tcpkali_common.h tcpkali_rate.h           \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)

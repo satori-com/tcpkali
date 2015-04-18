@@ -63,9 +63,8 @@ struct engine_params {
     double channel_lifetime;
     double epoch;
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
-    /* Pre-computed message data */
-    struct transport_data_spec data;
-    bandwidth_limit_t bandwidth_limit;
+    /* Pre-computed message data template */
+    struct transport_data_spec data_template;
     uint8_t *latency_marker_data;    /* --latency-marker */
     size_t   latency_marker_size;
     struct StreamBMH_Occ sbmh_occ;  /* Streaming Boyer-Moore-Horspool */

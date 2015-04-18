@@ -59,6 +59,7 @@
 #include "tcpkali_pacefier.h"
 #include "tcpkali_websocket.h"
 #include "tcpkali_terminfo.h"
+#include "tcpkali_expr.h"
 #include "tcpkali_data.h"
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -75,6 +76,7 @@ struct connection {
     tk_io watcher;
     tk_timer timer;
     off_t write_offset;
+    struct transport_data_spec data;
     non_atomic_wide_t data_sent;
     non_atomic_wide_t data_rcvd;
     non_atomic_wide_t data_sent_reported;
@@ -235,6 +237,8 @@ static socklen_t sockaddr_len(struct sockaddr *sa) {
             fprintf(stderr, "%s" fmt, tcpkali_clear_eol(), ##args);       \
     } while(0)
 
+#define REPLICATE_MAX_SIZE  (64*1024)       /* Proven to be a sweet spot */
+
 struct engine *engine_start(struct engine_params params) {
     int fildes[2];
 
@@ -264,8 +268,17 @@ struct engine *engine_start(struct engine_params params) {
      * For efficiency, make sure we concatenate a few data items
      * instead of sending short messages one by one.
      */
-    params.bandwidth_limit = compute_bandwidth_limit(params.channel_send_rate, params.data.single_message_size);
-    replicate_payload(&params.data, 64*1024);
+    switch(parse_payload_data(&params.data_template,
+                              params.verbosity_level >= DBG_DETAIL)) {
+    case 0:
+        replicate_payload(&params.data_template, REPLICATE_MAX_SIZE);
+        break;
+    case 1:
+        assert((params.data_template.flags & TDS_FLAG_EXPRESSION));
+        break;
+    default:
+        exit(EX_UNAVAILABLE);
+    }
     params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
 
     struct engine *eng = calloc(1, sizeof(*eng));
@@ -814,6 +827,103 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
     }
 }
 
+static ssize_t
+expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key) {
+    struct connection *conn = key;
+
+    if(expr->type == EXPR_CONNECTION_PTR) {
+        ssize_t s = snprintf(buf, size, "%p", conn);
+        if(s < 0 || s > (ssize_t)size)
+            return -1;
+        return s;
+    } else {
+        return -1;
+    }
+}
+
+static struct transport_data_spec
+explode_data_template(struct transport_data_spec *data, struct loop_arguments *largs UNUSED, struct connection *conn) {
+
+    /* If no expressions were given, just copy the template */
+    if(!(data->flags & TDS_FLAG_EXPRESSION))
+        return *data;
+
+    struct transport_data_spec new_data;
+    new_data = *data;
+    data = &new_data;
+
+    size_t buf_size =
+        data->ws_hdr_size
+        + (data->expr_head ? data->expr_head->estimate_size
+                            : data->once_size - data->ws_hdr_size)
+        + (data->expr_body ? data->expr_body->estimate_size
+                            : data->total_size - data->once_size)
+    ;
+    char *buf = malloc(buf_size + 1);
+    char *b = buf;
+    size_t offset = 0;
+    memcpy(b, data->ptr, data->ws_hdr_size);
+    b += offset;
+    offset += data->ws_hdr_size;
+
+    size_t once_size = data->once_size;
+    size_t total_size = data->total_size;
+
+    if(data->expr_head) {
+        char *tmp = b;
+        ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_head,
+                                    expr_callback, conn);
+        assert(s >= 0);
+        b += s;
+        offset += s;
+        once_size = data->ws_hdr_size + s;
+    } else {
+        memcpy(b,
+                (char *)data->ptr + data->ws_hdr_size,
+                data->once_size - data->ws_hdr_size);
+        b += data->once_size - data->ws_hdr_size;
+        offset += data->once_size - data->ws_hdr_size;
+    }
+
+    if(data->expr_body) {
+        char *tmp = b;
+        ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_body,
+                                    expr_callback, conn);
+        assert(s >= 0);
+        b += s;
+        offset += s;
+        total_size = once_size + s;
+    } else {
+        memcpy(b,
+                (char *)data->ptr + data->once_size,
+                data->total_size - data->once_size);
+        b += data->once_size - data->ws_hdr_size;
+        offset += data->once_size - data->ws_hdr_size;
+        total_size = once_size + (data->once_size - data->ws_hdr_size);
+    }
+    *b = '\0';
+
+    assert((b - buf) == (ssize_t)total_size);
+
+    data->ptr = buf;
+    data->once_size = once_size;
+    data->total_size = total_size;
+    data->single_message_size = total_size - once_size;
+    data->expr_head = 0;
+    data->expr_body = 0;
+    data->flags &= ~TDS_FLAG_EXPRESSION;
+
+    char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(total_size)];
+
+    DEBUG(DBG_DATA, "Connection data: %s\n",
+            printable_data(tmpbuf, sizeof(tmpbuf),
+                           data->ptr, data->total_size, 1));
+
+    replicate_payload(data, REPLICATE_MAX_SIZE);
+
+    return *data;
+}
+
 static void start_new_connection(TK_P) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct remote_stats *remote_stats;
@@ -907,10 +1017,15 @@ static void start_new_connection(TK_P) {
     pacefier_init(&conn->bandwidth_pace, now);
     conn->remote_index = remote_index;
 
+    conn->data = explode_data_template(&largs->params.data_template, largs, conn);
+    conn->bandwidth_limit = compute_bandwidth_limit(
+                                largs->params.channel_send_rate,
+                                conn->data.single_message_size);
+
     if(largs->params.latency_marker_data
-    && largs->params.data.single_message_size) {
+    && conn->data.single_message_size) {
         conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
-            = largs->params.data.single_message_size - 1;
+            = conn->data.single_message_size - 1;
 
         /*
          * Initialize the Boyer-Moore-Horspool context for substring search.
@@ -949,7 +1064,7 @@ static void start_new_connection(TK_P) {
 #endif
     }
 
-    int want_write = (largs->params.data.total_size || want_catch_connect);
+    int want_write = (conn->data.total_size || want_catch_connect);
     int want_events = TK_READ | (want_write ? TK_WRITE : 0);
 #ifdef  USE_LIBUV
     uv_poll_init(TK_A_ &conn->watcher, sockfd);
@@ -987,7 +1102,6 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
 }
 
 static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
-    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, timer));
 
     switch(conn->conn_state) {
@@ -998,7 +1112,7 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
             break;
         case CONN_OUTGOING:
             update_io_interest(TK_A_ conn,
-                TK_READ | (largs->params.data.total_size ? TK_WRITE : 0));
+                TK_READ | (conn->data.total_size ? TK_WRITE : 0));
             break;
         case CONN_ACCEPTOR:
             assert(conn->conn_type != CONN_ACCEPTOR);
@@ -1105,13 +1219,12 @@ static enum {
     LB_GO_SLEEP,    /* Not allowed to move data.        */
 } limit_channel_bandwidth(TK_P_ struct connection *conn,
                           size_t *suggested_move_size) {
-    struct loop_arguments *largs = tk_userdata(TK_A);
-    double bw = largs->params.bandwidth_limit.bytes_per_second;
+    double bw = conn->bandwidth_limit.bytes_per_second;
     if(bw == 0.0) {
         return LB_UNLIMITED;    /* Limit not set, don't limit. */
     }
 
-    size_t smallest_block_to_move = largs->params.bandwidth_limit.minimal_move_size;
+    size_t smallest_block_to_move = conn->bandwidth_limit.minimal_move_size;
     size_t allowed_to_move = pacefier_allow(&conn->bandwidth_pace, bw, tk_now(TK_A));
 
     if(allowed_to_move < smallest_block_to_move) {
@@ -1177,7 +1290,7 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
             default:
                 if(record_moved)
                     pacefier_moved(&conn->bandwidth_pace,
-                                   largs->params.bandwidth_limit.bytes_per_second,
+                                   conn->bandwidth_limit.bytes_per_second,
                                    rd, tk_now(TK_A));
                 conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
@@ -1283,11 +1396,11 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, struct tra
      * only the very first message byte is sent.
      */
 
-    size_t msgsize = largs->params.data.single_message_size;
+    size_t msgsize = conn->data.single_message_size;
     size_t pretend_sent = wrote + conn->latency.message_bytes_credit;
     size_t messages = pretend_sent / msgsize;
     conn->latency.message_bytes_credit =
-        pretend_sent % largs->params.data.single_message_size;
+        pretend_sent % conn->data.single_message_size;
     int ring_grown = 0;
     for(double now = tk_now(TK_A); messages; messages--) {
         ring_grown |= ring_buffer_add(conn->latency.sent_timestamps, now);
@@ -1364,7 +1477,7 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
  */
 static void largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn, const void **position, size_t *available_header, size_t *available_body) {
     off_t *current_offset = &conn->write_offset;
-    size_t accessible_size = largs->params.data.total_size;
+    size_t accessible_size = conn->data.total_size;
     size_t available = accessible_size - *current_offset;
 
     /* The first bunch of bytes sent on the WebSocket connection
@@ -1372,31 +1485,31 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
      * We then wait for the server reply.
      */
     if(conn->data_rcvd == 0
-            && conn->data_sent <= largs->params.data.ws_hdr_size
+            && conn->data_sent <= conn->data.ws_hdr_size
             && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
             && largs->params.websocket_enable) {
-        accessible_size = largs->params.data.ws_hdr_size;
+        accessible_size = conn->data.ws_hdr_size;
         size_t available = accessible_size - *current_offset;
-        *position = largs->params.data.ptr + *current_offset;
+        *position = conn->data.ptr + *current_offset;
         *available_header = available;
         *available_body = 0;
         return;
     }
 
-    if(conn->data_sent < largs->params.data.once_size) {
+    if(conn->data_sent < conn->data.once_size) {
         /* Send header... once per connection lifetime */
-        *available_header = largs->params.data.once_size - conn->data_sent;
+        *available_header = conn->data.once_size - conn->data_sent;
         assert(available);
     } else {
         *available_header = 0;    /* Sending body */
     }
 
     if(available) {
-        *position = largs->params.data.ptr + *current_offset;
+        *position = conn->data.ptr + *current_offset;
         *available_body = available - *available_header;
     } else {
-        size_t off = largs->params.data.once_size;
-        *position = largs->params.data.ptr + off;
+        size_t off = conn->data.once_size;
+        *position = conn->data.ptr + off;
         *available_body = accessible_size - off;
         *current_offset = off;
     }
@@ -1427,7 +1540,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
          * If there's nothing to write, we remove the write interest.
          */
         tk_timer_stop(TK_A, &conn->timer);
-        if(largs->params.data.total_size == 0) {
+        if(conn->data.total_size == 0) {
             update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
             revents &= ~TK_WRITE;   /* Don't actually write in this loop */
         }
@@ -1465,8 +1578,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 if(conn->data_rcvd == 0
                 && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
                 && largs->params.websocket_enable
-                && largs->params.data.ws_hdr_size
-                        != largs->params.data.total_size) {
+                && conn->data.ws_hdr_size
+                        != conn->data.total_size) {
                     conn->ws_state = WSTATE_WS_ESTABLISHED;
                     update_io_interest(TK_A_ conn, TK_READ | TK_WRITE);
                 }
@@ -1488,7 +1601,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         largest_contiguous_chunk(largs, conn, &position, &available_header, &available_body);
         if(!(available_header + available_body)) {
             /* Only the header was sent. Now, silence. */
-            assert(largs->params.data.total_size == largs->params.data.once_size
+            assert(conn->data.total_size == conn->data.once_size
                 || largs->params.websocket_enable);
             update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
             return;
@@ -1525,13 +1638,13 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             conn->data_sent += wrote;
             if(record_moved)
                 pacefier_moved(&conn->bandwidth_pace,
-                               largs->params.bandwidth_limit.bytes_per_second,
+                               conn->bandwidth_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
             wrote -= available_header;
             if(wrote > 0) {
                 /* Record latencies for the body only, not headers */
                 latency_record_outgoing_ts(TK_A_ conn,
-                        &largs->params.data, position, wrote);
+                        &conn->data, position, wrote);
             }
         }
     }
@@ -1664,6 +1777,9 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     }
 
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
+
+    if(conn->data.ptr != largs->params.data_template.ptr)
+        free(conn->data.ptr);
 
     connection_free_internals(conn);
 

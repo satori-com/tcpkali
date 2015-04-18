@@ -12,6 +12,8 @@ AM_PROG_LIBTOOL
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
+AC_PROG_YACC
+AM_PROG_LEX
 
 dnl Third-party dependencies.
 m4_include([deps/libev/libev.m4])

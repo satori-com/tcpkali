@@ -70,8 +70,8 @@ compute_bandwidth_limit(rate_spec_t rspec, size_t message_size) {
     bandwidth_limit_t lim;
 
     /*
-     * The message_size will vary per connection in the future.
-     * Therefore we compute the bandwidth limit
+     * The message_size varies according to the \{expressions} which might
+     * be present in a message. Therefore we compute the bandwidth limit
      * independently for every connection made.
      */
     switch(rspec.value_base) {

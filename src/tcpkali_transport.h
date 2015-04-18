@@ -27,10 +27,15 @@
 #ifndef TCPKALI_TRANSPORT_H
 #define TCPKALI_TRANSPORT_H
 
+#include <sys/uio.h>
+
+struct tk_expr; /* Forward declaration */
+
 /*
- * Our send buffer is pre-computed in advance and shared between
- * the instances of engine. The buffer contains both headers and
- * payload. The data_header_size is used to determine the end of
+ * Our send buffer is pre-computed in advance and typically
+ * shared between the instances of engine (workers).
+ * The buffer contains both headers and payload.
+ * The data_header_size is used to determine the end of
  * the headers and start of the payload.
  */
 struct transport_data_spec {
@@ -39,9 +44,13 @@ struct transport_data_spec {
     size_t once_size;       /* Part of data to send just once. */
     size_t total_size;
     size_t single_message_size;
-    enum flags {
-        TDS_REPLICATED = 0x01, /* total_size >= once_size+single_message_size */
+    enum transport_data_flags {
+        TDS_FLAG_NONE       = 0x00,
+        TDS_FLAG_REPLICATED = 0x01, /* total_size >= once_ + single_message_ */
+        TDS_FLAG_EXPRESSION = 0x02, /* \{foo.bar} style expression found! */
     } flags;
+    struct tk_expr *expr_head;  /* Optional */
+    struct tk_expr *expr_body;  /* Optional */
 };
 
 

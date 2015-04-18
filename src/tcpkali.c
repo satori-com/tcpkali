@@ -505,7 +505,8 @@ int main(int argc, char **argv) {
             { .iov_base = conf.message_data,
               .iov_len = conf.message_size }
         };
-        engine_params.data = add_transport_framing(iovs,
+        engine_params.data_template =
+                    add_transport_framing(iovs,
                                 1,  /* First message data */
                                 2,  /* Subsequent messages data */
                                 conf.websocket_enable,
@@ -519,7 +520,8 @@ int main(int argc, char **argv) {
      * if we are also told to measure latency.
      */
     if(engine_params.latency_marker_data) {
-        if(engine_params.data.once_size == engine_params.data.total_size
+        if(engine_params.data_template.once_size
+            == engine_params.data_template.total_size
             || (argc - optind == 0)) {
             fprintf(stderr, "--latency-marker is given, but no messages are supposed to be sent; die confused");
             exit(EX_USAGE);
