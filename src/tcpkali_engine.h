@@ -32,6 +32,7 @@
 
 #include "tcpkali_transport.h"
 #include "tcpkali_atomic.h"
+#include "tcpkali_rate.h"
 
 long number_of_cpus();
 
@@ -41,8 +42,7 @@ struct engine_params {
     struct addresses remote_addresses;
     struct addresses listen_addresses;
     size_t requested_workers;       /* Number of threads to start */
-    size_t channel_bandwidth_Bps;   /* Single channel bw, bytes per second. */
-    size_t minimal_move_size;       /* Number of bytes to read/write at once */
+    rate_spec_t channel_send_rate;  /* --channel-bandwidth or --message-rate */
     enum {
         DBG_ALWAYS  = 0,
         DBG_ERROR   = 0,
@@ -65,6 +65,7 @@ struct engine_params {
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data */
     struct transport_data_spec data;
+    bandwidth_limit_t bandwidth_limit;
     uint8_t *latency_marker_data;    /* --latency-marker */
     size_t   latency_marker_size;
     struct StreamBMH_Occ sbmh_occ;  /* Streaming Boyer-Moore-Horspool */

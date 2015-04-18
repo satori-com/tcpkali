@@ -102,7 +102,6 @@ static struct tcpkali_config {
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
-    double message_rate;    /* Messages per second in channel */
     char  *first_message_data;
     size_t first_message_size;
     char  *message_data;
@@ -316,25 +315,18 @@ int main(int argc, char **argv) {
             engine_params.requested_workers = n;
             break;
             }
-        case 'b': {
-            int Bps = parse_with_multipliers(option, optarg,
+        case 'b': { /* --channel-bandwidth <Bw> */
+            double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
             if(Bps <= 0) {
                 fprintf(stderr, "Expecting --channel-bandwidth > 0\n");
                 exit(EX_USAGE);
             }
-            engine_params.channel_bandwidth_Bps = Bps;
-            /*
-             * --channel-bandwidth intentionally disregards the message
-             * boundary, unlike --message-rate, which attempts to preserve it.
-             * Therefore, use --channel-bandwidth to split the message into
-             * smaller fragments, if needed.
-             */
-            engine_params.minimal_move_size = 1;
+            engine_params.channel_send_rate = RATE_BPS(Bps);
             break;
             }
-        case 'r': {
+        case 'r': { /* --message-rate <R> */
             double rate = parse_with_multipliers(option, optarg,
                         km_multiplier,
                         sizeof(km_multiplier)/sizeof(km_multiplier[0]));
@@ -342,7 +334,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expecting --message-rate > 0\n");
                 exit(EX_USAGE);
             }
-            conf.message_rate = rate;
+            engine_params.channel_send_rate = RATE_MPS(rate);
             break;
             }
         case 'N':   /* --nagle {on|off} */
@@ -537,32 +529,22 @@ int main(int argc, char **argv) {
     /*
      * Make sure we're consistent with the message rate and channel bandwidth.
      */
-    if(conf.message_rate) {
+    if(engine_params.channel_send_rate.value_base != RS_UNLIMITED) {
         size_t msize = message_size_with_framing;
         if(msize == 0) {
-            fprintf(stderr, "--message-rate parameter makes no sense "
-                            "without --message or --message-file\n");
+            char *cli_opt_name = "";
+            switch(engine_params.channel_send_rate.value_base) {
+            case RS_UNLIMITED: break;
+            case RS_BYTES_PER_SECOND:
+                cli_opt_name = "--channel-bandwidth"; break;
+            case RS_MESSAGES_PER_SECOND:
+                cli_opt_name = "--message-rate"; break;
+            }
+            fprintf(stderr, "%s parameter makes no sense "
+                            "without --message or --message-file\n",
+                            cli_opt_name);
             exit(EX_USAGE);
         }
-        size_t message_bandwidth = (msize * conf.message_rate) / 1;
-        if(message_bandwidth == 0) {
-            fprintf(stderr, "--message-rate=%g with message size %ld results in a less than a byte per second bandwidth, refusing to proceed\n",
-                conf.message_rate, (long)msize);
-            exit(EX_USAGE);
-        }
-        if(engine_params.channel_bandwidth_Bps &&
-           engine_params.channel_bandwidth_Bps != message_bandwidth) {
-            fprintf(stderr, "--channel-bandwidth=%ld is %s than --message-rate=%g * %ld (message size)\n",
-                (long)engine_params.channel_bandwidth_Bps,
-                (engine_params.channel_bandwidth_Bps > message_bandwidth)
-                    ? "more" : "less",
-                conf.message_rate,
-                (long)msize);
-            exit(EX_USAGE);
-        }
-        engine_params.channel_bandwidth_Bps = message_bandwidth;
-        /* Write in msize blocks unless they're large, then use default. */
-        engine_params.minimal_move_size = msize < 1460 ? msize : 0;
     }
 
     if(optind == argc && conf.listen_port == 0) {

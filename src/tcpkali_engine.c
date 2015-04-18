@@ -73,13 +73,14 @@
 struct connection {
     tk_io watcher;
     tk_timer timer;
-    struct pacefier bw_pace;
     off_t write_offset;
     non_atomic_wide_t data_sent;
     non_atomic_wide_t data_rcvd;
     non_atomic_wide_t data_sent_reported;
     non_atomic_wide_t data_rcvd_reported;
     float channel_eol_point;    /* End of life time, since epoch */
+    struct pacefier   bandwidth_pace;
+    bandwidth_limit_t bandwidth_limit;
     enum type {
         CONN_OUTGOING,
         CONN_INCOMING,
@@ -262,9 +263,8 @@ struct engine *engine_start(struct engine_params params) {
      * For efficiency, make sure we concatenate a few data items
      * instead of sending short messages one by one.
      */
+    params.bandwidth_limit = compute_bandwidth_limit(params.channel_send_rate, params.data.single_message_size);
     replicate_payload(&params.data, 64*1024);
-    if(params.minimal_move_size == 0)
-        params.minimal_move_size = 1460; /* ~MTU */
     params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
 
     struct engine *eng = calloc(1, sizeof(*eng));
@@ -647,7 +647,7 @@ static void *single_engine_loop_thread(void *argp) {
             struct connection *conn = calloc(1, sizeof(*conn));
             conn->conn_type = CONN_ACCEPTOR;
             /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
-            pacefier_init(&conn->bw_pace, tk_now(TK_A));
+            pacefier_init(&conn->bandwidth_pace, tk_now(TK_A));
 #ifdef   USE_LIBUV
             uv_poll_init(TK_A_ &conn->watcher, lsock);
             uv_poll_start(&conn->watcher, TK_READ | TK_WRITE, accept_cb_uv);
@@ -903,7 +903,7 @@ static void start_new_connection(TK_P) {
             (now - largs->params.epoch) + largs->params.channel_lifetime;
     }
     TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
-    pacefier_init(&conn->bw_pace, now);
+    pacefier_init(&conn->bandwidth_pace, now);
     conn->remote_index = remote_index;
 
     if(largs->params.latency_marker_data
@@ -1091,7 +1091,7 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  * Debug data by dumping it in a format escaping all the special
  * characters.
  */
-void debug_dump_data(const void *data, size_t size) {
+static void debug_dump_data(const void *data, size_t size) {
     const int blowup_factor = 4; /* Each character expands by 4, max. */
     char buffer[blowup_factor * size + 1];
     const unsigned char *p = data;
@@ -1121,18 +1121,19 @@ static enum {
 } limit_channel_bandwidth(TK_P_ struct connection *conn,
                           size_t *suggested_move_size) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    size_t bw = largs->params.channel_bandwidth_Bps;
-    if(!bw) return LB_UNLIMITED;
+    double bw = largs->params.bandwidth_limit.bytes_per_second;
+    if(bw == 0.0) {
+        return LB_UNLIMITED;    /* Limit not set, don't limit. */
+    }
 
-    size_t smallest_block_to_move = largs->params.minimal_move_size;
-    size_t allowed_to_move = pacefier_allow(&conn->bw_pace, bw, tk_now(TK_A));
+    size_t smallest_block_to_move = largs->params.bandwidth_limit.minimal_move_size;
+    size_t allowed_to_move = pacefier_allow(&conn->bandwidth_pace, bw, tk_now(TK_A));
 
     if(allowed_to_move < smallest_block_to_move) {
         /*     allowed     smallest_blk
            |------^-------------^-------> */
         double delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
-        if(delay > 1.0) delay = 1.0;
-        else if(delay < 0.001) delay = 0.001;
+        if(delay < 0.001) delay = 0.001;
 
         tk_timer_stop(TK_A, &conn->timer);
 #ifdef  USE_LIBUV
@@ -1190,8 +1191,8 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
                 return;
             default:
                 if(record_moved)
-                    pacefier_moved(&conn->bw_pace,
-                                   largs->params.channel_bandwidth_Bps,
+                    pacefier_moved(&conn->bandwidth_pace,
+                                   largs->params.bandwidth_limit.bytes_per_second,
                                    rd, tk_now(TK_A));
                 conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
@@ -1538,8 +1539,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
             if(record_moved)
-                pacefier_moved(&conn->bw_pace,
-                               largs->params.channel_bandwidth_Bps,
+                pacefier_moved(&conn->bandwidth_pace,
+                               largs->params.bandwidth_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
             wrote -= available_header;
             if(wrote > 0) {
