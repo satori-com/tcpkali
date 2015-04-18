@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "tcpkali_expr.h"
 #include "tcpkali_expr_y.h"
