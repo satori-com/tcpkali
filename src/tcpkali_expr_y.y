@@ -1,6 +1,7 @@
 %{
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 #include "tcpkali_expr.h"
@@ -19,12 +20,13 @@ int yyerror(const char *);
         char  *buf;
         size_t len;
     } tv_string;
+    char  tv_char;
 };
 
-%token              TOK_connection  "connection"
-%token              TOK_ptr         "ptr"
-%token              TOK_uid         "uid"
-%token              END 0           "end of expression"
+%token              TOK_connection   "connection"
+%token              TOK_ptr          "ptr"
+%token              TOK_uid          "uid"
+%token              END 0            "end of expression"
 %token  <tv_string> arbitrary_string
 
 %type   <tv_expr>   Expr    "expression"
@@ -51,10 +53,23 @@ DataAndExpressions:
     }
     | DataOrExpr DataAndExpressions {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
-        expr->type = EXPR_CONCAT;
-        expr->u.concat.expr[0] = $1;
-        expr->u.concat.expr[1] = $2;
-        expr->estimate_size = $1->estimate_size + $2->estimate_size;
+        if($1->type == EXPR_DATA && $2->type == EXPR_DATA) {
+            /* Concatenate two strings for simplicity */
+            expr->type = EXPR_DATA;
+            expr->u.data.size = $1->u.data.size + $2->u.data.size;
+            expr->u.data.data = malloc(expr->u.data.size + 1);
+            memcpy((char *)expr->u.data.data, $1->u.data.data, $1->u.data.size);
+            memcpy((char *)expr->u.data.data + $1->u.data.size, $2->u.data.data,
+                                                        $2->u.data.size);
+            ((char *)expr->u.data.data)[expr->u.data.size] = '\0';
+            free((void *)$1->u.data.data);
+            free((void *)$2->u.data.data);
+        } else {
+            expr->type = EXPR_CONCAT;
+            expr->u.concat.expr[0] = $1;
+            expr->u.concat.expr[1] = $2;
+            expr->estimate_size = $1->estimate_size + $2->estimate_size;
+        }
         $$ = expr;
     }
 

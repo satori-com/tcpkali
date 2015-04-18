@@ -25,7 +25,7 @@ WSP [\t\r\v\f\n ]
 <INITIAL>{
         "\\{"       { yy_push_state(in_expression); return '{'; }
 
-        [^\\]+  {
+        "\\"|"\\\\"|[^\\]+  {
             yylval.tv_string.buf = malloc(yyleng + 1);
             yylval.tv_string.len = yyleng;
             memcpy(yylval.tv_string.buf, yytext, yyleng);
