@@ -48,8 +48,22 @@ typedef struct tk_expr {
     size_t estimate_size;
 } tk_expr_t;
 
-int parse_payload_data(struct transport_data_spec *data, int debug);
+/*
+ * Trivial expression is expression which does not contain any
+ * interesting (dynamically computable) values and is basically
+ * a constant string.
+ */
+#define EXPR_IS_TRIVIAL(e)  ((e)->type == EXPR_DATA)
+
+/*
+ * Return values:
+ *  0: No expression was found, returns a simple EXPR_DATA node.
+ *  1: An expression was found, returned.
+ * -1: Expression parsing failed.
+ */
 int parse_expression(tk_expr_t **, const char *expr_buf, size_t size, int debug);
+
+int parse_payload_data(struct transport_data_spec *data, int debug);
 
 typedef ssize_t (expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key);
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f, void *key);

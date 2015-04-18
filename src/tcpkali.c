@@ -420,15 +420,20 @@ int main(int argc, char **argv) {
             conf.websocket_enable = 1;
             engine_params.websocket_enable = 1;
             break;
-        case 'L':
-            engine_params.latency_marker_data = (uint8_t *)strdup(optarg);
-            engine_params.latency_marker_size = strlen(optarg);
+        case 'L': { /* --latency-marker */
+            char *data  = strdup(optarg);
+            size_t size = strlen(optarg);
             if(unescape_message_data)
-                unescape(engine_params.latency_marker_data,
-                        &engine_params.latency_marker_size);
-            if(engine_params.latency_marker_size == 0) {
+                unescape(data, &size);
+            if(size == 0) {
                 fprintf(stderr, "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
+            }
+            if(parse_expression(&engine_params.latency_marker, data, size, 0)
+                    == -1) {
+                fprintf(stderr, "--latency-marker: Failed to parse expression\n");
+                exit(EX_USAGE);
+            }
             }
             break;
         default:
@@ -519,7 +524,7 @@ int main(int argc, char **argv) {
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
-    if(engine_params.latency_marker_data) {
+    if(engine_params.latency_marker) {
         if(engine_params.data_template.once_size
             == engine_params.data_template.total_size
             || (argc - optind == 0)) {

@@ -33,6 +33,7 @@
 #include "tcpkali_transport.h"
 #include "tcpkali_atomic.h"
 #include "tcpkali_rate.h"
+#include "tcpkali_expr.h"
 
 long number_of_cpus();
 
@@ -65,9 +66,8 @@ struct engine_params {
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data template */
     struct transport_data_spec data_template;
-    uint8_t *latency_marker_data;    /* --latency-marker */
-    size_t   latency_marker_size;
-    struct StreamBMH_Occ sbmh_occ;  /* Streaming Boyer-Moore-Horspool */
+    tk_expr_t *latency_marker;      /* --latency-marker */
+    struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
 };
 
 struct engine *engine_start(struct engine_params);

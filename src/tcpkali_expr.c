@@ -77,12 +77,15 @@ parse_payload_data(struct transport_data_spec *data, int debug) {
     switch(parse_expression(&expr,
                             (char *)data->ptr + data->ws_hdr_size,
                             data->once_size - data->ws_hdr_size, debug)) {
-    case 0: break;
-    default: return -1;
+    case 0:
+        free_expr(expr);
+        break;
     case 1:
         data->expr_head = expr;
         data->flags |= TDS_FLAG_EXPRESSION;
         break;
+    default:
+        return -1;
     }
 
     /*
@@ -90,12 +93,15 @@ parse_payload_data(struct transport_data_spec *data, int debug) {
      */
     switch(parse_expression(&expr, (char *)data->ptr + data->once_size,
                                    data->total_size - data->once_size, debug)) {
-    case 0: break;
-    default: return -1;
+    case 0:
+        free_expr(expr);
+        break;
     case 1:
         data->expr_body = expr;
         data->flags |= TDS_FLAG_EXPRESSION;
         break;
+    default:
+        return -1;
     }
 
     return (data->flags & TDS_FLAG_EXPRESSION) ? 1 : 0;
@@ -122,12 +128,17 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
     if(ret == 0) {
         assert(expr);
         if(expr->type == EXPR_DATA) {
-            free_expr(expr);
+            /* Trivial expression found, should exactly match input. */
+            assert(expr->u.data.size == size);
+            assert(memcmp(expr->u.data.data, buf, size) == 0);
+            if(expr_p) *expr_p = expr;
+            else free_expr(expr);
             return 0;   /* No expression found */
+        } else {
+            if(expr_p) *expr_p = expr;
+            else free_expr(expr);
+            return 1;
         }
-        if(expr_p) *expr_p = expr;
-        else free_expr(expr);
-        return 1;
     } else {
         char tmp[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
         DEBUG("Failed to parse \"%s\"\n",

@@ -1,4 +1,9 @@
 
+0.6:    ??
+    * Parse \{connection.uid} type expressions in --first-message,
+      --message, --latency-marker parameters, making sent data unique per
+      connection.
+
 0.5:    2015-Apr-14
     * --enable-asan and --enable-tsan flags to enable address/thread sanitizer.
     * Do not account latencies for --first-message.
