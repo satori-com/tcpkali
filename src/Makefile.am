@@ -18,6 +18,7 @@ tcpkali_SOURCES = \
                 tcpkali_mavg.h tcpkali_events.h           \
                 tcpkali_ring.c tcpkali_ring.h             \
                 tcpkali_terminfo.c tcpkali_terminfo.h     \
+                tcpkali_data.c tcpkali_data.h             \
                 tcpkali_common.h tcpkali_rate.h           \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
