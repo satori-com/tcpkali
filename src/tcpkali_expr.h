@@ -33,7 +33,8 @@ typedef struct tk_expr {
     enum {
         EXPR_DATA,
         EXPR_CONCAT,
-        EXPR_CONNECTION_PTR
+        EXPR_CONNECTION_PTR,
+        EXPR_CONNECTION_UID
     } type;
     union {
         struct {

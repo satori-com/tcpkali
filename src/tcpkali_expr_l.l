@@ -44,6 +44,7 @@ WSP [\t\r\v\f\n ]
     {WSP}+          /* Ignore whitespace */
     "connection"    return TOK_connection;
     "ptr"           return TOK_ptr;
+    "uid"           return TOK_uid;
     "."             return '.';
     .     {
                     fprintf(stderr,

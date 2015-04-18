@@ -28,7 +28,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -98,6 +97,7 @@ struct connection {
         WSTATE_WS_ESTABLISHED,
     } ws_state:1;
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
+    non_atomic_narrow_t connection_unique_id; /* connection.uid */
     TAILQ_ENTRY(connection) hook;
     /* Latency */
     struct {
@@ -139,6 +139,12 @@ struct loop_arguments {
     /* Reporting histogram should not be touched unless asked. */
     struct hdr_histogram *reporting_histogram;
     pthread_mutex_t       reporting_histogram_lock;
+    /*
+     * Connection identifier counter is shared between all connections
+     * across all workers. We don't allocate it per worker, so it points
+     * to the same memory in the parameters of all workers.
+     */
+    atomic_narrow_t *connection_unique_id;
 };
 
 /*
@@ -161,6 +167,7 @@ struct engine {
     int n_workers;
     non_atomic_wide_t total_data_sent;
     non_atomic_wide_t total_data_rcvd;
+    atomic_narrow_t connection_unique_id; /* == loop->connection_unique_id */
 };
 
 /*
@@ -299,6 +306,7 @@ struct engine *engine_start(struct engine_params params) {
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
         TAILQ_INIT(&largs->open_conns);
+        largs->connection_unique_id = &eng->connection_unique_id;
         largs->params = params;
         largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
@@ -830,15 +838,23 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
 static ssize_t
 expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key) {
     struct connection *conn = key;
+    ssize_t s;
 
-    if(expr->type == EXPR_CONNECTION_PTR) {
-        ssize_t s = snprintf(buf, size, "%p", conn);
-        if(s < 0 || s > (ssize_t)size)
-            return -1;
-        return s;
-    } else {
-        return -1;
+    switch(expr->type) {
+    case EXPR_CONNECTION_PTR:
+        s = snprintf(buf, size, "%p", conn);
+        break;
+    case EXPR_CONNECTION_UID:
+        s = snprintf(buf, size, "%" PRIan, conn->connection_unique_id);
+        break;
+    default:
+        s = snprintf(buf, size, "?");
+        break;
     }
+
+    if(s < 0 || s > (ssize_t)size)
+        return -1;
+    return s;
 }
 
 static struct transport_data_spec
@@ -847,6 +863,12 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
     /* If no expressions were given, just copy the template */
     if(!(data->flags & TDS_FLAG_EXPRESSION))
         return *data;
+
+    /*
+     * We might need a unique ID for a connection, and it is rather expensive
+     * to obtain it. We set it here once during connection establishment.
+     */
+    conn->connection_unique_id = atomic_inc_and_get(largs->connection_unique_id);
 
     struct transport_data_spec new_data;
     new_data = *data;

@@ -59,6 +59,7 @@ static void free_expr(tk_expr_t *expr) {
             free_expr(expr->u.concat.expr[1]);
             break;
         case EXPR_CONNECTION_PTR:
+        case EXPR_CONNECTION_UID:
             break;
         }
     }
@@ -163,7 +164,8 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callbac
         if(size1 < 0) return -1;
         return size1 + size2;
         }
-    case EXPR_CONNECTION_PTR: {
+    case EXPR_CONNECTION_PTR:
+    case EXPR_CONNECTION_UID: {
         return cb(buf, size, expr, key);
         }
     }

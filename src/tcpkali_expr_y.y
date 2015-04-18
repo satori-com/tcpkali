@@ -22,8 +22,9 @@ int yyerror(const char *);
 };
 
 %token              TOK_connection  "connection"
-%token              TOK_ptr  "ptr"
-%token              END 0   "end of expression"
+%token              TOK_ptr         "ptr"
+%token              TOK_uid         "uid"
+%token              END 0           "end of expression"
 %token  <tv_string> arbitrary_string
 
 %type   <tv_expr>   Expr    "expression"
@@ -75,6 +76,11 @@ Expr:
     TOK_connection '.' TOK_ptr {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_PTR;
+        $$->estimate_size = sizeof("100000000000000");
+    }
+    | TOK_connection '.' TOK_uid {
+        $$ = calloc(1, sizeof(*($$)));
+        $$->type = EXPR_CONNECTION_UID;
         $$->estimate_size = sizeof("100000000000000");
     }
 

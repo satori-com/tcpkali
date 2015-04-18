@@ -28,6 +28,7 @@
 #define TCPKALI_COMMON_H
 
 #include <config.h>
+#include <inttypes.h>
 #include <assert.h>
 
 #define UNUSED  __attribute__((unused))

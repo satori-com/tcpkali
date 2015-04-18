@@ -29,6 +29,8 @@
 
 #include "tcpkali_common.h"
 
+#define PRIan   PRIu32      /* printf formatting argument for narrow type */
+
 /*
  * We introduce two atomic integer types, narrow (32-bit) and wide, which is
  * hopefully 64-bit, if the system permits. We also introduce non-atomic
@@ -39,8 +41,10 @@
 #if defined(__GNUC__) && (__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 || __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
 
 #ifdef  __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+#define PRIaw   PRIu64
 typedef uint64_t non_atomic_wide_t;
 #else
+#define PRIaw   PRIu32
 typedef uint32_t non_atomic_wide_t;
 #warning "This compiler does not have 64-bit compare_and_swap, results might be broken"
 #endif
@@ -65,6 +69,11 @@ atomic_decrement(atomic_narrow_t *i) {
 }
 
 static inline non_atomic_narrow_t UNUSED
+atomic_inc_and_get(atomic_narrow_t *i) {
+    return __sync_add_and_fetch(&i->_atomic_val, 1);
+}
+
+static inline non_atomic_narrow_t UNUSED
 atomic_get(atomic_narrow_t *i) {
     return __sync_add_and_fetch(&i->_atomic_val, 0);
 }
@@ -77,6 +86,7 @@ atomic_wide_get(atomic_wide_t *i) {
 #else   /* No builtin atomics, emulate */
 
 #if SIZEOF_SIZE_T == 4
+#define PRIaw   PRIu32
 typedef uint32_t atomic_narrow_t;
 typedef uint32_t atomic_wide_t;
 static inline void UNUSED
@@ -84,6 +94,7 @@ atomic_add(atomic_wide_t *i, uint64_t v) {
     asm volatile("lock addl %1, %0" : "+m" (i->_atomic_val) : "r" (v));
 }
 #elif SIZEOF_SIZE_T == 8
+#define PRIaw   PRIu64
 typedef uint32_t atomic_narrow_t;
 typedef uint64_t atomic_wide_t;
 static inline void UNUSED
@@ -105,6 +116,16 @@ atomic_increment(atomic_narrow_t *i) {
 static inline void UNUSED
 atomic_decrement(atomic_narrow_t *i) {
     asm volatile("lock decl %0" : "+m" (i->_atomic_val));
+}
+
+static inline non_atomic_narrow_t UNUSED
+atomic_inc_and_get(atomic_narrow_t *i) {
+    non_atomic_narrow_t prev;
+    asm volatile("lock xaddl %1, %0"
+        : "+m" (i->_atomic_val), "=a" (prev)
+        : "r"(1)
+        );
+    return 1 + prev;
 }
 
 #endif  /* Builtin atomics */
