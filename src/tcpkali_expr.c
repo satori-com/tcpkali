@@ -74,7 +74,9 @@ parse_payload_data(struct transport_data_spec *data, int debug) {
     /*
      * Attempt to find expression in headers.
      */
-    switch(parse_expression(&expr, data->ptr, data->once_size, debug)) {
+    switch(parse_expression(&expr,
+                            (char *)data->ptr + data->ws_hdr_size,
+                            data->once_size - data->ws_hdr_size, debug)) {
     case 0: break;
     default: return -1;
     case 1:

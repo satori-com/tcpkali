@@ -885,7 +885,7 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
     char *b = buf;
     size_t offset = 0;
     memcpy(b, data->ptr, data->ws_hdr_size);
-    b += offset;
+    b += data->ws_hdr_size;
     offset += data->ws_hdr_size;
 
     size_t once_size = data->once_size;
@@ -919,12 +919,13 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
         memcpy(b,
                 (char *)data->ptr + data->once_size,
                 data->total_size - data->once_size);
-        b += data->once_size - data->ws_hdr_size;
-        offset += data->once_size - data->ws_hdr_size;
-        total_size = once_size + (data->once_size - data->ws_hdr_size);
+        b += data->total_size - data->once_size;
+        offset += data->total_size - data->once_size;
+        total_size = once_size + (data->total_size - data->once_size);
     }
     *b = '\0';
 
+    assert(total_size <= buf_size);
     assert((b - buf) == (ssize_t)total_size);
 
     data->ptr = buf;
