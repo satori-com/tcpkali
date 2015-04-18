@@ -24,7 +24,7 @@ int yyerror(const char *);
 };
 
 %token              TOK_connection   "connection"
-%token              TOK_ptr
+%token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
 %token              END 0            "end of expression"
 %token  <tv_string> arbitrary_string
