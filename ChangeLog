@@ -3,6 +3,7 @@
     * Parse \{connection.uid} type expressions in --first-message,
       --message, --latency-marker parameters, making sent data unique per
       connection.
+    * Added "k" multiplier to --connections, now -c10k option is valid :)
 
 0.5:    2015-Apr-14
     * --enable-asan and --enable-tsan flags to enable address/thread sanitizer.

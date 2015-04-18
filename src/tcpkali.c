@@ -225,7 +225,9 @@ int main(int argc, char **argv) {
             }
             break;
         case 'c':
-            conf.max_connections = atoi(optarg);
+            conf.max_connections = parse_with_multipliers(option, optarg,
+                            km_multiplier,
+                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
             if(conf.max_connections < 0) {
                 fprintf(stderr, "Expecting --connections > 0\n");
                 exit(EX_USAGE);
