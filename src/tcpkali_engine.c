@@ -730,14 +730,14 @@ static void *single_engine_loop_thread(void *argp) {
     close_all_connections(TK_A_ CCR_CLEAN);
 
     DEBUG(DBG_DETAIL, "Exiting worker %d\n"
-            "  %u↓, %u↑ open connections (%u connecting)\n"
-            "  %u connections_counter \n"
+            "  %"PRIan"↓, %"PRIan"↑ open connections (%"PRIan" connecting)\n"
+            "  %"PRIan" connections_counter \n"
             "  ↳ %lu connections_initiated\n"
             "  ↳ %lu connections_accepted\n"
             "  %lu connection_failures\n"
             "  ↳ %lu connection_timeouts\n"
-            "  %lu worker_data_sent\n"
-            "  %lu worker_data_rcvd\n",
+            "  %"PRIaw" worker_data_sent\n"
+            "  %"PRIaw" worker_data_rcvd\n",
         largs->thread_no,
         atomic_get(&largs->incoming_established),
         atomic_get(&largs->outgoing_established),
