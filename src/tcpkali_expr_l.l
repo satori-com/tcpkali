@@ -31,7 +31,7 @@ WSP [\t\r\v\f\n ]
             yylval.tv_string.len = yyleng;
             memcpy(yylval.tv_string.buf, yytext, yyleng);
             yylval.tv_string.buf[yyleng] = '\0';
-            return arbitrary_string;
+            return string;
         }
 
     }
@@ -46,7 +46,12 @@ WSP [\t\r\v\f\n ]
     "connection"    return TOK_connection;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;
+    [0-9]+  {
+            yylval.tv_long = atol(yytext);
+            return integer;
+        }
     "."             return '.';
+    "%"             return '%';
     .     {
                     fprintf(stderr,
                         "Unexpected token in message expression: %s\n",
