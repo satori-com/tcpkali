@@ -12,8 +12,12 @@ AM_PROG_LIBTOOL
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
-AC_PROG_YACC
 AM_PROG_LEX
+
+AC_CHECK_PROGS([YACC], ['bison -y' byacc])
+AS_IF([test "x${YACC}" == "x"], [AC_MSG_ERROR([
+    ${PACKAGE_NAME} requires bison or byacc, plain yacc doesn't count.
+    Install 'bison' package first.])])
 
 dnl Third-party dependencies.
 m4_include([deps/libev/libev.m4])
