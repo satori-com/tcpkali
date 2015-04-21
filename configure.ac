@@ -23,8 +23,11 @@ dnl Third-party dependencies.
 m4_include([deps/libev/libev.m4])
 m4_include([deps/libstatsd/libstatsd.m4])
 
-dnl Import compile flags checking macro.
+dnl Import locally defined macros.
 m4_include([m4/ax_check_compile_flag.m4])
+m4_include([m4/ax_make_optional_include.m4])
+
+AX_CHECK_GNU_STYLE_OPTIONAL_INCLUDE()
 
 dnl Global CFLAGS, for tcpkali and its third-party dependencies.
 AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])

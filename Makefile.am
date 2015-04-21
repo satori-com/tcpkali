@@ -3,8 +3,9 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = doc deps src test
 
+if GNU_STYLE_OPTIONAL_INCLUDE
 ##
-## Building RPM.
+## Building MZ-specific RPM.
 ##
 PKG_NAME=@PACKAGE@
 PKG_VERSION=@PACKAGE_VERSION@
@@ -14,3 +15,4 @@ pkgroot:: src
 	mkdir pkgroot
 	cp $(builddir)/src/tcpkali pkgroot
 -include mz-rpm.mk
+endif
