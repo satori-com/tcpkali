@@ -844,19 +844,22 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
 }
 
 static ssize_t
-expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key) {
+expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
     struct connection *conn = key;
     ssize_t s;
 
     switch(expr->type) {
     case EXPR_CONNECTION_PTR:
         s = snprintf(buf, size, "%p", conn);
+        if(v) *v = (long)conn;
         break;
     case EXPR_CONNECTION_UID:
         s = snprintf(buf, size, "%" PRIan, conn->connection_unique_id);
+        if(v) *v = (long)conn->connection_unique_id;
         break;
     default:
         s = snprintf(buf, size, "?");
+        if(v) *v = 0;
         break;
     }
 
@@ -902,7 +905,7 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
     if(data->expr_head) {
         char *tmp = b;
         ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_head,
-                                    expr_callback, conn);
+                                    expr_callback, conn, 0);
         assert(s >= 0);
         b += s;
         offset += s;
@@ -918,7 +921,7 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
     if(data->expr_body) {
         char *tmp = b;
         ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_body,
-                                    expr_callback, conn);
+                                    expr_callback, conn, 0);
         assert(s >= 0);
         b += s;
         offset += s;
@@ -958,7 +961,7 @@ explode_data_template(struct transport_data_spec *data, struct loop_arguments *l
 static void
 explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr, struct loop_arguments *largs UNUSED, struct connection *conn) {
     *buf_p = 0;
-    ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn);
+    ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0);
     assert(s >= 0);
     *size = s;
 }

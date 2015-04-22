@@ -40,3 +40,6 @@ check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS = check_tcpkali_ring check_platform
+
+clean-local:
+	rm -f *_y.[ch] *_l.[ch]

@@ -54,6 +54,9 @@ static void free_expr(tk_expr_t *expr) {
         case EXPR_DATA:
             free((void *)expr->u.data.data);
             break;
+        case EXPR_MODULO:
+            free_expr((void *)expr->u.modulo.expr);
+            break;
         case EXPR_CONCAT:
             free_expr(expr->u.concat.expr[0]);
             free_expr(expr->u.concat.expr[1]);
@@ -148,7 +151,7 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
     }
 }
 
-ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb, void *key) {
+ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb, void *key, long *value) {
     char *buf;
 
     if(!*buf_p) {
@@ -165,21 +168,32 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callbac
             return -1;
         memcpy(buf, expr->u.data.data, expr->u.data.size);
         return expr->u.data.size;
+    case EXPR_MODULO: {
+        long v = 0;
+        (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v);
+        v %= expr->u.modulo.modulo_value;
+        ssize_t s = snprintf(buf, size, "%ld", v);
+        if(s < 0 || s > (ssize_t)size)
+            return -1;
+        if(value) *value = v;
+        return s;
+        }
+        break;
     case EXPR_CONCAT: {
         assert((expr->u.concat.expr[0]->estimate_size
                + expr->u.concat.expr[1]->estimate_size) <= size);
         ssize_t size1 = eval_expression(&buf, size,
-                                        expr->u.concat.expr[0], cb, key);
+                                        expr->u.concat.expr[0], cb, key, value);
         if(size1 < 0) return -1;
         char *buf2 = buf + size1;
         ssize_t size2 = eval_expression(&buf2, size - size1,
-                                        expr->u.concat.expr[1], cb, key);
+                                        expr->u.concat.expr[1], cb, key, value);
         if(size1 < 0) return -1;
         return size1 + size2;
         }
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID: {
-        return cb(buf, size, expr, key);
+        return cb(buf, size, expr, key, value);
         }
     }
 

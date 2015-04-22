@@ -16,6 +16,7 @@ int yyerror(const char *);
 
 %union  {
     tk_expr_t   *tv_expr;
+    long         tv_long;
     struct {
         char  *buf;
         size_t len;
@@ -27,7 +28,8 @@ int yyerror(const char *);
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
 %token              END 0            "end of expression"
-%token  <tv_string> arbitrary_string
+%token  <tv_string> string           "arbitrary string"
+%token  <tv_long>   integer
 
 %type   <tv_expr>   Expr    "expression"
 %type   <tv_expr>   DataOrExpr "some string or \\{expression}"
@@ -74,7 +76,7 @@ DataAndExpressions:
     }
 
 DataOrExpr:
-    arbitrary_string {
+    string {
         /* If there's nothing to parse, don't return anything */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -88,7 +90,14 @@ DataOrExpr:
     }
 
 Expr:
-    TOK_connection '.' TOK_ptr {
+    | Expr '%' integer {
+        $$ = calloc(1, sizeof(*($$)));
+        $$->type = EXPR_MODULO;
+        $$->u.modulo.expr = $1;
+        $$->u.modulo.modulo_value = $3;
+        $$->estimate_size = $1->estimate_size;
+    }
+    | TOK_connection '.' TOK_ptr {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_PTR;
         $$->estimate_size = sizeof("100000000000000");
