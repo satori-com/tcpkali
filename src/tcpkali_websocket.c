@@ -52,8 +52,6 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
         size = sizeof(tmpbuf);
     }
 
-    if(!payload_size) return 0;
-
     struct ws_frame {
         enum {
             OP_CONTINUATION = 0x0,
