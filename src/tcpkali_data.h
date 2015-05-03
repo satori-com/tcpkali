@@ -32,6 +32,7 @@
  * Format data by escaping special characters. The buffer size should be
  * preallocated to at least (3 + 4*data_size).
  */
+#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)  (3 + 4*(size))
 char *printable_data(char *buffer, size_t buf_size, const void *data, size_t data_size, int quote);
 
 /*
@@ -41,6 +42,16 @@ char *printable_data(char *buffer, size_t buf_size, const void *data, size_t dat
  */
 void unescape_data(void *data, size_t *initial_data_size);
 
-#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)  (3 + 4*(size))
+/*
+ * Read in the specified file contents, allocating memory and recording
+ * the file size.
+ * The caller is responsible for free()'ing the data pointer after successful
+ * invocation.
+ *
+ * RETURN VALUES:
+ *   0: file was read correctly,
+ *  -1: some error was encountered.
+ */
+int read_in_file(const char *filename, char **data, size_t *size);
 
 #endif  /* TCPKALI_DATA_H */

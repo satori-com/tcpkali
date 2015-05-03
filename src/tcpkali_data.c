@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 
 #include "tcpkali_data.h"
@@ -130,4 +131,31 @@ unescape_data(void *data, size_t *initial_data_size) {
 
     if(initial_data_size)
         *initial_data_size = (w - (char *)data);
+}
+
+int
+read_in_file(const char *filename, char **data, size_t *size) {
+    FILE *fp = fopen(filename, "rb");
+    if(!fp) {
+        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+        return -1;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    long off = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    if(!off) {
+        fprintf(stderr, "%s: Warning: file has no content\n", filename);
+    }
+
+    *data = malloc(off + 1);
+    size_t r = fread(*data, 1, off, fp);
+    assert((long)r == off);
+    (*data)[off] = '\0';    /* Just in case. */
+    *size = off;
+
+    fclose(fp);
+
+    return 0;
 }
