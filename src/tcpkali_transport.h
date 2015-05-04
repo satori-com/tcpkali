@@ -27,9 +27,73 @@
 #ifndef TCPKALI_TRANSPORT_H
 #define TCPKALI_TRANSPORT_H
 
-#include <sys/uio.h>
+#include "tcpkali_expr.h"
 
-struct tk_expr; /* Forward declaration */
+/* Forward declarations */
+struct tk_expr;
+struct transport_data_spec;
+
+/*
+ * This is what we get from the CLI options.
+ */
+struct message_collection {
+    struct message_collection_snippet {
+        char           *data;
+        size_t          size;
+        struct tk_expr *expr;
+        enum mc_snippet_kind {
+            /* Whether to add WebSocket framing, if needed */
+            MSK_PURPOSE_HTTP_HEADER     = 0x01, /* HTTP connection upgrade */
+            MSK_PURPOSE_FIRST_MSG       = 0x02, /* --first-message, *-file */
+            MSK_PURPOSE_MESSAGE         = 0x04, /* --message, *-file */
+            MSK_FRAMING_ALLOWED         = 0x10, /* msg=framing, hdr=!framing */
+            MSK_EXPRESSION_FOUND        = 0x20  /* Expression */
+#define MSK_PURPOSE(snippet)    ((snippet)->flags & 0x0f)
+        } flags;
+    } snippets[16];
+    /*
+     * Number of --first-message, --message, etc
+     * options reflected in snippets.
+     */
+    size_t snippets_count;
+    /*
+     * Whether \{expressions} were found in snippets
+     */
+    int expressions_found;
+    /*
+     * A collection must be finalized before use.
+     */
+    enum {
+        MC_EMBRYONIC,           /* We don't know what data is for */
+        MC_FINALIZED_PLAIN_TCP, /* Data is for plain TCP connection */
+        MC_FINALIZED_WEBSOCKET  /* Data is for WebSocket connection */
+    } state;
+};
+
+/*
+ * Add a new data snippet into the message collection.
+ * The function copies data.
+ */
+void message_collection_add(struct message_collection *mc,
+                            enum mc_snippet_kind,
+                            void *data, size_t size,
+                            int unescape);
+
+/*
+ * Finalize the collection, preventing new data to be added,
+ * and adding websocket related messages details.
+ */
+void message_collection_finalize(struct message_collection *, int as_websocket,
+                                 const char *hostport, const char *path);
+
+/*
+ * Estimate the size of the snippets of the specified kind (and mask).
+ * Works on a finalized message collection.
+ */
+size_t message_collection_estimate_size(struct message_collection *mc,
+                                        enum mc_snippet_kind kind_and,
+                                        enum mc_snippet_kind kind_equal);
+
 
 /*
  * Our send buffer is pre-computed in advance and typically
@@ -47,21 +111,14 @@ struct transport_data_spec {
     enum transport_data_flags {
         TDS_FLAG_NONE       = 0x00,
         TDS_FLAG_REPLICATED = 0x01, /* total_size >= once_ + single_message_ */
-        TDS_FLAG_EXPRESSION = 0x02, /* \{foo.bar} style expression found! */
     } flags;
-    struct tk_expr *expr_head;  /* Optional */
-    struct tk_expr *expr_body;  /* Optional */
 };
 
-
 /*
- * Create the data specification by adding transport specific framing.
+ * Convert message collection into transport data specification, which is
+ * friendlier for the high speed sending routine.
  */
-struct transport_data_spec add_transport_framing(struct iovec *iovs,
-        size_t iovs_header, size_t iovs_total,
-        int websocket_enable,
-        const char *hostport,
-        const char *path);
+struct transport_data_spec *transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *, expr_callback_f optional_cb, void *expr_cb_key);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate

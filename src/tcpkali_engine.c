@@ -149,7 +149,7 @@ struct loop_arguments {
      * across all workers. We don't allocate it per worker, so it points
      * to the same memory in the parameters of all workers.
      */
-    atomic_narrow_t *connection_unique_id;
+    atomic_narrow_t *connection_unique_id_atomic;
 };
 
 /*
@@ -172,7 +172,7 @@ struct engine {
     int n_workers;
     non_atomic_wide_t total_data_sent;
     non_atomic_wide_t total_data_rcvd;
-    atomic_narrow_t connection_unique_id; /* == loop->connection_unique_id */
+    atomic_narrow_t connection_unique_id_global;
 };
 
 /*
@@ -277,21 +277,17 @@ struct engine *engine_start(struct engine_params params) {
     }
 
     /*
-     * For efficiency, make sure we concatenate a few data items
-     * instead of sending short messages one by one.
+     * The data template creation may fail because the message collection
+     * might contain expressions which must be resolved
+     * on a per connection basis.
      */
-    switch(parse_payload_data(&params.data_template,
-                              params.verbosity_level >= DBG_DETAIL)) {
-    case 0:
-        replicate_payload(&params.data_template, REPLICATE_MAX_SIZE);
-        break;
-    case 1:
-        assert((params.data_template.flags & TDS_FLAG_EXPRESSION));
-        break;
-    default:
-        exit(EX_UNAVAILABLE);
-    }
-    params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
+    assert(params.data_template == NULL);
+    params.data_template = transport_spec_from_message_collection(0,
+                                &params.message_collection, 0, 0);
+    assert(params.data_template || params.message_collection.expressions_found);
+
+    if(params.data_template)
+        replicate_payload(params.data_template, REPLICATE_MAX_SIZE);
 
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
@@ -311,10 +307,11 @@ struct engine *engine_start(struct engine_params params) {
                     params.latency_marker->u.data.size);
     }
 
+    params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
         TAILQ_INIT(&largs->open_conns);
-        largs->connection_unique_id = &eng->connection_unique_id;
+        largs->connection_unique_id_atomic = &eng->connection_unique_id_global;
         largs->params = params;
         largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
@@ -868,94 +865,37 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
     return s;
 }
 
-static struct transport_data_spec
-explode_data_template(struct transport_data_spec *data, struct loop_arguments *largs UNUSED, struct connection *conn) {
+static void
+explode_data_template(struct message_collection *mc, const struct transport_data_spec *data_template, struct transport_data_spec *out_data, struct loop_arguments *largs UNUSED, struct connection *conn) {
 
-    /* If no expressions were given, just copy the template */
-    if(!(data->flags & TDS_FLAG_EXPRESSION))
-        return *data;
-
-    /*
-     * We might need a unique ID for a connection, and it is rather expensive
-     * to obtain it. We set it here once during connection establishment.
-     */
-    conn->connection_unique_id = atomic_inc_and_get(largs->connection_unique_id);
-
-    struct transport_data_spec new_data;
-    new_data = *data;
-    data = &new_data;
-
-    size_t buf_size =
-        data->ws_hdr_size
-        + (data->expr_head ? data->expr_head->estimate_size
-                            : data->once_size - data->ws_hdr_size)
-        + (data->expr_body ? data->expr_body->estimate_size
-                            : data->total_size - data->once_size)
-    ;
-    char *buf = malloc(buf_size + 1);
-    char *b = buf;
-    size_t offset = 0;
-    memcpy(b, data->ptr, data->ws_hdr_size);
-    b += data->ws_hdr_size;
-    offset += data->ws_hdr_size;
-
-    size_t once_size = data->once_size;
-    size_t total_size = data->total_size;
-
-    if(data->expr_head) {
-        char *tmp = b;
-        ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_head,
-                                    expr_callback, conn, 0);
-        assert(s >= 0);
-        b += s;
-        offset += s;
-        once_size = data->ws_hdr_size + s;
+    if(data_template) {
+        /*
+         * Return the already once prepared data.
+         */
+        *out_data = *data_template;
     } else {
-        memcpy(b,
-                (char *)data->ptr + data->ws_hdr_size,
-                data->once_size - data->ws_hdr_size);
-        b += data->once_size - data->ws_hdr_size;
-        offset += data->once_size - data->ws_hdr_size;
+        /*
+         * We might need a unique ID for a connection, and it is a bit expensive
+         * to obtain it. We set it here once during connection establishment.
+         */
+        conn->connection_unique_id = atomic_inc_and_get(
+                                        largs->connection_unique_id_atomic);
+
+        struct transport_data_spec *new_data_ptr;
+        new_data_ptr = transport_spec_from_message_collection(out_data,
+                            mc, expr_callback, conn);
+        assert(new_data_ptr == out_data);
+
+        char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(out_data->total_size)];
+
+        DEBUG(DBG_DATA, "Connection data: %s\n",
+                printable_data(tmpbuf, sizeof(tmpbuf),
+                               out_data->ptr, out_data->total_size, 1));
+
+        replicate_payload(out_data, REPLICATE_MAX_SIZE);
+        assert(out_data->ptr);
     }
 
-    if(data->expr_body) {
-        char *tmp = b;
-        ssize_t s = eval_expression(&tmp, buf_size - offset, data->expr_body,
-                                    expr_callback, conn, 0);
-        assert(s >= 0);
-        b += s;
-        offset += s;
-        total_size = once_size + s;
-    } else {
-        memcpy(b,
-                (char *)data->ptr + data->once_size,
-                data->total_size - data->once_size);
-        b += data->total_size - data->once_size;
-        offset += data->total_size - data->once_size;
-        total_size = once_size + (data->total_size - data->once_size);
-    }
-    *b = '\0';
-
-    assert(total_size <= buf_size);
-    assert((b - buf) == (ssize_t)total_size);
-
-    data->ptr = buf;
-    data->once_size = once_size;
-    data->total_size = total_size;
-    data->single_message_size = total_size - once_size;
-    data->expr_head = 0;
-    data->expr_body = 0;
-    data->flags &= ~TDS_FLAG_EXPRESSION;
-
-    char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(total_size)];
-
-    DEBUG(DBG_DATA, "Connection data: %s\n",
-            printable_data(tmpbuf, sizeof(tmpbuf),
-                           data->ptr, data->total_size, 1));
-
-    replicate_payload(data, REPLICATE_MAX_SIZE);
-
-    return *data;
 }
 
 static void
@@ -1059,7 +999,7 @@ static void start_new_connection(TK_P) {
     pacefier_init(&conn->bandwidth_pace, now);
     conn->remote_index = remote_index;
 
-    conn->data = explode_data_template(&largs->params.data_template, largs, conn);
+    explode_data_template(&largs->params.message_collection, largs->params.data_template, &conn->data, largs, conn);
     conn->bandwidth_limit = compute_bandwidth_limit(
                                 largs->params.channel_send_rate,
                                 conn->data.single_message_size);
@@ -1827,8 +1767,12 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
 
-    if(conn->data.ptr != largs->params.data_template.ptr)
+    if(largs->params.data_template) {
+        assert(!conn->data.ptr
+               || conn->data.ptr == largs->params.data_template->ptr);
+    } else {
         free(conn->data.ptr);
+    }
 
     connection_free_internals(conn);
 

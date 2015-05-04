@@ -28,7 +28,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <assert.h>
 
 #include    "tcpkali_transport.h"
@@ -48,66 +47,24 @@ void *yyrestart(FILE *);
     } while(0)
 
 
-static void free_expr(tk_expr_t *expr) {
+void free_expression(tk_expr_t *expr) {
     if(expr) {
         switch(expr->type) {
         case EXPR_DATA:
             free((void *)expr->u.data.data);
             break;
         case EXPR_MODULO:
-            free_expr((void *)expr->u.modulo.expr);
+            free_expression((void *)expr->u.modulo.expr);
             break;
         case EXPR_CONCAT:
-            free_expr(expr->u.concat.expr[0]);
-            free_expr(expr->u.concat.expr[1]);
+            free_expression(expr->u.concat.expr[0]);
+            free_expression(expr->u.concat.expr[1]);
             break;
         case EXPR_CONNECTION_PTR:
         case EXPR_CONNECTION_UID:
             break;
         }
     }
-}
-
-int
-parse_payload_data(struct transport_data_spec *data, int debug) {
-    assert(!(data->flags & TDS_FLAG_REPLICATED));
-
-    tk_expr_t *expr;
-
-    /*
-     * Attempt to find expression in headers.
-     */
-    switch(parse_expression(&expr,
-                            (char *)data->ptr + data->ws_hdr_size,
-                            data->once_size - data->ws_hdr_size, debug)) {
-    case 0:
-        free_expr(expr);
-        break;
-    case 1:
-        data->expr_head = expr;
-        data->flags |= TDS_FLAG_EXPRESSION;
-        break;
-    default:
-        return -1;
-    }
-
-    /*
-     * Attempt to find expression in body.
-     */
-    switch(parse_expression(&expr, (char *)data->ptr + data->once_size,
-                                   data->total_size - data->once_size, debug)) {
-    case 0:
-        free_expr(expr);
-        break;
-    case 1:
-        data->expr_body = expr;
-        data->flags |= TDS_FLAG_EXPRESSION;
-        break;
-    default:
-        return -1;
-    }
-
-    return (data->flags & TDS_FLAG_EXPRESSION) ? 1 : 0;
 }
 
 int
@@ -135,18 +92,18 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
             assert(expr->u.data.size == size);
             assert(memcmp(expr->u.data.data, buf, size) == 0);
             if(expr_p) *expr_p = expr;
-            else free_expr(expr);
+            else free_expression(expr);
             return 0;   /* No expression found */
         } else {
             if(expr_p) *expr_p = expr;
-            else free_expr(expr);
+            else free_expression(expr);
             return 1;
         }
     } else {
         char tmp[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
         DEBUG("Failed to parse \"%s\"\n",
             printable_data(tmp, sizeof(tmp), buf, size, 1));
-        free_expr(expr);
+        free_expression(expr);
         return -1;
     }
 }

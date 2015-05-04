@@ -27,8 +27,6 @@
 #ifndef TCPKALI_EXPR_H
 #define TCPKALI_EXPR_H
 
-#include "tcpkali_transport.h"
-
 typedef struct tk_expr {
     enum {
         EXPR_DATA,
@@ -68,7 +66,8 @@ typedef struct tk_expr {
  */
 int parse_expression(tk_expr_t **, const char *expr_buf, size_t size, int debug);
 
-int parse_payload_data(struct transport_data_spec *data, int debug);
+void free_expression(tk_expr_t *expr);
+
 
 typedef ssize_t (expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key, long *output_value);
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f, void *key, long *output_value);

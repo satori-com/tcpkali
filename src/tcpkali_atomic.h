@@ -38,9 +38,9 @@
  * atomic, but not provide atomicity guarantees. This two-tier typing is
  * good for documentation and correctness.
  */
-#if defined(__GNUC__) && (__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 || __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
+#if defined(__clang__) || (defined(__GNUC__) && (__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 || __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
 
-#ifdef  __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+#if defined(__clang__) || defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
 #define PRIaw   PRIu64
 typedef uint64_t non_atomic_wide_t;
 typedef uint32_t non_atomic_narrow_t;
@@ -129,9 +129,7 @@ static inline non_atomic_narrow_t UNUSED
 atomic_inc_and_get(atomic_narrow_t *i) {
     non_atomic_narrow_t prev;
     asm volatile("lock xaddl %1, %0"
-        : "+m" (i->_atomic_val), "=a" (prev)
-        : "r"(1)
-        );
+        : "+m" (i->_atomic_val), "+r"(prev));
     return 1 + prev;
 }
 

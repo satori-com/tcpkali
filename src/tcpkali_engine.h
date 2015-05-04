@@ -65,7 +65,8 @@ struct engine_params {
     double epoch;
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data template */
-    struct transport_data_spec data_template;
+    struct message_collection    message_collection; /* A descr. what to send */
+    struct transport_data_spec  *data_template;
     tk_expr_t *latency_marker;      /* --latency-marker */
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
 };

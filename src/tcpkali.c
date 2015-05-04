@@ -103,11 +103,6 @@ static struct tcpkali_config {
     int   statsd_port;
     char *statsd_namespace;
     int   listen_port;      /* Port on which to listen. */
-    char  *first_message_data;
-    size_t first_message_size;
-    char  *message_data;
-    size_t message_size;
-    int    websocket_enable;    /* Enable WebSocket framing. */
     char  *first_hostport;      /* A single (first) host:port specification */
     char  *first_path;          /* A /path specification from the first host */
 } default_config = {
@@ -155,8 +150,6 @@ static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
-static int read_in_file(const char *filename, char **data, size_t *size);
-static int append_data(const char *str, size_t str_size, char **data, size_t *data_size);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
@@ -255,52 +248,37 @@ int main(int argc, char **argv) {
             unescape_message_data = 1;
             break;
         case 'm':   /* --message */
-            if(conf.message_data) {
-                fprintf(stderr, "--message: Message is already specified.\n");
-                exit(EX_USAGE);
-            }
-            conf.message_data = strdup(optarg);
-            conf.message_size = strlen(optarg);
-            if(unescape_message_data)
-                unescape_data(conf.message_data, &conf.message_size);
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_MESSAGE,
+                                   optarg, strlen(optarg),
+                                   unescape_message_data);
             break;
         case '1':   /* --first-message */
-            if(conf.first_message_data) {
-                fprintf(stderr, "WARNING: --first-message is already specified;"
-                                " appending.\n");
-                /* FALL THROUGH */
-            }
-            char *str = strdup(optarg);
-            size_t slen = strlen(optarg);
-            if(unescape_message_data)
-                unescape_data(str, &slen);
-            if(append_data(str, slen,
-                    &conf.first_message_data, &conf.first_message_size) != 0) {
-                exit(EX_USAGE);
-            }
-            free(str);
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_FIRST_MSG,
+                                   optarg, strlen(optarg),
+                                   unescape_message_data);
             break;
-        case 'f':   /* --message-file */
-            if(conf.message_data) {
-                fprintf(stderr, "--message-file: Message is already specified.\n");
-                exit(EX_USAGE);
-            } else if(read_in_file(optarg, &conf.message_data,
-                                           &conf.message_size) != 0) {
+        case 'f': { /* --message-file */
+            char  *data;
+            size_t  size;
+            if(read_in_file(optarg, &data, &size) != 0)
                 exit(EX_DATAERR);
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_MESSAGE, data, size,
+                                   unescape_message_data);
+            free(data);
             }
-            if(unescape_message_data)
-                unescape_data(conf.message_data, &conf.message_size);
             break;
-        case 'F':
-            if(conf.first_message_data) {
-                fprintf(stderr, "--first-message-file: Message is already specified.\n");
-                exit(EX_USAGE);
-            } else if(read_in_file(optarg, &conf.first_message_data,
-                                           &conf.first_message_size) != 0) {
+        case 'F': { /* --first-message-file */
+            char  *data;
+            size_t  size;
+            if(read_in_file(optarg, &data, &size) != 0)
                 exit(EX_DATAERR);
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_FIRST_MSG, data, size,
+                                   unescape_message_data);
             }
-            if(unescape_message_data)
-                unescape_data(conf.message_data, &conf.message_size);
             break;
         case 'w': {
             int n = atoi(optarg);
@@ -419,7 +397,6 @@ int main(int argc, char **argv) {
             }
             break;
         case 'W':   /* --websocket: Enable WebSocket framing */
-            conf.websocket_enable = 1;
             engine_params.websocket_enable = 1;
             break;
         case 'L': { /* --latency-marker */
@@ -502,35 +479,26 @@ int main(int argc, char **argv) {
     }
 
     /*
-     * Prepare a buffer with data to [repeatedly] send to the other system.
+     * Add final touches to the collection:
+     * add websocket headers if needed, etc.
      */
-    size_t message_size_with_framing = conf.message_size; /* TCP||WS framing */
-    if(conf.message_size || conf.first_message_size || conf.websocket_enable) {
-        struct iovec iovs[2] = {
-            { .iov_base = conf.first_message_data,
-              .iov_len = conf.first_message_size },
-            { .iov_base = conf.message_data,
-              .iov_len = conf.message_size }
-        };
-        engine_params.data_template =
-                    add_transport_framing(iovs,
-                                1,  /* First message data */
-                                2,  /* Subsequent messages data */
-                                conf.websocket_enable,
-                                conf.first_hostport, conf.first_path);
-        message_size_with_framing += conf.websocket_enable
-            ? websocket_frame_header(conf.message_size, 0, 0) : 0;
-    }
+    message_collection_finalize(&engine_params.message_collection,
+                                engine_params.websocket_enable,
+                                conf.first_hostport,
+                                conf.first_path);
+
+    int no_message_to_send = (0 == message_collection_estimate_size(
+                &engine_params.message_collection,
+                MSK_PURPOSE_MESSAGE, MSK_PURPOSE_MESSAGE));
 
     /*
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
     if(engine_params.latency_marker) {
-        if(engine_params.data_template.once_size
-            == engine_params.data_template.total_size
-            || (argc - optind == 0)) {
-            fprintf(stderr, "--latency-marker is given, but no messages are supposed to be sent; die confused");
+        if(no_message_to_send || (argc - optind == 0)) {
+            fprintf(stderr, "--latency-marker is given, but no messages "
+                    "are supposed to be sent. Specify --message?\n");
             exit(EX_USAGE);
         }
     }
@@ -539,8 +507,7 @@ int main(int argc, char **argv) {
      * Make sure we're consistent with the message rate and channel bandwidth.
      */
     if(engine_params.channel_send_rate.value_base != RS_UNLIMITED) {
-        size_t msize = message_size_with_framing;
-        if(msize == 0) {
+        if(no_message_to_send) {
             char *cli_opt_name = "";
             switch(engine_params.channel_send_rate.value_base) {
             case RS_UNLIMITED: break;
@@ -915,47 +882,6 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
         return -1;
     }
     return value;
-}
-
-static int
-append_data(const char *str, size_t str_size, char **data, size_t *dsize) {
-    size_t old_size = (*dsize);
-    size_t new_size = old_size + str_size;
-    char *p = malloc(new_size + 1);
-    assert(p);
-    memcpy(p, *data, old_size);
-    memcpy(&p[old_size], str, str_size);
-    p[new_size] = '\0';
-    *data = p;
-    *dsize = new_size;
-    return 0;
-}
-
-static int
-read_in_file(const char *filename, char **data, size_t *size) {
-    FILE *fp = fopen(filename, "rb");
-    if(!fp) {
-        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
-        return -1;
-    }
-    
-    fseek(fp, 0, SEEK_END);
-    long off = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    if(!off) {
-        fprintf(stderr, "%s: Warning: file has no content\n", filename);
-    }
-
-    *data = malloc(off + 1);
-    size_t r = fread(*data, 1, off, fp);
-    assert((long)r == off);
-    (*data)[off] = '\0';    /* Just in case. */
-    *size = off;
-
-    fclose(fp);
-
-    return 0;
 }
 
 struct addresses detect_listen_addresses(int listen_port) {

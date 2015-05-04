@@ -29,92 +29,63 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-#include <sys/uio.h>
 #include <assert.h>
 
+#include "tcpkali_data.h"
+#include "tcpkali_expr.h"
 #include "tcpkali_websocket.h"
 #include "tcpkali_transport.h"
 
-static size_t iovecs_length(struct iovec *iovs, size_t iovl) {
-    size_t size = 0;
-    for(size_t i = 0; i < iovl; i++)
-        size += iovs[i].iov_len;
-    return size;
-}
 
 /*
- * Add transport specific framing and initialize the engine params members.
- * No framing in case of TCP. HTTP + WebSocket framing in case of websockets.
+ * Helper function to sort headers first, messages last.
  */
-struct transport_data_spec add_transport_framing(struct iovec *iovs, size_t iovh, size_t iovl, int websocket_enable, const char *hostport, const char *path) {
-    assert(iovh <= iovl);
+static int snippet_compare_cb(const void *ap, const void *bp) {
+    const struct message_collection_snippet *a = ap;
+    const struct message_collection_snippet *b = bp;
+    int ka = MSK_PURPOSE(a);
+    int kb = MSK_PURPOSE(b);
 
-    if(websocket_enable) {
-        static const char ws_http_headers_fmt[] =
-            "GET /%s HTTP/1.1\r\n"
-            "Host: %s\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
-            "Sec-WebSocket-Version: 13\r\n"
-            "\r\n";
-        ssize_t http_headers_size;
-        http_headers_size = snprintf("", 0, ws_http_headers_fmt,
-            path, hostport);
-        assert(http_headers_size > (ssize_t)sizeof(ws_http_headers_fmt));
-        char http_headers[http_headers_size + 1];
-        snprintf(http_headers, http_headers_size + 1, ws_http_headers_fmt,
-            path, hostport);
-        const int http_hdr_iovs = 1;
-        struct iovec ws_iovs[http_hdr_iovs + 2 * iovl];
-        uint8_t ws_framing_prefixes[WEBSOCKET_MAX_FRAME_HDR_SIZE * iovl];
-        uint8_t *wsp = ws_framing_prefixes;
-        ws_iovs[0].iov_base = (void *)http_headers;
-        ws_iovs[0].iov_len = http_headers_size;
-        for(size_t i = 0; i < iovl; i++) {
-            uint8_t *old_wsp = wsp;
-            wsp += websocket_frame_header(iovs[i].iov_len, wsp,
-                                         (size_t)(sizeof(ws_framing_prefixes)
-                                               - (wsp - ws_framing_prefixes)));
-            /* WS header */
-            ws_iovs[http_hdr_iovs + 2*i].iov_base = old_wsp;
-            ws_iovs[http_hdr_iovs + 2*i].iov_len = wsp - old_wsp;
-            /* WS data */
-            ws_iovs[http_hdr_iovs + 2*i + 1] = iovs[i];
-        }
-        assert((wsp - ws_framing_prefixes)
-            <= (ssize_t)sizeof(ws_framing_prefixes));
+    if(ka < kb) return -1;
+    if(ka > kb) return 1;
+    return 0;
+}
 
-        struct transport_data_spec data;
-        data = add_transport_framing(ws_iovs,
-            http_hdr_iovs + 2*iovh,
-            http_hdr_iovs + 2*iovl, 0, 0, 0);
-        data.ws_hdr_size = http_headers_size;
-        return data;
+void
+message_collection_finalize(struct message_collection *mc, int as_websocket, const char *hostport, const char *path) {
+    const char ws_http_headers_fmt[] =
+        "GET /%s HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n";
+
+    assert(mc->state == MC_EMBRYONIC);
+
+    if(as_websocket) {
+        ssize_t estimated_size = snprintf("", 0,
+                                          ws_http_headers_fmt,
+                                          path, hostport);
+        assert(estimated_size >= (ssize_t)sizeof(ws_http_headers_fmt));
+        char http_headers[estimated_size + 1];
+        ssize_t h_size = snprintf(http_headers, estimated_size + 1,
+                                  ws_http_headers_fmt, path, hostport);
+        assert(h_size == estimated_size);
+
+        const int DISABLE_UNESCAPE = 0;
+        message_collection_add(mc, MSK_PURPOSE_HTTP_HEADER,
+                               http_headers, h_size, DISABLE_UNESCAPE);
+
+        mc->state = MC_FINALIZED_WEBSOCKET;
     } else {
-        /* Straight plain flat TCP with no framing and back-to-back messages. */
-        char *p;
-        size_t once_size = iovecs_length(iovs, iovh);
-        size_t total_size = iovecs_length(iovs, iovl);
-        p = malloc(total_size + 1);
-        assert(p);
-
-        struct transport_data_spec data;
-        memset(&data, 0, sizeof(data));
-        data.ptr = p;
-        data.ws_hdr_size = 0;
-        data.once_size = once_size;
-        data.total_size = total_size;
-        data.single_message_size = total_size - once_size;
-
-        for(size_t i = 0; i < iovl; i++) {
-            memcpy(p, iovs[i].iov_base, iovs[i].iov_len);
-            p += iovs[i].iov_len;
-        }
-        p[0] = '\0';
-
-        return data;
+        mc->state = MC_FINALIZED_PLAIN_TCP;
     }
+
+    /* Order hdr > first_msg > msg. */
+    qsort(mc->snippets, mc->snippets_count, sizeof(mc->snippets[0]),
+          snippet_compare_cb);
 }
 
 
@@ -154,3 +125,193 @@ void replicate_payload(struct transport_data_spec *data, size_t target_size) {
     data->flags |= TDS_FLAG_REPLICATED;
 }
 
+
+void
+message_collection_add(struct message_collection *mc,
+                            enum mc_snippet_kind kind,
+                            void *data, size_t size,
+                            int unescape) {
+
+    assert(mc->state == MC_EMBRYONIC);
+
+    /* Verify that messages are properly kinded. */
+    switch(kind) {
+    case MSK_PURPOSE_HTTP_HEADER:
+        break;
+    case MSK_PURPOSE_FIRST_MSG:
+    case MSK_PURPOSE_MESSAGE:
+        kind |= MSK_FRAMING_ALLOWED;
+        break;
+    default:
+        assert(!"Cannot add message with non-MSK_PURPOSE_ kind");
+        return; /* Unreachable */
+    }
+
+    if(mc->snippets_count >= sizeof(mc->snippets)/sizeof(mc->snippets[0])) {
+        /* TODO: make snippets[] dynamic. */
+        fprintf(stderr, "Too many --message "
+                        "or --first-message arguments\n");
+        exit(1);
+    }
+
+    char *p = malloc(size + 1);
+    assert(p);
+    memcpy(p, data, size);
+    p[size] = 0;
+
+    if(unescape) unescape_data(p, &size);
+
+    struct message_collection_snippet *snip;
+    snip = &mc->snippets[mc->snippets_count++];
+    snip->data = p;
+    snip->size = size;
+    snip->expr = 0;
+    snip->flags = kind;
+
+    const int ENABLE_DEBUG = 1;
+    tk_expr_t *expr = 0;
+    switch(parse_expression(&expr, p, size, ENABLE_DEBUG)) {
+    case 0:
+        /* Trivial expression, does not change wrt. environment. */
+        free_expression(expr);
+        /* Just use the data instead. */
+        break;
+    case 1:
+        snip->expr = expr;
+        snip->flags |= MSK_EXPRESSION_FOUND;
+        mc->expressions_found++;
+        break;
+    case -1:
+        /* parse_expression() would have already printed the failure reason */
+        exit(1);
+    }
+}
+
+/*
+ * Give the largest size the message can possibly occupy.
+ */
+size_t
+message_collection_estimate_size(struct message_collection *mc,
+                                 enum mc_snippet_kind kind_and,
+                                 enum mc_snippet_kind kind_equal) {
+    size_t total_size = 0;
+    size_t i;
+
+    assert(mc->state != MC_EMBRYONIC);
+
+    for(i = 0; i < mc->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc->snippets[i];
+
+        /* Match pattern */
+        if((snip->flags & kind_and) != kind_equal)
+            continue;
+
+        if(snip->flags & MSK_EXPRESSION_FOUND) {
+            total_size += snip->expr->estimate_size;
+        } else {
+            total_size += snip->size;
+        }
+        total_size +=
+                (mc->state == MC_FINALIZED_WEBSOCKET
+                && (snip->flags & MSK_FRAMING_ALLOWED))
+                        ? WEBSOCKET_MAX_FRAME_HDR_SIZE : 0;
+    }
+    return total_size;
+}
+
+
+struct transport_data_spec *
+transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *mc, expr_callback_f optional_cb, void *expr_cb_key) {
+
+    /*
+     * If expressions found we can not create a transport data specification
+     * from this collection directly. Need to go through expression evaluator.
+     */
+    if(mc->expressions_found) {
+        if(!optional_cb)
+            return NULL;
+    }
+
+    size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
+
+    struct transport_data_spec *data_spec;
+    /* out_spec is expected to be 0-filled, if given. */
+    data_spec = out_spec ? out_spec : calloc(1, sizeof(*data_spec));
+    assert(data_spec);
+    data_spec->ptr = malloc(estimate_size + 1);
+    assert(data_spec->ptr);
+
+    size_t i;
+    for(i = 0; i < mc->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc->snippets[i];
+
+        void *data = snip->data;
+        size_t size = snip->size;
+
+        if(snip->flags & MSK_EXPRESSION_FOUND) {
+            size_t reified_size;
+            char *tptr = (char *)data_spec->ptr + data_spec->total_size;
+            assert(estimate_size >= data_spec->total_size
+                                    + snip->expr->estimate_size);
+            reified_size = eval_expression(&tptr,
+                            estimate_size - data_spec->total_size,
+                            snip->expr, optional_cb, expr_cb_key, 0);
+            assert(reified_size >= 0);
+            data = 0;
+            size = reified_size;
+        }
+
+        size_t ws_frame_size = 0;
+        if(mc->state == MC_FINALIZED_WEBSOCKET
+           && (snip->flags & MSK_FRAMING_ALLOWED)) {
+            if(snip->flags & MSK_EXPRESSION_FOUND) {
+                uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
+                /* Save the websocket frame elsewhere temporarily */
+                ws_frame_size = websocket_frame_header(size,
+                                        tmpbuf, sizeof(tmpbuf));
+                /* Move the data to the right to make space for framing */
+                memmove((char *)data_spec->ptr + data_spec->total_size
+                                               + ws_frame_size,
+                        (char *)data_spec->ptr + data_spec->total_size,
+                        size);
+                /* Prepend the websocket frame */
+                memcpy((char *)data_spec->ptr + data_spec->total_size,
+                       tmpbuf, ws_frame_size);
+            } else {
+                ws_frame_size = websocket_frame_header(size,
+                                (uint8_t *)data_spec->ptr+data_spec->total_size,
+                                estimate_size - data_spec->total_size);
+            }
+        }
+
+        /*
+         * We only add data if it has not already been added.
+         */
+        size_t framed_snippet_size = ws_frame_size + size;
+        if(data) {  /* Data is not there if expression is used. */
+            memcpy((char *)data_spec->ptr
+                   + data_spec->total_size + ws_frame_size, data, size);
+        }
+        data_spec->total_size += framed_snippet_size;
+
+        switch(MSK_PURPOSE(snip)) {
+        case MSK_PURPOSE_HTTP_HEADER:
+            data_spec->ws_hdr_size += framed_snippet_size;
+            data_spec->once_size   += framed_snippet_size;
+            break;
+        case MSK_PURPOSE_FIRST_MSG:
+            data_spec->once_size   += framed_snippet_size;
+            break;
+        case MSK_PURPOSE_MESSAGE:
+            data_spec->single_message_size += framed_snippet_size;
+            break;
+        default:
+            assert(!"No recognized snippet purpose");
+            return NULL;
+        }
+    }
+    assert(data_spec->total_size <= estimate_size);
+    ((char *)data_spec->ptr)[data_spec->total_size] = '\0';
+
+    return data_spec;
+}
