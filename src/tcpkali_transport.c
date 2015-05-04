@@ -249,7 +249,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
         size_t size = snip->size;
 
         if(snip->flags & MSK_EXPRESSION_FOUND) {
-            size_t reified_size;
+            ssize_t reified_size;
             char *tptr = (char *)data_spec->ptr + data_spec->total_size;
             assert(estimate_size >= data_spec->total_size
                                     + snip->expr->estimate_size);
