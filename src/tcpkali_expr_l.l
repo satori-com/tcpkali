@@ -36,7 +36,6 @@ WSP [\t\r\v\f\n ]
 
     }
 
-<INITIAL>.              return yytext[0];
 <INITIAL><<EOF>>        yyterminate();
 
 
