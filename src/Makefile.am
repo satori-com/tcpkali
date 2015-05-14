@@ -42,4 +42,4 @@ TESTS = $(check_PROGRAMS)
 check_PROGRAMS = check_tcpkali_ring check_platform
 
 clean-local:
-	rm -f *_y.[ch] *_l.[ch]
+	rm -f *_l.[ch]
