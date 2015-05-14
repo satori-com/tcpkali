@@ -90,7 +90,7 @@ DataOrExpr:
     }
 
 Expr:
-    | Expr '%' integer {
+    Expr '%' integer {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_MODULO;
         $$->u.modulo.expr = $1;
