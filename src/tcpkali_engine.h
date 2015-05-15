@@ -68,6 +68,7 @@ struct engine_params {
     struct message_collection    message_collection; /* A descr. what to send */
     struct transport_data_spec  *data_template;
     tk_expr_t *latency_marker;      /* --latency-marker */
+    int        latency_marker_skip;    /* --latency-marker-skip <N> */
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
 };
 

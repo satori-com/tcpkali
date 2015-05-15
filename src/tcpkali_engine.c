@@ -104,6 +104,7 @@ struct connection {
         struct ring_buffer *sent_timestamps;
         struct hdr_histogram *histogram;
         unsigned message_bytes_credit;  /* See (EXPL:1) below. */
+        unsigned lm_occurrences_skip;   /* See --latency-marker-skip */
         /* Boyer-Moore-Horspool substring search algorithm data */
         struct StreamBMH     *sbmh_ctx;
         /* The following fields might be shared across connections. */
@@ -1007,6 +1008,11 @@ static void start_new_connection(TK_P) {
     if(largs->params.latency_marker && conn->data.single_message_size) {
         conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
             = conn->data.single_message_size - 1;
+        /*
+         * Figure out how many latency markers to skip
+         * before starting to measure latency with them.
+         */
+        conn->latency.lm_occurrences_skip = largs->params.latency_marker_skip;
 
         /*
          * Initialize the Boyer-Moore-Horspool context for substring search.
@@ -1415,7 +1421,7 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
 
     const uint8_t *lm = conn->latency.sbmh_data;
     size_t   lm_size  = conn->latency.sbmh_size;
-    int num_markers_found = 0;
+    unsigned num_markers_found = 0;
 
     for(; size > 0; ) {
         size_t analyzed = sbmh_feed(conn->latency.sbmh_ctx,
@@ -1428,6 +1434,19 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
             sbmh_reset(conn->latency.sbmh_ctx);
         } else {
             break;
+        }
+    }
+
+    /*
+     * Skip the necessary numbers of markers.
+     */
+    if(conn->latency.lm_occurrences_skip) {
+        if(num_markers_found <= conn->latency.lm_occurrences_skip) {
+            conn->latency.lm_occurrences_skip -= num_markers_found;
+            return;
+        } else {
+            num_markers_found -= conn->latency.lm_occurrences_skip;
+            conn->latency.lm_occurrences_skip = 0;
         }
     }
 

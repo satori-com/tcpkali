@@ -74,6 +74,7 @@ static struct option cli_long_options[] = {
     { "first-message-file", 1, 0, 'F' },
     { "help", 0, 0, 'h' },
     { "latency-marker", 1, 0, 'L' },
+    { "latency-marker-skip", 1, 0, 'S' },
     { "listen-port", 1, 0, 'l' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
@@ -411,6 +412,18 @@ int main(int argc, char **argv) {
             if(parse_expression(&engine_params.latency_marker, data, size, 0)
                     == -1) {
                 fprintf(stderr, "--latency-marker: Failed to parse expression\n");
+                exit(EX_USAGE);
+            }
+            }
+            break;
+        case 'S': { /* --latency-marker-skip */
+            engine_params.latency_marker_skip =
+                            parse_with_multipliers(option, optarg,
+                            km_multiplier,
+                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            if(engine_params.latency_marker_skip < 0) {
+                fprintf(stderr, "--latency-marker-skip: "
+                            "Failed to parse or out of range expression\n");
                 exit(EX_USAGE);
             }
             }
@@ -949,6 +962,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -r, --message-rate <R>      Messages per second to send in a connection\n"
     "\n"
     "  --latency-marker <string>   Measure latency using a per-message marker\n"
+    "  --latency-marker-skip <N>   Ignore the first N occurrences of a marker\n"
     "\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
