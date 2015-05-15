@@ -59,6 +59,7 @@
       -r, --message-rate <R>      Messages per second to send in a connection
 
       --latency-marker <string>   Measure latency using a per-message marker
+      --latency-marker-skip <N>   Ignore the first N occurrences of a marker
 
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
