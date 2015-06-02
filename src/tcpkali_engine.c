@@ -398,7 +398,7 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         (uint64_t)epoch_data_rcvd);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
-    printf("Bandwidth per channel: %.3f Mbps, %.1f kBps\n",
+    printf("Bandwidth per channel: %.3f⇅ Mbps (%.1f kBps)\n",
         8 * ((epoch_data_transmitted / test_duration) / conns) / 1000000.0,
         (epoch_data_transmitted / test_duration) / conns / 1000.0
     );
