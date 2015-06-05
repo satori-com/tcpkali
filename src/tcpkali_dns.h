@@ -54,6 +54,6 @@ void address_add(struct addresses *, struct sockaddr *sa);
  * Return the string representing the socket address.
  * The size should be at least INET6_ADDRSTRLEN+64.
  */
-const char *format_sockaddr(struct sockaddr *, char *, size_t);
+const char *format_sockaddr(struct sockaddr_storage *, char *, size_t);
 
 #endif  /* TCPKALI_DNS_H */

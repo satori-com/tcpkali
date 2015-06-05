@@ -76,6 +76,7 @@ static struct option cli_long_options[] = {
     { "latency-marker", 1, 0, 'L' },
     { "latency-marker-skip", 1, 0, 'S' },
     { "listen-port", 1, 0, 'l' },
+    { "listen-mode", 1, 0, 'M' },
     { "message", 1, 0, 'm' },
     { "message-file", 1, 0, 'f' },
     { "message-rate", 1, 0, 'r' },
@@ -372,6 +373,18 @@ int main(int argc, char **argv) {
             if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
                 fprintf(stderr, "--listen-port=%d is not in [1..65535]\n",
                     conf.listen_port);
+                exit(EX_USAGE);
+            }
+            break;
+        case 'M':   /* --listen-mode={silent|active} */
+            if(strcmp(optarg, "silent") == 0) {
+                engine_params.listen_mode = LMODE_DEFAULT;
+            } if(strcmp(optarg, "active") == 0) {
+                engine_params.listen_mode &= ~_LMODE_SND_MASK;
+                engine_params.listen_mode |= LMODE_ACTIVE;
+            } else {
+                fprintf(stderr, "--listen-mode=%s is not one of {silent|active}\n",
+                    optarg);
                 exit(EX_USAGE);
             }
             break;
@@ -951,6 +964,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
     "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
+    "  --listen-mode=<mode>        What to do upon client connect, where <mode> is:\n"
+    "               \"silent\"       Do not send data, ignore received data (default)\n"
+    "               \"active\"       Actively send messages\n"
     "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  -T, --duration <T=10s>      Load test for the specified amount of time\n"
     "\n"

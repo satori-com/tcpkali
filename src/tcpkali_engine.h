@@ -58,6 +58,12 @@ struct engine_params {
         NSET_NODELAY_OFF = 0,  /* Enable Nagle */
         NSET_NODELAY_ON = 1,   /* Disable Nagle */
     } nagle_setting;
+    enum {
+        LMODE_DEFAULT   = 0x00,   /* Do not send data, ignore received data */
+        LMODE_ACTIVE    = 0x01,   /* Actively send messages */
+        _LMODE_RCV_MASK = 0xf0,
+        _LMODE_SND_MASK = 0x0f,
+    } listen_mode;
     uint32_t sock_rcvbuf_size;        /* SO_RCVBUF setting */
     uint32_t sock_sndbuf_size;        /* SO_SNDBUF setting */
     double connect_timeout;

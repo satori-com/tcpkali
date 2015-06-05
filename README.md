@@ -48,6 +48,9 @@
       --channel-lifetime <T>      Shut down each connection after T seconds
       --channel-bandwidth <Bw>    Limit single connection bandwidth
       -l, --listen-port <port>    Listen on the specified port
+      --listen-mode=<mode>        What to do upon client connect, where <mode> is:
+                   "silent"       Do not send data, ignore received data (default)
+                   "active"       Actively send messages
       -w, --workers <N>           Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
 

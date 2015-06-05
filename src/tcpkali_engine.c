@@ -83,12 +83,12 @@ struct connection {
     float channel_eol_point;    /* End of life time, since epoch */
     struct pacefier   bandwidth_pace;
     bandwidth_limit_t bandwidth_limit;
-    enum type {
+    enum conn_type {
         CONN_OUTGOING,
         CONN_INCOMING,
         CONN_ACCEPTOR,
     } conn_type:2;
-    enum state {
+    enum conn_state {
         CSTATE_CONNECTED,
         CSTATE_CONNECTING,
     } conn_state:1;
@@ -99,6 +99,7 @@ struct connection {
     int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
     non_atomic_narrow_t connection_unique_id; /* connection.uid */
     TAILQ_ENTRY(connection) hook;
+    struct sockaddr_storage peer_name;  /* For CONN_INCOMING */
     /* Latency */
     struct {
         struct ring_buffer *sent_timestamps;
@@ -193,7 +194,7 @@ static void connections_flush_stats(TK_P);
 static void connection_flush_stats(TK_P_ struct connection *conn);
 static void close_all_connections(TK_P_ enum connection_close_reason reason);
 static void connection_cb(TK_P_ tk_io *w, int revents);
-static void devnull_websocket_cb(TK_P_ tk_io *w, int revents);
+static void passive_websocket_cb(TK_P_ tk_io *w, int revents);
 static void devnull_cb(TK_P_ tk_io *w, int revents);
 static void control_cb(TK_P_ tk_io *w, int revents);
 static void accept_cb(TK_P_ tk_io *w, int revents);
@@ -202,11 +203,12 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int revents); /* Timeout timer */
 static void expire_channel_lives(TK_P_ tk_timer *w, int revents);
 static void setup_channel_lifetime_timer(TK_P_ double first_timeout);
 static void update_io_interest(TK_P_ struct connection *conn, int events);
-static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
+static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
 static void set_socket_options(int fd, struct loop_arguments *largs);
+static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd);
 
 #ifdef  USE_LIBUV
 static void expire_channel_lives_uv(tk_timer *w) {
@@ -218,8 +220,8 @@ static void stats_timer_cb_uv(tk_timer *w) {
 static void conn_timer_cb_uv(tk_timer *w) {
     conn_timer_cb(w->loop, w, 0);
 }
-static void devnull_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
-    devnull_websocket_cb(w->loop, w, revents);
+static void passive_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
+    passive_websocket_cb(w->loop, w, revents);
 }
 static void connection_cb_uv(tk_io *w, int UNUSED status, int revents) {
     connection_cb(w->loop, w, revents);
@@ -236,8 +238,8 @@ static void control_cb_uv(tk_io *w, int UNUSED status, int revents) {
 #endif
 
 /* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
-static socklen_t sockaddr_len(struct sockaddr *sa) {
-    switch(sa->sa_family) {
+static socklen_t sockaddr_len(struct sockaddr_storage *ss) {
+    switch(ss->ss_family) {
     case AF_INET: return sizeof(struct sockaddr_in);
     case AF_INET6: return sizeof(struct sockaddr_in6);
     }
@@ -633,9 +635,9 @@ static void *single_engine_loop_thread(void *argp) {
     if(largs->params.listen_addresses.n_addrs) {
         int opened_listening_sockets = 0;
         for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
-            struct sockaddr *sa = (struct sockaddr *)&largs->params.listen_addresses.addrs[n];
+            struct sockaddr_storage *ss = &largs->params.listen_addresses.addrs[n];
             int rc;
-            int lsock = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
+            int lsock = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
             assert(lsock != -1);
             set_nbio(lsock, 1);
 #ifdef SO_REUSEPORT
@@ -650,11 +652,11 @@ static void *single_engine_loop_thread(void *argp) {
              * See http://permalink.gmane.org/gmane.linux.network/158320
              */
 #endif  /* SO_REUSEPORT */
-            rc = bind(lsock, sa, sockaddr_len(sa));
+            rc = bind(lsock, (struct sockaddr *)ss, sockaddr_len(ss));
             if(rc == -1) {
                 char buf[256];
                 DEBUG(DBG_ALWAYS, "Bind %s is not done: %s\n",
-                        format_sockaddr(sa, buf, sizeof(buf)),
+                        format_sockaddr(ss, buf, sizeof(buf)),
                         strerror(errno));
                 switch(errno) {
                 case EINVAL: continue;
@@ -912,14 +914,14 @@ static void start_new_connection(TK_P) {
     struct remote_stats *remote_stats;
     size_t remote_index;
 
-    struct sockaddr *sa = pick_remote_address(largs, &remote_index);
+    struct sockaddr_storage *ss = pick_remote_address(largs, &remote_index);
     remote_stats = &largs->remote_stats[remote_index];
 
     atomic_increment(&largs->connections_counter);
     atomic_increment(&remote_stats->connection_attempts);
     largs->worker_connections_initiated++;
 
-    int sockfd = socket(sa->sa_family, SOCK_STREAM, IPPROTO_TCP);
+    int sockfd = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
         switch(errno) {
         case ENFILE:
@@ -935,7 +937,7 @@ static void start_new_connection(TK_P) {
     }
 
     int conn_state;
-    int rc = connect(sockfd, sa, sockaddr_len(sa));
+    int rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
     if(rc == -1) {
         char buf[INET6_ADDRSTRLEN+64];
         switch(errno) {
@@ -946,7 +948,7 @@ static void start_new_connection(TK_P) {
             largs->worker_connection_failures++;
             if(atomic_get(&remote_stats->connection_failures) == 1) {
                 DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
-                        format_sockaddr(sa, buf, sizeof(buf)), strerror(errno));
+                        format_sockaddr(ss, buf, sizeof(buf)), strerror(errno));
             }
             close(sockfd);
             return;
@@ -974,9 +976,9 @@ static void start_new_connection(TK_P) {
         socklen_t addrlen = sizeof(srcaddr);
         if(getsockname(sockfd, (struct sockaddr *)&srcaddr, &addrlen) == 0) {
             DEBUG(DBG_DETAIL, "Connection %s -> %s opened as %d\n",
-                      format_sockaddr((struct sockaddr *)&srcaddr,
+                      format_sockaddr(&srcaddr,
                             srcaddr_buf, sizeof(srcaddr_buf)),
-                      format_sockaddr(sa, dstaddr_buf, sizeof(dstaddr_buf)),
+                      format_sockaddr(ss, dstaddr_buf, sizeof(dstaddr_buf)),
                       sockfd);
         } else {
             DEBUG(DBG_WARNING, "Can't getsockname(%d): %s",
@@ -984,104 +986,15 @@ static void start_new_connection(TK_P) {
         }
     }
 
-    double now = tk_now(TK_A);
-
     struct connection *conn = calloc(1, sizeof(*conn));
-    conn->conn_type = CONN_OUTGOING;
-    conn->conn_state = conn_state;
-    if(limit_channel_lifetime(largs)) {
-        if(TAILQ_FIRST(&largs->open_conns) == NULL) {
-            setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
-        }
-        conn->channel_eol_point =
-            (now - largs->params.epoch) + largs->params.channel_lifetime;
-    }
-    TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
-    pacefier_init(&conn->bandwidth_pace, now);
     conn->remote_index = remote_index;
-
-    explode_data_template(&largs->params.message_collection, largs->params.data_template, &conn->data, largs, conn);
-    conn->bandwidth_limit = compute_bandwidth_limit(
-                                largs->params.channel_send_rate,
-                                conn->data.single_message_size);
-
-    if(largs->params.latency_marker && conn->data.single_message_size) {
-        conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
-            = conn->data.single_message_size - 1;
-        /*
-         * Figure out how many latency markers to skip
-         * before starting to measure latency with them.
-         */
-        conn->latency.lm_occurrences_skip = largs->params.latency_marker_skip;
-
-        /*
-         * Initialize the Boyer-Moore-Horspool context for substring search.
-         */
-        struct StreamBMH_Occ *init_occ = NULL;
-        if(EXPR_IS_TRIVIAL(largs->params.latency_marker)) {
-            /* Shared search table and expression */
-            conn->latency.sbmh_shared = 1;
-            conn->latency.sbmh_occ  = &largs->params.sbmh_shared_occ;
-            conn->latency.sbmh_data = (uint8_t *)largs->params.latency_marker->u.data.data;
-            conn->latency.sbmh_size = largs->params.latency_marker->u.data.size;
-        } else {
-            /* Individual search table. */
-            conn->latency.sbmh_shared = 0;
-            conn->latency.sbmh_occ = malloc(sizeof(*conn->latency.sbmh_occ));
-            assert(conn->latency.sbmh_occ);
-            init_occ = conn->latency.sbmh_occ;
-            explode_string_expression((char **)&conn->latency.sbmh_data,
-                                      &conn->latency.sbmh_size,
-                                      largs->params.latency_marker,
-                                      largs, conn);
-        }
-        conn->latency.sbmh_ctx = malloc(SBMH_SIZE(conn->latency.sbmh_size));
-        assert(conn->latency.sbmh_ctx);
-        sbmh_init(conn->latency.sbmh_ctx, init_occ,
-                  conn->latency.sbmh_data, conn->latency.sbmh_size);
-
-        /*
-         * Initialize the latency histogram by copying out the template
-         * parameter from the loop arguments.
-         */
-        conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-        int ret = hdr_init(largs->histogram->lowest_trackable_value,
-                         largs->histogram->highest_trackable_value,
-                         largs->histogram->significant_figures,
-                         &conn->latency.histogram);
-        assert(ret == 0);
-    }
-
-    int want_catch_connect = (conn_state == CSTATE_CONNECTING
-                    && largs->params.connect_timeout > 0.0);
-    if(want_catch_connect) {
-#ifdef  USE_LIBUV
-        uv_timer_init(TK_A_ &conn->timer);
-        uint64_t delay = 1000 * largs->params.connect_timeout;
-        if(delay == 0) delay = 1;
-        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
-#else
-        ev_timer_init(&conn->timer, conn_timer_cb,
-                      largs->params.connect_timeout, 0.0);
-        ev_timer_start(TK_A_ &conn->timer);
-#endif
-    }
-
-    int want_write = (conn->data.total_size || want_catch_connect);
-    int want_events = TK_READ | (want_write ? TK_WRITE : 0);
-#ifdef  USE_LIBUV
-    uv_poll_init(TK_A_ &conn->watcher, sockfd);
-    uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
-#else
-    ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
-    ev_io_start(TK_A_ &conn->watcher);
-#endif
+    common_connection_init(TK_A_ conn, CONN_OUTGOING, conn_state, sockfd);
 }
 
 /*
  * Pick an address in a round-robin fashion, skipping certainly broken ones.
  */
-static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t *remote_index) {
+static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs, size_t *remote_index) {
 
     /*
      * If it is known that a particular destination is broken, choose
@@ -1101,18 +1014,22 @@ static struct sockaddr *pick_remote_address(struct loop_arguments *largs, size_t
     }
 
     *remote_index = off;
-    return (struct sockaddr *)&largs->params.remote_addresses.addrs[off];
+    return &largs->params.remote_addresses.addrs[off];
 }
 
 static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, timer));
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
         switch(conn->conn_type) {
         case CONN_INCOMING:
-            update_io_interest(TK_A_ conn, TK_READ);
-            break;
+            if((largs->params.listen_mode & _LMODE_SND_MASK) == 0) {
+                update_io_interest(TK_A_ conn, TK_READ);
+                break;
+            }
+            /* Fall through */
         case CONN_OUTGOING:
             update_io_interest(TK_A_ conn,
                 TK_READ | (conn->data.total_size ? TK_WRITE : 0));
@@ -1153,6 +1070,139 @@ static void setup_channel_lifetime_timer(TK_P_ double first_timeout) {
 #endif
 }
 
+/*
+ * Initialize common connection parameters.
+ */
+static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
+
+    conn->conn_type = conn_type;
+    conn->conn_state = conn_state;
+
+    double now = tk_now(TK_A);
+
+    if(limit_channel_lifetime(largs)) {
+        if(TAILQ_FIRST(&largs->open_conns) == NULL) {
+            setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
+        }
+        conn->channel_eol_point =
+            (now - largs->params.epoch) + largs->params.channel_lifetime;
+    }
+    TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
+
+    /*
+     * If we're going to send data, establish bandwidth control.
+     */
+    int active_socket = conn_type == CONN_OUTGOING
+                    || (largs->params.listen_mode & _LMODE_SND_MASK);
+    if(active_socket) {
+        pacefier_init(&conn->bandwidth_pace, now);
+
+        explode_data_template(&largs->params.message_collection, largs->params.data_template, &conn->data, largs, conn);
+        conn->bandwidth_limit = compute_bandwidth_limit(
+                                    largs->params.channel_send_rate,
+                                    conn->data.single_message_size);
+
+        if(largs->params.latency_marker && conn->data.single_message_size) {
+            conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
+                = conn->data.single_message_size - 1;
+            /*
+             * Figure out how many latency markers to skip
+             * before starting to measure latency with them.
+             */
+            conn->latency.lm_occurrences_skip = largs->params.latency_marker_skip;
+
+            /*
+             * Initialize the Boyer-Moore-Horspool context for substring search.
+             */
+            struct StreamBMH_Occ *init_occ = NULL;
+            if(EXPR_IS_TRIVIAL(largs->params.latency_marker)) {
+                /* Shared search table and expression */
+                conn->latency.sbmh_shared = 1;
+                conn->latency.sbmh_occ  = &largs->params.sbmh_shared_occ;
+                conn->latency.sbmh_data = (uint8_t *)largs->params.latency_marker->u.data.data;
+                conn->latency.sbmh_size = largs->params.latency_marker->u.data.size;
+            } else {
+                /* Individual search table. */
+                conn->latency.sbmh_shared = 0;
+                conn->latency.sbmh_occ = malloc(sizeof(*conn->latency.sbmh_occ));
+                assert(conn->latency.sbmh_occ);
+                init_occ = conn->latency.sbmh_occ;
+                explode_string_expression((char **)&conn->latency.sbmh_data,
+                                          &conn->latency.sbmh_size,
+                                          largs->params.latency_marker,
+                                          largs, conn);
+            }
+            conn->latency.sbmh_ctx = malloc(SBMH_SIZE(conn->latency.sbmh_size));
+            assert(conn->latency.sbmh_ctx);
+            sbmh_init(conn->latency.sbmh_ctx, init_occ,
+                      conn->latency.sbmh_data, conn->latency.sbmh_size);
+
+            /*
+             * Initialize the latency histogram by copying out the template
+             * parameter from the loop arguments.
+             */
+            conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
+            int ret = hdr_init(largs->histogram->lowest_trackable_value,
+                             largs->histogram->highest_trackable_value,
+                             largs->histogram->significant_figures,
+                             &conn->latency.histogram);
+            assert(ret == 0);
+        }
+    }
+
+    /*
+     * Catch connection timeout.
+     */
+    int want_catch_connect = (conn_state == CSTATE_CONNECTING
+                        && largs->params.connect_timeout > 0.0);
+    if(want_catch_connect) {
+        assert(conn_type == CONN_OUTGOING);
+#ifdef  USE_LIBUV
+        uv_timer_init(TK_A_ &conn->timer);
+        uint64_t delay = 1000 * largs->params.connect_timeout;
+        if(delay == 0) delay = 1;
+        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
+#else
+        ev_timer_init(&conn->timer, conn_timer_cb,
+                      largs->params.connect_timeout, 0.0);
+        ev_timer_start(TK_A_ &conn->timer);
+#endif
+    }
+
+    if(largs->params.websocket_enable) {
+        if(conn_type == CONN_OUTGOING) {
+            int want_events = TK_READ | TK_WRITE;
+#ifdef  USE_LIBUV
+            uv_poll_init(TK_A_ &conn->watcher, sockfd);
+            uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
+#else
+            ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
+            ev_io_start(TK_A_ &conn->watcher);
+#endif
+        } else {
+#ifdef  USE_LIBUV
+            uv_poll_init(TK_A_ &conn->watcher, sockfd);
+            uv_poll_start(&conn->watcher, TK_READ, passive_websocket_cb_uv);
+#else
+            ev_io_init(&conn->watcher, passive_websocket_cb, sockfd, TK_READ);
+            ev_io_start(TK_A_ &conn->watcher);
+#endif
+        }
+        return;
+    } else {    /* Plain socket */
+        int want_write = (conn->data.total_size || want_catch_connect);
+        int want_events = TK_READ | (want_write ? TK_WRITE : 0);
+#ifdef  USE_LIBUV
+        uv_poll_init(TK_A_ &conn->watcher, sockfd);
+        uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
+#else
+        ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
+        ev_io_start(TK_A_ &conn->watcher);
+#endif
+    }
+}
+
 static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
@@ -1163,46 +1213,25 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     set_socket_options(sockfd, largs);
 
     atomic_increment(&largs->connections_counter);
+    largs->worker_connections_accepted++;
 
     /* If channel lifetime is 0, close it right away. */
     if(largs->params.channel_lifetime == 0.0) {
-        largs->worker_connections_accepted++;
         close(sockfd);
         return;
     }
 
-    atomic_increment(&largs->incoming_established);
-
     struct connection *conn = calloc(1, sizeof(*conn));
-    conn->conn_type = CONN_INCOMING;
-    if(limit_channel_lifetime(largs)) {
-        if(TAILQ_FIRST(&largs->open_conns) == NULL) {
-            setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
-        }
-        double now = tk_now(TK_A);
-        conn->channel_eol_point =
-            (now - largs->params.epoch) + largs->params.channel_lifetime;
+    socklen_t addrlen = sizeof(conn->peer_name);
+    if(getpeername(sockfd, (struct sockaddr *)&conn->peer_name, &addrlen)
+            != 0) {
+        DEBUG(DBG_WARNING, "Can't getpeername(%d): %s", sockfd, strerror(errno));
+        free(conn);
+        close(sockfd);
+        return;
     }
-    TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
-    largs->worker_connections_accepted++;
-
-#ifdef  USE_LIBUV
-    void (*responder_callback)(tk_io *w, int status, int revents);
-    if(largs->params.websocket_enable)
-        responder_callback = devnull_websocket_cb_uv;
-    else
-        responder_callback = devnull_cb_uv;
-    uv_poll_init(TK_A_ &conn->watcher, sockfd);
-    uv_poll_start(&conn->watcher, TK_READ, responder_callback);
-#else
-    void (*responder_callback)(TK_P_ tk_io *w, int revents);
-    if(largs->params.websocket_enable)
-        responder_callback = devnull_websocket_cb;
-    else
-        responder_callback = devnull_cb;
-    ev_io_init(&conn->watcher, responder_callback, sockfd, TK_READ);
-    ev_io_start(TK_A_ &conn->watcher);
-#endif
+    atomic_increment(&largs->incoming_established);
+    common_connection_init(TK_A_ conn, CONN_INCOMING, CSTATE_CONNECTED, sockfd);
 }
 
 /*
@@ -1305,7 +1334,7 @@ static void devnull_cb(TK_P_ tk_io *w, int revents) {
     }
 }
 
-static void devnull_websocket_cb(TK_P_ tk_io *w, int revents) {
+static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
@@ -1343,7 +1372,17 @@ static void devnull_websocket_cb(TK_P_ tk_io *w, int revents) {
                     close_connection(TK_A_ conn, CCR_DATA);
                     return;
                 }
+                conn->ws_state = WSTATE_WS_ESTABLISHED;
 
+                int want_events = TK_READ | TK_WRITE;
+#ifdef  USE_LIBUV
+                uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
+#else
+                ev_io_stop(TK_A_ w);
+                ev_io_init(&conn->watcher, connection_cb, tk_fd(w), want_events);
+                ev_io_start(TK_A_ &conn->watcher);
+#endif
+                break;
                 /* Do a proper /dev/null from now on */
 #ifdef  USE_LIBUV
                 uv_poll_start(w, TK_READ, devnull_cb_uv);
@@ -1521,7 +1560,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
 static void connection_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
-    struct sockaddr *remote = (struct sockaddr *)&largs->params.remote_addresses.addrs[conn->remote_index];
+    struct sockaddr_storage *remote = conn->conn_type == CONN_OUTGOING ? &largs->params.remote_addresses.addrs[conn->remote_index] : &conn->peer_name;
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         /*
@@ -1752,8 +1791,8 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
         DEBUG(DBG_NORMAL, "Connection to %s is being closed: %s\n",
-                format_sockaddr((struct sockaddr *)&largs->params
-                    .remote_addresses.addrs[conn->remote_index],
+                format_sockaddr(
+                    &largs->params.remote_addresses.addrs[conn->remote_index],
                     buf, sizeof(buf)),
                 strerror(errno));
         largs->worker_connection_failures++;

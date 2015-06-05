@@ -134,8 +134,7 @@ void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, str
         }
         char buf[INET6_ADDRSTRLEN+64];
         fprintf(stderr, "%s",
-            format_sockaddr((struct sockaddr *)&addresses.addrs[n],
-                              buf, sizeof(buf)));
+            format_sockaddr(&addresses.addrs[n], buf, sizeof(buf)));
         if(n == addresses.n_addrs - 1) {
             fprintf(fp, "%s", suffix);
         }
@@ -145,24 +144,24 @@ void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, str
 /*
  * Printable representation of a sockaddr.
  */
-const char *format_sockaddr(struct sockaddr *sa, char *buf, size_t size) {
+const char *format_sockaddr(struct sockaddr_storage *ss, char *buf, size_t size) {
     void *in_addr;
     uint16_t nport;
-    switch(sa->sa_family) {
+    switch(ss->ss_family) {
     case AF_INET:
-        in_addr = &((struct sockaddr_in *)sa)->sin_addr;
-        nport = ((struct sockaddr_in *)sa)->sin_port;
+        in_addr = &((struct sockaddr_in *)ss)->sin_addr;
+        nport = ((struct sockaddr_in *)ss)->sin_port;
         break;
     case AF_INET6:
-        in_addr = &((struct sockaddr_in6 *)sa)->sin6_addr;
-        nport = ((struct sockaddr_in6 *)sa)->sin6_port;
+        in_addr = &((struct sockaddr_in6 *)ss)->sin6_addr;
+        nport = ((struct sockaddr_in6 *)ss)->sin6_port;
         break;
     default:
         assert(!"ipv4 or ipv6 expected");
         return "<unknown>";
     }
     char ipbuf[INET6_ADDRSTRLEN];
-    const char *ip = inet_ntop(sa->sa_family, in_addr, ipbuf, sizeof(ipbuf));
+    const char *ip = inet_ntop(ss->ss_family, in_addr, ipbuf, sizeof(ipbuf));
     snprintf(buf, size, "[%s]:%d", ip, ntohs(nport));
     return buf;
 }

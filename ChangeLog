@@ -2,6 +2,7 @@
 0.?:    ?
     * --latency-marker-skip <N> to ignore the first occurrences of a marker.
     * "Bandwidth per channel:" output line changed to reflect bi-direction⇅
+    * --listen-mode=active to send data for connections received through -l.
 
 0.6:    2015-May-13
     * Parse \{connection.uid} type expressions in
