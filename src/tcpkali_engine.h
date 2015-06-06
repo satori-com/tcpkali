@@ -72,7 +72,7 @@ struct engine_params {
     int    websocket_enable;        /* Enable Websocket responder on (-l) */
     /* Pre-computed message data template */
     struct message_collection    message_collection; /* A descr. what to send */
-    struct transport_data_spec  *data_template;
+    struct transport_data_spec  *data_templates[2]; /* client, server tmpls */
     tk_expr_t *latency_marker;      /* --latency-marker */
     int        latency_marker_skip;    /* --latency-marker-skip <N> */
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */

@@ -110,7 +110,8 @@ struct transport_data_spec {
     size_t single_message_size;
     enum transport_data_flags {
         TDS_FLAG_NONE       = 0x00,
-        TDS_FLAG_REPLICATED = 0x01, /* total_size >= once_ + single_message_ */
+        TDS_FLAG_PTR_SHARED = 0x01, /* Disallow freeing .ptr field */
+        TDS_FLAG_REPLICATED = 0x02, /* total_size >= once_ + single_message_ */
     } flags;
 };
 
@@ -118,7 +119,11 @@ struct transport_data_spec {
  * Convert message collection into transport data specification, which is
  * friendlier for the high speed sending routine.
  */
-struct transport_data_spec *transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *, expr_callback_f optional_cb, void *expr_cb_key);
+enum transport_websocket_side {
+    TWS_SIDE_CLIENT,
+    TWS_SIDE_SERVER,
+};
+struct transport_data_spec *transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *, expr_callback_f optional_cb, void *expr_cb_key, enum transport_websocket_side);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate

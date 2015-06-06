@@ -38,7 +38,7 @@
 /*
  * Write out a frame header to prefix a payload of given size.
  */
-size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
+size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size, enum websocket_side side) {
     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
     uint8_t *orig_buf_ptr;
 
@@ -71,7 +71,7 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size) {
     *buf++ = *(uint8_t *)&first_byte;
 
     /* Mask MUST be present in C->S (RFC) */
-    const unsigned char mask_flag = 0x80;
+    const unsigned char mask_flag = (side == WS_SIDE_CLIENT) ? 0x80 : 0;
 
     if(payload_size <= 125) {
         *buf++ = mask_flag | payload_size;

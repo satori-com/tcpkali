@@ -284,13 +284,20 @@ struct engine *engine_start(struct engine_params params) {
      * might contain expressions which must be resolved
      * on a per connection basis.
      */
-    assert(params.data_template == NULL);
-    params.data_template = transport_spec_from_message_collection(0,
-                                &params.message_collection, 0, 0);
-    assert(params.data_template || params.message_collection.expressions_found);
+    enum transport_websocket_side tws_side;
+    for(tws_side = TWS_SIDE_CLIENT; tws_side <= TWS_SIDE_SERVER; tws_side++) {
+        assert(params.data_templates[tws_side] == NULL);
+        params.data_templates[tws_side] =
+                transport_spec_from_message_collection(0,
+                    &params.message_collection, 0, 0, tws_side);
+        assert(params.data_templates[tws_side]
+                || params.message_collection.expressions_found);
+    }
 
-    if(params.data_template)
-        replicate_payload(params.data_template, REPLICATE_MAX_SIZE);
+    if(params.data_templates[0])
+        replicate_payload(params.data_templates[0], REPLICATE_MAX_SIZE);
+    if(params.data_templates[1])
+        replicate_payload(params.data_templates[1], REPLICATE_MAX_SIZE);
 
     struct engine *eng = calloc(1, sizeof(*eng));
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
@@ -869,13 +876,14 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
 }
 
 static void
-explode_data_template(struct message_collection *mc, const struct transport_data_spec *data_template, struct transport_data_spec *out_data, struct loop_arguments *largs UNUSED, struct connection *conn) {
+explode_data_template(struct message_collection *mc, struct transport_data_spec * const data_templates[2], enum transport_websocket_side tws_side, struct transport_data_spec *out_data, struct loop_arguments *largs UNUSED, struct connection *conn) {
 
-    if(data_template) {
+    if(data_templates[tws_side]) {
         /*
          * Return the already once prepared data.
          */
-        *out_data = *data_template;
+        *out_data = *data_templates[tws_side];
+        out_data->flags |= TDS_FLAG_PTR_SHARED;
     } else {
         /*
          * We might need a unique ID for a connection, and it is a bit expensive
@@ -886,7 +894,7 @@ explode_data_template(struct message_collection *mc, const struct transport_data
 
         struct transport_data_spec *new_data_ptr;
         new_data_ptr = transport_spec_from_message_collection(out_data,
-                            mc, expr_callback, conn);
+                            mc, expr_callback, conn, tws_side);
         assert(new_data_ptr == out_data);
 
         char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(out_data->total_size)];
@@ -1098,7 +1106,10 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
     if(active_socket) {
         pacefier_init(&conn->bandwidth_pace, now);
 
-        explode_data_template(&largs->params.message_collection, largs->params.data_template, &conn->data, largs, conn);
+        enum transport_websocket_side tws_side =
+            (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
+        explode_data_template(&largs->params.message_collection,
+            largs->params.data_templates, tws_side, &conn->data, largs, conn);
         conn->bandwidth_limit = compute_bandwidth_limit(
                                     largs->params.channel_send_rate,
                                     conn->data.single_message_size);
@@ -1825,10 +1836,7 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 
     TAILQ_REMOVE(&largs->open_conns, conn, hook);
 
-    if(largs->params.data_template) {
-        assert(!conn->data.ptr
-               || conn->data.ptr == largs->params.data_template->ptr);
-    } else {
+    if(conn->data.ptr && !(conn->data.flags & TDS_FLAG_PTR_SHARED)) {
         free(conn->data.ptr);
     }
 

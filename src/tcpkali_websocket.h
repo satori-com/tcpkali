@@ -37,7 +37,13 @@
  * RETURN VALUE:
  *   Number of bytes written out to the buffer.
  */
-size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size);
+enum websocket_side {
+    WS_SIDE_CLIENT,
+    WS_SIDE_SERVER,
+};
+size_t websocket_frame_header(size_t payload_size,
+                              uint8_t *buf, size_t size,
+                              enum websocket_side);
 
 
 /*

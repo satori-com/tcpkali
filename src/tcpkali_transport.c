@@ -219,9 +219,8 @@ message_collection_estimate_size(struct message_collection *mc,
     return total_size;
 }
 
-
 struct transport_data_spec *
-transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *mc, expr_callback_f optional_cb, void *expr_cb_key) {
+transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *mc, expr_callback_f optional_cb, void *expr_cb_key, enum transport_websocket_side tws_side) {
 
     /*
      * If expressions found we can not create a transport data specification
@@ -240,6 +239,9 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
     assert(data_spec);
     data_spec->ptr = malloc(estimate_size + 1);
     assert(data_spec->ptr);
+
+    enum websocket_side ws_side =
+        (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
 
     size_t i;
     for(i = 0; i < mc->snippets_count; i++) {
@@ -262,25 +264,32 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
         }
 
         size_t ws_frame_size = 0;
-        if(mc->state == MC_FINALIZED_WEBSOCKET
-           && (snip->flags & MSK_FRAMING_ALLOWED)) {
-            if(snip->flags & MSK_EXPRESSION_FOUND) {
-                uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
-                /* Save the websocket frame elsewhere temporarily */
-                ws_frame_size = websocket_frame_header(size,
-                                        tmpbuf, sizeof(tmpbuf));
-                /* Move the data to the right to make space for framing */
-                memmove((char *)data_spec->ptr + data_spec->total_size
-                                               + ws_frame_size,
-                        (char *)data_spec->ptr + data_spec->total_size,
-                        size);
-                /* Prepend the websocket frame */
-                memcpy((char *)data_spec->ptr + data_spec->total_size,
-                       tmpbuf, ws_frame_size);
-            } else {
-                ws_frame_size = websocket_frame_header(size,
+        if(mc->state == MC_FINALIZED_WEBSOCKET) {
+            /* Do not construct WebSocket/HTTP header. */
+            if((ws_side == WS_SIDE_SERVER)
+               && (snip->flags & MSK_PURPOSE_HTTP_HEADER))
+                continue;
+
+            if(snip->flags & MSK_FRAMING_ALLOWED) {
+                if(snip->flags & MSK_EXPRESSION_FOUND) {
+                    uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
+                    /* Save the websocket frame elsewhere temporarily */
+                    ws_frame_size = websocket_frame_header(size,
+                                            tmpbuf, sizeof(tmpbuf),
+                                            ws_side);
+                    /* Move the data to the right to make space for framing */
+                    memmove((char *)data_spec->ptr + data_spec->total_size
+                                                   + ws_frame_size,
+                            (char *)data_spec->ptr + data_spec->total_size,
+                            size);
+                    /* Prepend the websocket frame */
+                    memcpy((char *)data_spec->ptr + data_spec->total_size,
+                           tmpbuf, ws_frame_size);
+                } else {
+                    ws_frame_size = websocket_frame_header(size,
                                 (uint8_t *)data_spec->ptr+data_spec->total_size,
-                                estimate_size - data_spec->total_size);
+                                estimate_size - data_spec->total_size, ws_side);
+                }
             }
         }
 
