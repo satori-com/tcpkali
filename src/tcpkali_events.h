@@ -77,7 +77,7 @@ typedef struct ev_loop          tk_loop;
     } while(0)
 #define tk_userdata             ev_userdata
 #define tk_set_userdata         ev_set_userdata
-#define tk_loop_new()           ev_loop_new(EVFLAG_AUTO)
+#define tk_loop_new()           ev_loop_new(ev_recommended_backends() | (ev_supported_backends() & EVBACKEND_KQUEUE))
 #define tk_stop(loop)           ev_break((loop), EVBREAK_ALL)
 #define tk_io_stop(loop, p)     ev_io_stop((loop), (p))
 #define tk_timer_stop(loop, t)  ev_timer_stop((loop), (t))
