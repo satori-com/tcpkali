@@ -1228,17 +1228,30 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
         case EINTR: break;
         case EAGAIN: break;
         case EMFILE:
-            DEBUG(DBG_ERROR,
-                "Cannot accept a new connection: %s\n", strerror(errno));
-            DEBUG(DBG_ALWAYS,
-                "Increase `ulimit -n` to twice exceed the --connections.\n");
-            exit(1);
         case ENFILE:
+            if(largs->params.remote_addresses.n_addrs == 0) {
+                /*
+                 * If we are in a purely listen mode (no active connections),
+                 * we largely ignore connections that exceeding capacity.
+                 * Leave some indication that we're churning through these
+                 * connections. It will be visible in the status ribbon
+                 * even if verbosity is low.
+                 */
+                atomic_increment(&largs->connections_counter);
+                DEBUG(DBG_DETAIL,
+                    "Cannot accept a new connection: %s\n", strerror(errno));
+                break;
+            }
             DEBUG(DBG_ERROR,
                 "Cannot accept a new connection: %s\n", strerror(errno));
-            DEBUG(DBG_ALWAYS, "Increase kern.maxfiles/fs.file-max sysctls\n");
+            if(errno == EMFILE) {           /* Per-process limit */
+                DEBUG(DBG_ALWAYS,
+                  "Increase `ulimit -n` to twice exceed the --connections.\n");
+            } else if(errno == ENFILE) {    /* System limit */
+                DEBUG(DBG_ALWAYS,
+                  "Increase kern.maxfiles/fs.file-max sysctls\n");
+            }
             exit(1);
-            break;
         default:
             DEBUG(DBG_DETAIL, "Cannot accept a new connection: %s\n",
                 strerror(errno));
