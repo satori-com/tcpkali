@@ -932,12 +932,17 @@ static void start_new_connection(TK_P) {
     int sockfd = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
         switch(errno) {
+        case EMFILE:
+            DEBUG(DBG_ERROR, "Cannot create socket: %s\n", strerror(errno));
+            DEBUG(DBG_ALWAYS,
+                "Increase `ulimit -n` to twice exceed the --connections.\n");
+            exit(1);
         case ENFILE:
-            DEBUG(DBG_ERROR, "Cannot create socket, "
-                             "consider changing ulimit -n and/or "
-                             "kern.maxfiles/fs.file-max sysctls\n");
+            DEBUG(DBG_ERROR, "Cannot create socket: %s\n", strerror(errno));
+            DEBUG(DBG_ALWAYS, "Increase kern.maxfiles/fs.file-max sysctls\n");
             exit(1);
         }
+        DEBUG(DBG_WARNING, "Cannot create socket: %s\n", strerror(errno));
         return; /* Come back later */
     } else {
         set_nbio(sockfd, 1);
@@ -1218,8 +1223,28 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     int sockfd = accept(tk_fd(w), 0, 0);
-    if(sockfd == -1)
+    if(sockfd == -1) {
+        switch(errno) {
+        case EINTR: break;
+        case EAGAIN: break;
+        case EMFILE:
+            DEBUG(DBG_ERROR,
+                "Cannot accept a new connection: %s\n", strerror(errno));
+            DEBUG(DBG_ALWAYS,
+                "Increase `ulimit -n` to twice exceed the --connections.\n");
+            exit(1);
+        case ENFILE:
+            DEBUG(DBG_ERROR,
+                "Cannot accept a new connection: %s\n", strerror(errno));
+            DEBUG(DBG_ALWAYS, "Increase kern.maxfiles/fs.file-max sysctls\n");
+            exit(1);
+            break;
+        default:
+            DEBUG(DBG_DETAIL, "Cannot accept a new connection: %s\n",
+                strerror(errno));
+        }
         return;
+    }
     set_nbio(sockfd, 1);
     set_socket_options(sockfd, largs);
 
