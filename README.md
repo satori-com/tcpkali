@@ -18,17 +18,14 @@
 
     tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 --latency-marker "HTTP/1.1" google.com:80
 
-# Build
+# Build & Install
 
-    autoreconf -iv
+    test -f configure || autoreconf -iv
     ./configure
     make
+    sudo make install
 
 [![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
-
-# Install
-
-    make install
 
 # Usage
 
