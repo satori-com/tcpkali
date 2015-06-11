@@ -107,6 +107,9 @@ AC_ARG_ENABLE([tsan],
     dnl We can't do anything about this message in GCC; use clang.
   ])
 
+dnl Newer bison 3.x breaks backward compatibility.
+dnl Fight that by not recompiling .y file unnecessarily.
+AC_CONFIG_COMMANDS([bison_compat_fix], [touch src/*y.c])
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
