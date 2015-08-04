@@ -66,8 +66,8 @@
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "channel-bandwidth", 1, 0, 'b' },
-    { "channel-upstream", 1, 0, 'u' },
-    { "channel-downstream", 1, 0, 'd' },
+    { "channel-bandwidth-upstream", 1, 0, 'u' },
+    { "channel-bandwidth-downstream", 1, 0, 'd' },
     { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'R' },
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
@@ -313,23 +313,23 @@ int main(int argc, char **argv) {
             engine_params.channel_recv_rate = rate;
             break;
             }
-        case 'u': { /* --channel-upstream <Bw> */
+        case 'u': { /* --channel-bandwidth-upstream <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
             if(Bps <= 0) {
-                fprintf(stderr, "Expecting --channel-upstream > 0\n");
+                fprintf(stderr, "Expecting --channel-bandwidth-upstream > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_send_rate = RATE_BPS(Bps);
             break;
             }
-        case 'd': { /* --channel-downstream <Bw> */
+        case 'd': { /* --channel-bandwidth-downstream <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
             if(Bps <= 0) {
-                fprintf(stderr, "Expecting --channel-downstream > 0\n");
+                fprintf(stderr, "Expecting --channel-bandwidth-downstream > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_recv_rate = RATE_BPS(Bps);
@@ -981,9 +981,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --connect-rate <R=%g>       Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
-    "  --channel-bandwidth <Bw>    Limit both upstream and downstream bandwidth\n"
-    "  --channel-upstream <Bw>     Limit upstream bandwidth\n"
-    "  --channel-downstream <Bw>   Limit downstream bandwidth\n"
+    "  --channel-bandwidth <Bw>              Limit both upstream and downstream bandwidth\n"
+    "  --channel-bandwidth-upstream <Bw>     Limit upstream bandwidth\n"
+    "  --channel-bandwidth-downstream <Bw>   Limit downstream bandwidth\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  --listen-mode=<mode>        What to do upon client connect, where <mode> is:\n"
     "               \"silent\"       Do not send data, ignore received data (default)\n"
