@@ -81,8 +81,16 @@ struct connection {
     non_atomic_wide_t data_sent_reported;
     non_atomic_wide_t data_rcvd_reported;
     float channel_eol_point;    /* End of life time, since epoch */
-    struct pacefier   bandwidth_pace;
-    bandwidth_limit_t bandwidth_limit;
+    struct pacefier   send_pace;
+    struct pacefier   recv_pace;
+    bandwidth_limit_t send_limit;
+    bandwidth_limit_t recv_limit;
+    enum {
+        CW_READ_INTEREST    = 0x01,
+        CW_READ_BLOCKED     = 0x10,
+        CW_WRITE_INTEREST   = 0x02,
+        CW_WRITE_BLOCKED    = 0x20,
+    } conn_wish:8;
     enum conn_type {
         CONN_OUTGOING,
         CONN_INCOMING,
@@ -195,20 +203,20 @@ static void connection_flush_stats(TK_P_ struct connection *conn);
 static void close_all_connections(TK_P_ enum connection_close_reason reason);
 static void connection_cb(TK_P_ tk_io *w, int revents);
 static void passive_websocket_cb(TK_P_ tk_io *w, int revents);
-static void devnull_cb(TK_P_ tk_io *w, int revents);
 static void control_cb(TK_P_ tk_io *w, int revents);
 static void accept_cb(TK_P_ tk_io *w, int revents);
 static void stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents);
 static void conn_timer_cb(TK_P_ tk_timer *w, int revents); /* Timeout timer */
 static void expire_channel_lives(TK_P_ tk_timer *w, int revents);
 static void setup_channel_lifetime_timer(TK_P_ double first_timeout);
-static void update_io_interest(TK_P_ struct connection *conn, int events);
+static void update_io_interest(TK_P_ struct connection *conn);
 static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
 static void set_socket_options(int fd, struct loop_arguments *largs);
 static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd);
+static void largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn, const void **position, size_t *available_header, size_t *available_body);
 
 #ifdef  USE_LIBUV
 static void expire_channel_lives_uv(tk_timer *w) {
@@ -225,9 +233,6 @@ static void passive_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
 }
 static void connection_cb_uv(tk_io *w, int UNUSED status, int revents) {
     connection_cb(w->loop, w, revents);
-}
-static void devnull_cb_uv(tk_io *w, int UNUSED status, int revents) {
-    devnull_cb(w->loop, w, revents);
 }
 static void accept_cb_uv(tk_io *w, int UNUSED status, int revents) {
     accept_cb(w->loop, w, revents);
@@ -261,7 +266,7 @@ struct engine *engine_start(struct engine_params params) {
     int rc = pipe(fildes);
     assert(rc == 0);
     int gctl_pipe_rd = fildes[0];
-    int gtcl_pipe_wr = fildes[1];
+    int gctl_pipe_wr = fildes[1];
     set_nbio(gctl_pipe_rd, 1);
 
     /* Global feedback pipe. Engine <- workers. */
@@ -303,7 +308,7 @@ struct engine *engine_start(struct engine_params params) {
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
-    eng->global_control_pipe_wr = gtcl_pipe_wr;
+    eng->global_control_pipe_wr = gctl_pipe_wr;
     eng->global_feedback_pipe_rd = gfbk_pipe_rd;
 
     /*
@@ -684,7 +689,8 @@ static void *single_engine_loop_thread(void *argp) {
             struct connection *conn = calloc(1, sizeof(*conn));
             conn->conn_type = CONN_ACCEPTOR;
             /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
-            pacefier_init(&conn->bandwidth_pace, tk_now(TK_A));
+            pacefier_init(&conn->send_pace, tk_now(TK_A));
+            pacefier_init(&conn->recv_pace, tk_now(TK_A));
 #ifdef   USE_LIBUV
             uv_poll_init(TK_A_ &conn->watcher, lsock);
             uv_poll_start(&conn->watcher, TK_READ | TK_WRITE, accept_cb_uv);
@@ -1039,13 +1045,14 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
         switch(conn->conn_type) {
         case CONN_INCOMING:
             if((largs->params.listen_mode & _LMODE_SND_MASK) == 0) {
-                update_io_interest(TK_A_ conn, TK_READ);
+                conn->conn_wish &= ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED);
+                update_io_interest(TK_A_ conn);
                 break;
             }
             /* Fall through */
         case CONN_OUTGOING:
-            update_io_interest(TK_A_ conn,
-                TK_READ | (conn->data.total_size ? TK_WRITE : 0));
+            conn->conn_wish &= ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED);
+            update_io_interest(TK_A_ conn);
             break;
         case CONN_ACCEPTOR:
             assert(conn->conn_type != CONN_ACCEPTOR);
@@ -1104,21 +1111,30 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
     TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook);
 
     /*
-     * If we're going to send data, establish bandwidth control.
+     * Set up downstream bandwidth regardless of the type of connection.
      */
+
+    pacefier_init(&conn->recv_pace, now);
+    conn->recv_limit = compute_bandwidth_limit(
+                           largs->params.channel_recv_rate,
+                           conn->data.single_message_size);
+
+    /*
+     * If we're going to send data, establish bandwidth control for upstream.
+     */
+
     int active_socket = conn_type == CONN_OUTGOING
                     || (largs->params.listen_mode & _LMODE_SND_MASK);
     if(active_socket) {
-        pacefier_init(&conn->bandwidth_pace, now);
+        pacefier_init(&conn->send_pace, now);
 
         enum transport_websocket_side tws_side =
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
         explode_data_template(&largs->params.message_collection,
             largs->params.data_templates, tws_side, &conn->data, largs, conn);
-        conn->bandwidth_limit = compute_bandwidth_limit(
-                                    largs->params.channel_send_rate,
-                                    conn->data.single_message_size);
-
+        conn->send_limit = compute_bandwidth_limit(
+                               largs->params.channel_send_rate,
+                               conn->data.single_message_size);
         if(largs->params.latency_marker && conn->data.single_message_size) {
             conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
                 = conn->data.single_message_size - 1;
@@ -1185,6 +1201,10 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
         ev_timer_start(TK_A_ &conn->timer);
 #endif
     }
+
+    conn->conn_wish = CW_READ_INTEREST
+                    | ((conn->data.total_size || want_catch_connect)
+                    ? CW_WRITE_INTEREST : 0);
 
     if(largs->params.websocket_enable) {
         if(conn_type == CONN_OUTGOING) {
@@ -1299,14 +1319,28 @@ static enum {
     LB_PROCEED,     /* Use pacefier_moved() afterwards. */
     LB_GO_SLEEP,    /* Not allowed to move data.        */
 } limit_channel_bandwidth(TK_P_ struct connection *conn,
-                          size_t *suggested_move_size) {
-    double bw = conn->bandwidth_limit.bytes_per_second;
+                          size_t *suggested_move_size,
+                          int event) {
+    struct pacefier *pace = NULL;
+    bandwidth_limit_t limit = { 0, 0 };
+
+    if(event & TK_WRITE) {
+        limit = conn->send_limit;
+        pace = &conn->send_pace;
+    } else if(event & TK_READ) {
+        limit = conn->recv_limit;
+        pace = &conn->send_pace;
+    } else {
+        assert(event & (TK_WRITE | TK_READ));
+    }
+
+    double bw = limit.bytes_per_second;
     if(bw == 0.0) {
         return LB_UNLIMITED;    /* Limit not set, don't limit. */
     }
 
-    size_t smallest_block_to_move = conn->bandwidth_limit.minimal_move_size;
-    size_t allowed_to_move = pacefier_allow(&conn->bandwidth_pace, bw, tk_now(TK_A));
+    size_t smallest_block_to_move = limit.minimal_move_size;
+    size_t allowed_to_move = pacefier_allow(pace, bw, tk_now(TK_A));
 
     if(allowed_to_move < smallest_block_to_move) {
         /*     allowed     smallest_blk
@@ -1334,52 +1368,6 @@ static enum {
                         - (allowed_to_move % smallest_block_to_move);
         }
         return LB_PROCEED;
-    }
-}
-
-static void devnull_cb(TK_P_ tk_io *w, int revents) {
-    struct loop_arguments *largs = tk_userdata(TK_A);
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
-
-    if(revents & TK_READ) {
-        char buf[16384];
-        for(;;) {
-            size_t recv_size = sizeof(buf);
-            int record_moved = 0;
-            switch(limit_channel_bandwidth(TK_A_ conn, &recv_size)) {
-            case LB_UNLIMITED: record_moved = 0; break;
-            case LB_PROCEED:   record_moved = 1; break;
-            case LB_GO_SLEEP:
-                update_io_interest(TK_A_ conn, 0);
-                return;
-            }
-
-            ssize_t rd = read(tk_fd(w), buf, recv_size);
-            switch(rd) {
-            case -1:
-                switch(errno) {
-                case EAGAIN:
-                    return;
-                default:
-                    close_connection(TK_A_ conn, CCR_REMOTE);
-                    return;
-                }
-                /* Fall through */
-            case 0:
-                close_connection(TK_A_ conn, CCR_REMOTE);
-                return;
-            default:
-                if(record_moved)
-                    pacefier_moved(&conn->bandwidth_pace,
-                                   conn->bandwidth_limit.bytes_per_second,
-                                   rd, tk_now(TK_A));
-                conn->data_rcvd += rd;
-                if(largs->params.verbosity_level >= DBG_DATA) {
-                    debug_dump_data("Data", buf, rd);
-                }
-                break;
-            }
-        }
     }
 }
 
@@ -1432,21 +1420,20 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 ev_io_start(TK_A_ &conn->watcher);
 #endif
                 break;
-                /* Do a proper /dev/null from now on */
-#ifdef  USE_LIBUV
-                uv_poll_start(w, TK_READ, devnull_cb_uv);
-#else
-                ev_io_stop(TK_A_ w);
-                ev_io_init(w, devnull_cb, tk_fd(w), TK_READ);
-                ev_io_start(TK_A_ w);
-#endif
-                break;
             }
         }
     }
 }
 
-static void update_io_interest(TK_P_ struct connection *conn, int events) {
+static void update_io_interest(TK_P_ struct connection *conn) {
+    int events = 0;
+    /* Remove read or write wish, if we don't want them */
+    events |= (conn->conn_wish & CW_READ_INTEREST) ? TK_READ : 0;
+    events |= (conn->conn_wish & CW_WRITE_INTEREST) ? TK_WRITE : 0;
+    /* Remove read or write wish, if we are blocked on them */
+    events &= ~((conn->conn_wish & CW_READ_BLOCKED) ? TK_READ : 0);
+    events &= ~((conn->conn_wish & CW_WRITE_BLOCKED) ? TK_WRITE : 0);
+
 #ifdef  USE_LIBUV
     (void)loop;
     uv_poll_start(&conn->watcher, events, conn->watcher.poll_cb);
@@ -1632,15 +1619,34 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
          */
         tk_timer_stop(TK_A, &conn->timer);
         if(conn->data.total_size == 0) {
-            update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
+            conn->conn_wish &= ~CW_WRITE_INTEREST;  /* Remove write interest */
+            update_io_interest(TK_A_ conn);
             revents &= ~TK_WRITE;   /* Don't actually write in this loop */
         }
     }
 
     if(revents & TK_READ) {
         char buf[16384];
-        for(;;) {
-            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
+        int record_moved_data = 0;
+        do {
+            size_t read_size = sizeof(buf);
+            if(largs->params.websocket_enable == 0
+            || conn->ws_state == WSTATE_WS_ESTABLISHED) {
+                switch(limit_channel_bandwidth(TK_A_ conn, &read_size, TK_READ)) {
+                case LB_UNLIMITED:
+                    break;
+                case LB_PROCEED:
+                    record_moved_data = 1;
+                    break;
+                case LB_GO_SLEEP:
+                    conn->conn_wish |= CW_READ_BLOCKED;
+                    update_io_interest(TK_A_ conn);
+                    break;
+                }
+            }
+
+            if(read_size == 0) break;
+            ssize_t rd = read(tk_fd(w), buf, read_size);
             switch(rd) {
             case -1:
                 switch(errno) {
@@ -1672,16 +1678,24 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 && conn->data.ws_hdr_size
                         != conn->data.total_size) {
                     conn->ws_state = WSTATE_WS_ESTABLISHED;
-                    update_io_interest(TK_A_ conn, TK_READ | TK_WRITE);
+                    conn->conn_wish |= CW_WRITE_INTEREST;
+                    update_io_interest(TK_A_ conn);
                 }
                 conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
                     debug_dump_data("Data", buf, rd);
                 }
                 latency_record_incoming_ts(TK_A_ conn, buf, rd);
+
+                if(record_moved_data) {
+                    pacefier_moved(&conn->recv_pace,
+                        conn->recv_limit.bytes_per_second,
+                        rd, tk_now(TK_A));
+                }
+
                 break;
             }
-        }
+        } while(0);
     }
 
     if(revents & TK_WRITE) {
@@ -1689,23 +1703,26 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         size_t available_header, available_body;
         int record_moved = 0;
 
-        largest_contiguous_chunk(largs, conn, &position, &available_header, &available_body);
+        largest_contiguous_chunk(largs, conn,
+                &position, &available_header, &available_body);
         if(!(available_header + available_body)) {
             /* Only the header was sent. Now, silence. */
             assert(conn->data.total_size == conn->data.once_size
                 || largs->params.websocket_enable);
-            update_io_interest(TK_A_ conn, TK_READ); /* no write interest */
+            conn->conn_wish &= ~CW_WRITE_INTEREST;  /* disable write interest */
+            update_io_interest(TK_A_ conn);
             return;
         }
 
         /* Adjust (available_body) to avoid sending too much stuff. */
-        switch(limit_channel_bandwidth(TK_A_ conn, &available_body)) {
+        switch(limit_channel_bandwidth(TK_A_ conn, &available_body, TK_WRITE)) {
         case LB_UNLIMITED: record_moved = 0; break;
         case LB_PROCEED:   record_moved = 1; break;
         case LB_GO_SLEEP:
             if(available_header)
                 break;
-            update_io_interest(TK_A_ conn, TK_READ);
+            conn->conn_wish |= CW_WRITE_BLOCKED;
+            update_io_interest(TK_A_ conn);
             return;
         }
 
@@ -1728,8 +1745,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             conn->write_offset += wrote;
             conn->data_sent += wrote;
             if(record_moved)
-                pacefier_moved(&conn->bandwidth_pace,
-                               conn->bandwidth_limit.bytes_per_second,
+                pacefier_moved(&conn->send_pace,
+                               conn->send_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
             wrote -= available_header;
             if(wrote > 0) {

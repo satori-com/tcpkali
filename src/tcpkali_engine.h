@@ -43,7 +43,8 @@ struct engine_params {
     struct addresses remote_addresses;
     struct addresses listen_addresses;
     size_t requested_workers;       /* Number of threads to start */
-    rate_spec_t channel_send_rate;  /* --channel-bandwidth or --message-rate */
+    rate_spec_t channel_send_rate;  /* --channel-upstream */
+    rate_spec_t channel_recv_rate;  /* --channel-downstream */
     enum {
         DBG_ALWAYS  = 0,
         DBG_ERROR   = 0,

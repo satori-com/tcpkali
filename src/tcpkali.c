@@ -66,6 +66,8 @@
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "channel-bandwidth", 1, 0, 'b' },
+    { "channel-upstream", 1, 0, 'u' },
+    { "channel-downstream", 1, 0, 'd' },
     { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'R' },
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
@@ -297,6 +299,7 @@ int main(int argc, char **argv) {
             engine_params.requested_workers = n;
             break;
             }
+        // TODO: Does channel-bandwidth really need?
         case 'b': { /* --channel-bandwidth <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
@@ -305,7 +308,31 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expecting --channel-bandwidth > 0\n");
                 exit(EX_USAGE);
             }
+            rate_spec_t rate = RATE_BPS(Bps);
+            engine_params.channel_send_rate = rate;
+            engine_params.channel_recv_rate = rate;
+            break;
+            }
+        case 'u': { /* --channel-upstream <Bw> */
+            double Bps = parse_with_multipliers(option, optarg,
+                        bw_multiplier,
+                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
+            if(Bps <= 0) {
+                fprintf(stderr, "Expecting --channel-upstream > 0\n");
+                exit(EX_USAGE);
+            }
             engine_params.channel_send_rate = RATE_BPS(Bps);
+            break;
+            }
+        case 'd': { /* --channel-downstream <Bw> */
+            double Bps = parse_with_multipliers(option, optarg,
+                        bw_multiplier,
+                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
+            if(Bps <= 0) {
+                fprintf(stderr, "Expecting --channel-downstream > 0\n");
+                exit(EX_USAGE);
+            }
+            engine_params.channel_recv_rate = RATE_BPS(Bps);
             break;
             }
         case 'r': { /* --message-rate <R> */
@@ -530,21 +557,13 @@ int main(int argc, char **argv) {
     }
 
     /*
-     * Make sure we're consistent with the message rate and channel bandwidth.
+     * Make sure the message rate makes sense (e.g. the -m param is there).
      */
-    if(engine_params.channel_send_rate.value_base != RS_UNLIMITED) {
-        if(no_message_to_send) {
-            char *cli_opt_name = "";
-            switch(engine_params.channel_send_rate.value_base) {
-            case RS_UNLIMITED: break;
-            case RS_BYTES_PER_SECOND:
-                cli_opt_name = "--channel-bandwidth"; break;
-            case RS_MESSAGES_PER_SECOND:
-                cli_opt_name = "--message-rate"; break;
-            }
-            fprintf(stderr, "%s parameter makes no sense "
-                            "without --message or --message-file\n",
-                            cli_opt_name);
+    if(engine_params.channel_send_rate.value_base == RS_MESSAGES_PER_SECOND
+       && no_message_to_send) {
+        if(engine_params.channel_send_rate.value_base) {
+            fprintf(stderr, "--message-rate parameter makes no sense "
+                            "without --message or --message-file\n");
             exit(EX_USAGE);
         }
     }
@@ -958,11 +977,13 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --sndbuf <S>                Send buffers (set SO_SNDBUF)\n"
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
-    "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
-    "  --connect-rate <R=%g>      Limit number of new connections per second\n"
+    "  -c, --connections <N=%d>    Connections to keep open to the destinations\n"
+    "  --connect-rate <R=%g>       Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
-    "  --channel-bandwidth <Bw>    Limit single connection bandwidth\n"
+    "  --channel-bandwidth <Bw>    Limit both upstream and downstream bandwidth\n"
+    "  --channel-upstream <Bw>     Limit upstream bandwidth\n"
+    "  --channel-downstream <Bw>   Limit downstream bandwidth\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  --listen-mode=<mode>        What to do upon client connect, where <mode> is:\n"
     "               \"silent\"       Do not send data, ignore received data (default)\n"
