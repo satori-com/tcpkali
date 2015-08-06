@@ -68,8 +68,8 @@ typedef struct bandwidth_limit {
 static inline UNUSED bandwidth_limit_t
 compute_bandwidth_limit(rate_spec_t rspec) {
     bandwidth_limit_t lim = {
-        .bytes_per_second  = 0.0, /* Simulate "not set" -> no limit. */
-        .minimal_move_size = 1460 /* ~MTU */
+        .bytes_per_second  = -1.0, /* Simulate "not set" -> no limit. */
+        .minimal_move_size = 1460  /* ~MTU */
     };
 
     if(rspec.value_base == RS_BYTES_PER_SECOND) {
@@ -94,7 +94,7 @@ compute_bandwidth_limit_by_message_size(rate_spec_t rspec, size_t message_size) 
      */
     switch(rspec.value_base) {
     case RS_UNLIMITED:
-        lim.bytes_per_second = 0.0; /* Simulate "not set" -> no limit. */
+        lim.bytes_per_second  = -1.0; /* Simulate "not set" -> no limit. */
         lim.minimal_move_size = 1460; /* ~MTU */
         break;
     case RS_BYTES_PER_SECOND:

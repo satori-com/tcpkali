@@ -1333,7 +1333,7 @@ static enum {
     }
 
     double bw = limit.bytes_per_second;
-    if(bw == 0.0) {
+    if(bw < 0.0) {
         return LB_UNLIMITED;    /* Limit not set, don't limit. */
     }
 
