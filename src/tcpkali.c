@@ -65,7 +65,6 @@
 #define CLI_SOCKET_OPT   2048
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
-    { "channel-bandwidth", 1, 0, 'b' },
     { "channel-bandwidth-upstream", 1, 0, 'u' },
     { "channel-bandwidth-downstream", 1, 0, 'd' },
     { "connections", 1, 0, 'c' },
@@ -299,20 +298,6 @@ int main(int argc, char **argv) {
             engine_params.requested_workers = n;
             break;
             }
-        // TODO: Does channel-bandwidth really need?
-        case 'b': { /* --channel-bandwidth <Bw> */
-            double Bps = parse_with_multipliers(option, optarg,
-                        bw_multiplier,
-                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
-            if(Bps <= 0) {
-                fprintf(stderr, "Expecting --channel-bandwidth > 0\n");
-                exit(EX_USAGE);
-            }
-            rate_spec_t rate = RATE_BPS(Bps);
-            engine_params.channel_send_rate = rate;
-            engine_params.channel_recv_rate = rate;
-            break;
-            }
         case 'u': { /* --channel-bandwidth-upstream <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
@@ -328,7 +313,7 @@ int main(int argc, char **argv) {
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
-            if(Bps <= 0) {
+            if(Bps < 0) {
                 fprintf(stderr, "Expecting --channel-bandwidth-downstream > 0\n");
                 exit(EX_USAGE);
             }
@@ -977,11 +962,10 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --sndbuf <S>                Send buffers (set SO_SNDBUF)\n"
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
-    "  -c, --connections <N=%d>    Connections to keep open to the destinations\n"
-    "  --connect-rate <R=%g>       Limit number of new connections per second\n"
+    "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
+    "  --connect-rate <R=%g>      Limit number of new connections per second\n"
     "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
     "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
-    "  --channel-bandwidth <Bw>              Limit both upstream and downstream bandwidth\n"
     "  --channel-bandwidth-upstream <Bw>     Limit upstream bandwidth\n"
     "  --channel-bandwidth-downstream <Bw>   Limit downstream bandwidth\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"

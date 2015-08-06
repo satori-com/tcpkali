@@ -1115,9 +1115,7 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
      */
 
     pacefier_init(&conn->recv_pace, now);
-    conn->recv_limit = compute_bandwidth_limit(
-                           largs->params.channel_recv_rate,
-                           conn->data.single_message_size);
+    conn->recv_limit = compute_bandwidth_limit(largs->params.channel_recv_rate);
 
     /*
      * If we're going to send data, establish bandwidth control for upstream.
@@ -1132,7 +1130,7 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
         explode_data_template(&largs->params.message_collection,
             largs->params.data_templates, tws_side, &conn->data, largs, conn);
-        conn->send_limit = compute_bandwidth_limit(
+        conn->send_limit = compute_bandwidth_limit_by_message_size(
                                largs->params.channel_send_rate,
                                conn->data.single_message_size);
         if(largs->params.latency_marker && conn->data.single_message_size) {
