@@ -17,7 +17,7 @@ check() {
 
 check 1  ${TCPKALI} --connections=20 --duration=1 -l1271 127.1:1271
 check 2  ${TCPKALI} -c10 -T1 --message Z --message-rate=1 -l1271 127.1:1271
-check 3  ${TCPKALI} -c10 -T1 -m Z --channel-bandwidth=10kbps -l1271 127.1:1271
+check 3  ${TCPKALI} -c10 -T1 -m Z --channel-bandwidth-upstream=10kbps -l1271 127.1:1271
 check 4  ${TCPKALI} --connections=10 --duration=1 -m Z -l1271 127.1:1271
 
 check 5  ${TCPKALI} -T1s --ws -l1271 127.1:1271 | egrep -q "Total data sent:[ ]+149 bytes"
