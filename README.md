@@ -9,7 +9,7 @@
 
  * Efficient multi-core operation (`--workers`); utilizes all available cores by default.
  * Allows opening massive number of connections (`--connections`)
- * Allows limiting a single connection throughput (`--channel-bandwidth` or `--message-rate`)
+ * Allows limiting an upstream and downstream of a single connection throughput (`--channel-bandwidth-downstream`, `--channel-bandwidth-upstream` or `--message-rate`)
  * Allows specifying the first and subsequent messages (`--message`, `--first-message`).
  * Measures response latency percentiles using [HdrHistogram](https://github.com/HdrHistogram) (`--latency-marker`)
  * Sends stats to StatsD/DataDog (`--statsd`)
@@ -43,7 +43,8 @@
       --connect-rate <R=100>      Limit number of new connections per second
       --connect-timeout <T=1s>    Limit time spent in a connection attempt
       --channel-lifetime <T>      Shut down each connection after T seconds
-      --channel-bandwidth <Bw>    Limit single connection bandwidth
+      --channel-bandwidth-upstream <Bw>     Limit upstream bandwidth
+      --channel-bandwidth-downstream <Bw>   Limit downstream bandwidth
       -l, --listen-port <port>    Listen on the specified port
       --listen-mode=<mode>        What to do upon client connect, where <mode> is:
                    "silent"       Do not send data, ignore received data (default)
