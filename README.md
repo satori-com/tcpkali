@@ -18,6 +18,16 @@
 
     tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 --latency-marker "HTTP/1.1" google.com:80
 
+# Pre-requisites
+
+During the build procedure listed below, some errors may be thrown if these pre-requisites are not met. However, installing these at runtime can still result in a problematic installation (for example, "make" does not succeed). So, better to ensure these pre-requisites are satisfied before building & installing tcpkali.
+ * autoconf
+ * automake
+ * libtool
+ * bison
+ * flex
+ * gcc-c++
+
 # Build & Install
 
     test -f configure || autoreconf -iv
