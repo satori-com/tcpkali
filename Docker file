@@ -1,0 +1,13 @@
+FROM buildpack-deps:jessie
+
+ADD . /tcpkali
+
+RUN apt-get update && apt-get install -y bison flex
+
+RUN cd /tcpkali && \
+  test -f configure || autoreconf -iv && \
+  ./configure && \
+  make && \
+  make install
+
+CMD ["tcpkali"]
