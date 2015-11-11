@@ -976,7 +976,6 @@ static void start_new_connection(TK_P) {
         atomic_increment(&largs->outgoing_connecting);
         conn_state = CSTATE_CONNECTING;
     } else { /* This branch is for completeness only. Should not happen. */
-        assert(!"Synchronous connection should not happen");
         if(largs->params.channel_lifetime == 0.0) {
             close(sockfd);
             return;
