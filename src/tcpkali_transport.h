@@ -50,12 +50,17 @@ struct message_collection {
             MSK_EXPRESSION_FOUND        = 0x20  /* Expression */
 #define MSK_PURPOSE(snippet)    ((snippet)->flags & 0x0f)
         } flags;
-    } snippets[16];
+        int sort_index;
+    } *snippets;
     /*
      * Number of --first-message, --message, etc
      * options reflected in snippets.
      */
     size_t snippets_count;
+    /*
+     * Size of the snippets array (>= snippets_count).
+     */
+    size_t snippets_size;
     /*
      * Whether \{expressions} were found in snippets
      */

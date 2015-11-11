@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -48,6 +48,12 @@ static int snippet_compare_cb(const void *ap, const void *bp) {
 
     if(ka < kb) return -1;
     if(ka > kb) return 1;
+
+    if(a->sort_index < b->sort_index)
+        return -1;
+    if(a->sort_index > b->sort_index)
+        return 1;
+
     return 0;
 }
 
@@ -147,11 +153,20 @@ message_collection_add(struct message_collection *mc,
         return; /* Unreachable */
     }
 
-    if(mc->snippets_count >= sizeof(mc->snippets)/sizeof(mc->snippets[0])) {
-        /* TODO: make snippets[] dynamic. */
-        fprintf(stderr, "Too many --message "
-                        "or --first-message arguments\n");
-        exit(1);
+    /* Reallocate snippets array, if needed. */
+    if(mc->snippets_count >= mc->snippets_size) {
+        mc->snippets_size = 2 * (mc->snippets_size ? mc->snippets_size : 8);
+        struct message_collection_snippet *ptr = realloc(mc->snippets,
+                        mc->snippets_size * sizeof(mc->snippets[0]));
+        if(!ptr) {
+            /* TODO: make snippets[] dynamic. */
+            fprintf(stderr, "Too many --message "
+                            "or --first-message arguments\n");
+            exit(1);
+        }
+        memset(&ptr[mc->snippets_count], 0,
+               (mc->snippets_size - mc->snippets_count) * sizeof(ptr[0]));
+        mc->snippets = ptr;
     }
 
     char *p = malloc(size + 1);
@@ -167,6 +182,7 @@ message_collection_add(struct message_collection *mc,
     snip->size = size;
     snip->expr = 0;
     snip->flags = kind;
+    snip->sort_index = mc->snippets_count;
 
     const int ENABLE_DEBUG = 1;
     tk_expr_t *expr = 0;
