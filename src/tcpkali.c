@@ -62,6 +62,7 @@
 #define CLI_STATSD_OFFSET   256
 #define CLI_CHAN_OFFSET  512
 #define CLI_CONN_OFFSET  1024
+#define CLI_LAT_OFFSET   1536
 #define CLI_SOCKET_OPT   2048
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
@@ -76,6 +77,7 @@ static struct option cli_long_options[] = {
     { "help", 0, 0, 'h' },
     { "latency-marker", 1, 0, 'L' },
     { "latency-marker-skip", 1, 0, 'S' },
+    { "latency-percentiles", 1, 0, CLI_LAT_OFFSET + 'P'},
     { "listen-port", 1, 0, 'l' },
     { "listen-mode", 1, 0, 'M' },
     { "message", 1, 0, 'm' },
@@ -152,6 +154,7 @@ typedef struct {
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
+static int parse_latency_percentiles_list(char *str, struct latency_percentiles *latency_percentiles);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
@@ -192,6 +195,11 @@ int main(int argc, char **argv) {
         .nagle_setting = NSET_UNSET
     };
     int unescape_message_data = 0;
+
+    struct latency_percentiles latency_percentiles = {
+        .size = 0,
+        .percentiles = NULL,
+    };
 
     while(1) {
         char *option = argv[optind];
@@ -453,6 +461,11 @@ int main(int argc, char **argv) {
             }
             }
             break;
+        case CLI_LAT_OFFSET + 'P': { /* --latency-percentiles */
+            if(parse_latency_percentiles_list(optarg, &latency_percentiles))
+                exit(EX_USAGE);
+            }
+            break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage(argv[0], &default_config);
@@ -674,7 +687,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
         checkpoint.initial_data_sent,
-        checkpoint.initial_data_received);
+        checkpoint.initial_data_received,
+        latency_percentiles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0);
@@ -914,6 +928,42 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
     return value;
 }
 
+static int
+parse_latency_percentiles_list(char *str, struct latency_percentiles *latency_percentiles) {
+    double *percentiles = NULL;
+    size_t size = 0;
+
+    for (char *pos = str; *pos; pos++) {
+        char *endpos;
+        double got = strtod(pos, &endpos);
+        if(pos == endpos) {
+            fprintf(stderr, "Latency percentiles: "
+                    "Failed to parse: bad number\n");
+            return -1;
+        }
+        if(got < 0.0 || 100.0 < got) {
+            fprintf(stderr, "Latency percentiles: "
+                    "%%'ile isn't in a [0..100] range\n");
+            return -1;
+        }
+        percentiles = realloc(percentiles, ++size * sizeof(double));
+        percentiles[size-1] = got;
+
+        pos = endpos;
+        if(*pos == 0)
+            break;
+        if(*pos != ',') {
+            fprintf(stderr, "Latency percentiles: "
+                    "Failed to parse: invalid separator, use ','\n");
+            return -1;
+        }
+    }
+
+    latency_percentiles->percentiles = percentiles;
+    latency_percentiles->size = size;
+    return 0;
+}
+
 struct addresses detect_listen_addresses(int listen_port) {
     struct addresses addresses = { 0, 0 };
     struct addrinfo hints = {
@@ -944,6 +994,7 @@ struct addresses detect_listen_addresses(int listen_port) {
 
     return addresses;
 }
+
 
 /*
  * Display the Usage screen.
@@ -984,6 +1035,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "\n"
     "  --latency-marker <string>   Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>   Ignore the first N occurrences of a marker\n"
+    "  --latency-percentiles <Fs>  Report this percentiles\n"
     "\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
@@ -994,7 +1046,9 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  <N, R>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <S>:     k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
     "  <Bw>:    kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
+    "  <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
+    "\n"
+    "  <Fs>:    comma-separated list of real numbers\n",
     (_DBG_MAX - 1),
     conf->max_connections,
     conf->connect_rate,

@@ -76,7 +76,13 @@ struct engine_params {
     struct transport_data_spec  *data_templates[2]; /* client, server tmpls */
     tk_expr_t *latency_marker;      /* --latency-marker */
     int        latency_marker_skip;    /* --latency-marker-skip <N> */
+
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
+};
+
+struct latency_percentiles {
+    size_t size;
+    double *percentiles;
 };
 
 struct engine *engine_start(struct engine_params);
@@ -94,8 +100,9 @@ void engine_traffic(struct engine *, non_atomic_wide_t *sent, non_atomic_wide_t 
 size_t engine_initiate_new_connections(struct engine *, size_t n);
 
 void engine_terminate(struct engine *, double epoch_start,
-    non_atomic_wide_t initial_data_sent,    /* Data sent during ramp-up */
-    non_atomic_wide_t initial_data_received /* Data received during ramp-up */
+    non_atomic_wide_t initial_data_sent,     /* Data sent during ramp-up */
+    non_atomic_wide_t initial_data_received, /* Data received during ramp-up */
+    struct latency_percentiles latency_percentiles /* Report this %'iles */
     );
 
 #endif  /* TCPKALI_ENGINE_H */
