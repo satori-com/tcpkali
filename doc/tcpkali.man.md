@@ -33,8 +33,8 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 --version
 :   Print version number, then exit.
 
---verbose *level*
-:   Output verbosity level [0..3]. Default is 1.
+-v, --verbose *level*
+:   Increase (**-v**) or set (**--verbose**) output verbosity level [0..3]. Default is 1.
 
 -w, --workers *N*
 :   Number of parallel threads to use. Default is to use as many as needed,
@@ -194,7 +194,7 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
 #. Show server responses (**--verbose**) when we ping SMTP server once a second (**--connect-rate**) disconnecting promptly (**--channel-lifetime**):
 
-    tcpkali --connect-rate=1 --channel-lifetime=0.1  --verbose 3 nonexistent.org:smtp
+    tcpkali --connect-rate=1 --channel-lifetime=0.1 -vvv nonexistent.org:smtp
 
 # SEE ALSO
 

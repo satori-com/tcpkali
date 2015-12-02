@@ -38,8 +38,9 @@ Print version number, then exit.
 .RS
 .RE
 .TP
-.B \-\-verbose \f[I]level\f[]
-Output verbosity level [0..3].
+.B \-v, \-\-verbose \f[I]level\f[]
+Increase (\f[B]\-v\f[]) or set (\f[B]\-\-verbose\f[]) output verbosity
+level [0..3].
 Default is 1.
 .RS
 .RE
@@ -316,7 +317,7 @@ once a second (\f[B]\-\-connect\-rate\f[]) disconnecting promptly
 (\f[B]\-\-channel\-lifetime\f[]):
 .RS 4
 .PP
-tcpkali \-\-connect\-rate=1 \-\-channel\-lifetime=0.1 \-\-verbose 3
+tcpkali \-\-connect\-rate=1 \-\-channel\-lifetime=0.1 \-vvv
 nonexistent.org:smtp
 .RE
 .SH SEE ALSO

@@ -59,10 +59,11 @@
 /*
  * Describe the command line options.
  */
-#define CLI_STATSD_OFFSET   256
-#define CLI_CHAN_OFFSET  512
-#define CLI_CONN_OFFSET  1024
-#define CLI_SOCKET_OPT   2048
+#define CLI_VERBOSE_OFFSET  (1<<8)
+#define CLI_STATSD_OFFSET   (1<<9)
+#define CLI_CHAN_OFFSET     (1<<10)
+#define CLI_CONN_OFFSET     (1<<11)
+#define CLI_SOCKET_OPT      (1<<12)
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "channel-bandwidth-upstream", 1, 0, 'u' },
@@ -90,7 +91,7 @@ static struct option cli_long_options[] = {
     { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
     { "unescape-message-args", 0, 0, 'e' },
     { "version", 0, 0, 'V' },
-    { "verbose", 1, 0, 'v' },
+    { "verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v' },
     { "workers", 1, 0, 'w' },
     { "websocket", 0, 0, 'W' },
     { "ws", 0, 0, 'W' },
@@ -196,7 +197,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:em:f:r:l:w:T:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "hc:em:f:r:l:vw:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -212,7 +213,13 @@ int main(int argc, char **argv) {
         case 'h':
             usage(argv[0], &default_config);
             exit(EX_USAGE);
-        case 'v':
+        case 'v':   /* -v */
+            engine_params.verbosity_level++;
+            if(engine_params.verbosity_level >= _DBG_MAX) {
+                engine_params.verbosity_level = (_DBG_MAX-1);
+            }
+            break;
+        case CLI_VERBOSE_OFFSET + 'v':  /* --verbose <level> */
             engine_params.verbosity_level = atoi(optarg);
             if((int)engine_params.verbosity_level < 0
                || engine_params.verbosity_level >= _DBG_MAX) {
@@ -956,7 +963,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "Where OPTIONS are:\n"
     "  -h, --help                  Print this help screen, then exit\n"
     "  --version                   Print version number, then exit\n"
-    "  --verbose <level=1>         Verbosity level [0..%d]\n"
+    "  -v, --verbose <level=1>     Increase (-v) or set verbosity level [0..%d]\n"
     "  --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)\n"
     "  --rcvbuf <S>                Receive buffers (set SO_RCVBUF)\n"
     "  --sndbuf <S>                Send buffers (set SO_SNDBUF)\n"
