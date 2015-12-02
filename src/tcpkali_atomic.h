@@ -127,7 +127,7 @@ atomic_decrement(atomic_narrow_t *i) {
 
 static inline non_atomic_narrow_t UNUSED
 atomic_inc_and_get(atomic_narrow_t *i) {
-    non_atomic_narrow_t prev;
+    non_atomic_narrow_t prev = 1;
     asm volatile("lock xaddl %1, %0"
         : "+m" (i->_atomic_val), "+r"(prev));
     return 1 + prev;
