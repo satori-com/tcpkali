@@ -41,49 +41,48 @@ During the build procedure listed below, some errors may be thrown if these pre-
 
     Usage: tcpkali [OPTIONS] <host:port> [<host:port>...]
     Where OPTIONS are:
-      -h, --help                  Print this help screen, then exit
-      --version                   Print version number, then exit
-      -v, --verbose <level=1>     Increase (-v) or set verbosity level [0..3]
-      -w, --workers <N>           Number of parallel threads to use
-      --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)
-      --rcvbuf <S>                Receive buffers (set SO_RCVBUF)
-      --sndbuf <S>                Send buffers (set SO_SNDBUF)
+      -h, --help                   Print this help screen, then exit
+      --version                    Print version number, then exit
+      -v, --verbose <level=1>      Increase (-v) or set verbosity level [0..3]
+      -w, --workers <N>            Number of parallel threads to use
+      --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)
+      --rcvbuf <Sizebytes>         Set TCP receive buffers (set SO_RCVBUF)
+      --sndbuf <Sizebytes>         Set TCP rend buffers (set SO_SNDBUF)
 
-      --ws, --websocket           Use RFC6455 WebSocket transport
-      -c, --connections <N=1>     Connections to keep open to the destinations
-      --connect-rate <R=100>      Limit number of new connections per second
-      --connect-timeout <T=1s>    Limit time spent in a connection attempt
-      --channel-lifetime <T>      Shut down each connection after T seconds
-      --channel-bandwidth-upstream <Bw>     Limit upstream bandwidth
-      --channel-bandwidth-downstream <Bw>   Limit downstream bandwidth
-      -l, --listen-port <port>    Listen on the specified port
-      --listen-mode=<mode>        What to do upon client connect, where <mode> is:
-                   "silent"       Do not send data, ignore received data (default)
-                   "active"       Actively send messages
-      -T, --duration <T=10s>      Load test for the specified amount of time
+      --ws, --websocket            Use RFC6455 WebSocket transport
+      -c, --connections <N=1>      Connections to keep open to the destinations
+      --connect-rate <Rate=100>    Limit number of new connections per second
+      --connect-timeout <Time=1s>  Limit time spent in a connection attempt
+      --channel-lifetime <Time>    Shut down each connection after Time seconds
+      --channel-bandwidth-upstream <Bandwidth>     Limit upstream bandwidth
+      --channel-bandwidth-downstream <Bandwidth>   Limit downstream bandwidth
+      -l, --listen-port <port>     Listen on the specified port
+      --listen-mode=<mode>         What to do upon client connect, where <mode> is:
+                   "silent"        Do not send data, ignore received data (default)
+                   "active"        Actively send messages
+      -T, --duration <Time=10s>    Exit after the specified amount of time
 
-      -e, --unescape-message-args Unescape the message data arguments
-      --first-message <string>    Send this message first, once
-      --first-message-file <name> Read the first message from a file
-      -m, --message <string>      Message to repeatedly send to the remote
-      -f, --message-file <name>   Read message to send from a file
-      -r, --message-rate <R>      Messages per second to send in a connection
+      -e, --unescape-message-args  Unescape the message data arguments
+      --first-message <string>     Send this message first, once
+      --first-message-file <name>  Read the first message from a file
+      -m, --message <string>       Message to repeatedly send to the remote
+      -f, --message-file <name>    Read message to send from a file
+      -r, --message-rate <Rate>    Messages per second to send in a connection
 
-      --latency-marker <string>   Measure latency using a per-message marker
-      --latency-marker-skip <N>   Ignore the first N occurrences of a marker
+      --latency-marker <string>    Measure latency using a per-message marker
+      --latency-marker-skip <N>    Ignore the first N occurrences of a marker
 
-      --statsd                    Enable StatsD output (default disabled)
-      --statsd-host <host>        StatsD host to send data (default is localhost)
-      --statsd-port <port>        StatsD port to use (default is 8125)
-      --statsd-namespace <string> Metric namespace (default is "tcpkali")
+      --statsd                     Enable StatsD output (default disabled)
+      --statsd-host <host>         StatsD host to send data (default is localhost)
+      --statsd-port <port>         StatsD port to use (default is 8125)
+      --statsd-namespace <string>  Metric namespace (default is "tcpkali")
 
     Variable units and recognized multipliers:
       <N>, <Rate>:  k (1000, as in "5k" is 5000), m (1000000)
       <Sizebytes>:  k (1024, as in "5k" is 5120), m (1024*1024)
       <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)
-      <T>:          ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
-      <Rate> and <T> can be fractional values, such as 0.25.
-
+      <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
+      <Rate> and <Time> can be fractional values, such as 0.25.
 
 # Examples
 
