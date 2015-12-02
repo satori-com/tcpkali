@@ -22,7 +22,7 @@ tcpkali can throw unlimited or bandwidth-controlled traffic to the
 remote destinations both in the *client* and in the *server* mode.
 
 The *client* mode is triggered by specifying one or more *host:port* arguments
-on the command line. The *server* mode is triggered by specifying **-l**\ (**--listen-port** *port*).
+on the command line. The *server* mode is triggered by specifying **-l** (**--listen-port** *port*).
 
 # OPTIONS
 ## GENERAL OPTIONS
