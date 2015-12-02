@@ -1,6 +1,6 @@
 .\"t
 .ad l
-.TH "tcpkali" "1" "2015\-12\-01" "TCPKali user manual" "Version 0.6"
+.TH "tcpkali" "1" "2015\-12\-02" "TCPKali user manual" "Version 0.6"
 .nh \" Turn off hyphenation
 .SH NAME
 .PP
@@ -165,6 +165,52 @@ This setting is mutually incompatible with
 the same thing.
 .RS
 .RE
+.SS Traffic content expressions
+.PP
+tcpkali supports injecting a limited form of variability into the
+generated content.
+All message data, be it the \f[B]\-m\f[] or \f[B]\-\-first\-message\f[],
+can contain the dynamic expressions in the form of
+\[lq]\\{EXPRESSION}\[rq].
+.PP
+Expressions can be of the following forms:
+.TS
+tab(@);
+lw(18.5n) lw(49.6n).
+T{
+Expression
+T}@T{
+Description
+T}
+_
+T{
+connection.uid
+T}@T{
+Unique number incremented for each new connection.
+T}
+T{
+connection.ptr
+T}@T{
+Pointer to a connection structure.
+Don't use.
+T}
+T{
+EXPRESSION % \f[I]int\f[]
+T}@T{
+Remainder of the expression value divided by \f[I]int\f[].
+T}
+.TE
+.PP
+Expressions can be used to provide some amount of variability to the
+outgoing data stream.
+For example, the following command line might be used to load 10
+different resources from HTTP server:
+.PP
+tcpkali \f[B]\-em\f[]
+\f[C]\[aq]GET\ /image\-\\{connection.uid%10}.jpg\\r\\n\\r\\n\[aq]\f[]
+\&...
+.PP
+Expressions are evaluated even if the \f[B]\-e\f[] option is not given.
 .SS LATENCY MEASUREMENT OPTIONS
 .PP
 tcpkali measures latency by repeatedly recording the time difference

@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2015-12-01
+% 2015-12-02
 
 # NAME
 
@@ -109,6 +109,31 @@ on the command line. The *server* mode is triggered by specifying **-l**\ (**\--
     message boundaries. This setting is mutually incompatible with
     **\--channel-bandwidth-upstream** option, because they control
     the same thing.
+
+### Traffic content expressions
+
+tcpkali supports injecting a limited form of variability into the
+generated content. All message data, be it the **-m** or **\--first-message**,
+can contain the dynamic expressions in the form of "\\{EXPRESSION}".
+
+----------------------------------------------------------------------
+Expression         Description
+--------------     ---------------------------------------------------
+connection.uid     Unique number incremented for each new connection.
+
+connection.ptr     Pointer to a connection structure. Don't use.
+
+EXPRESSION % *int* Remainder of the expression value divided by *int*.
+-----------------------------------------------------------------------
+: Expressions can be of the following forms:
+
+Expressions can be used to provide some amount of variability to the
+outgoing data stream. For example, the following command line might be used to
+load 10 different resources from HTTP server:
+
+tcpkali **-em** `'GET /image-\{connection.uid%10}.jpg\r\n\r\n'` ...
+
+Expressions are evaluated even if the **-e** option is not given.
 
 ## LATENCY MEASUREMENT OPTIONS
 
