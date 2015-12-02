@@ -48,6 +48,8 @@ During the build procedure listed below, some errors may be thrown if these pre-
       --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)
       --rcvbuf <Sizebytes>         Set TCP receive buffers (set SO_RCVBUF)
       --sndbuf <Sizebytes>         Set TCP rend buffers (set SO_SNDBUF)
+      --source-ip <IP>             Use the specified IP address to connect
+
 
       --ws, --websocket            Use RFC6455 WebSocket transport
       -c, --connections <N=1>      Connections to keep open to the destinations

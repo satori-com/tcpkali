@@ -37,6 +37,16 @@ struct addresses {
     size_t n_addrs;
 };
 
+/* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
+static inline socklen_t UNUSED sockaddr_len(struct sockaddr_storage *ss) {
+    switch(ss->ss_family) {
+    case AF_INET: return sizeof(struct sockaddr_in);
+    case AF_INET6: return sizeof(struct sockaddr_in6);
+    }
+    assert(!"Not IPv4 and not IPv6");
+    return 0;
+}
+
 /*
  * Given a sequence of host:port strings, return all of the resolved IP
  * addresses.

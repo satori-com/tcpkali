@@ -42,6 +42,7 @@ struct engine;
 struct engine_params {
     struct addresses remote_addresses;
     struct addresses listen_addresses;
+    struct addresses source_addresses;
     size_t requested_workers;       /* Number of threads to start */
     rate_spec_t channel_send_rate;  /* --channel-upstream */
     rate_spec_t channel_recv_rate;  /* --channel-downstream */

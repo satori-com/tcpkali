@@ -51,6 +51,10 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 --sndbuf *SizeBytes*
 :   Set TCP send buffers (set `SO_SNDBUF` socket option).
 
+--source-ip *IP*
+:   Use the specified IP address to connect to destination hosts.
+
+
 ## TEST RUN OPTIONS
 
 --ws, --websocket

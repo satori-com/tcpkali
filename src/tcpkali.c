@@ -85,6 +85,7 @@ static struct option cli_long_options[] = {
     { "nagle", 1, 0, 'N' },
     { "rcvbuf", 1, 0,           CLI_SOCKET_OPT + 'R' },
     { "sndbuf", 1, 0,           CLI_SOCKET_OPT + 'S' },
+    { "source-ip", 1, 0, 'I' },
     { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
     { "statsd-host", 1, 0,      CLI_STATSD_OFFSET + 'h' },
     { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
@@ -154,7 +155,8 @@ static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
-struct addresses detect_listen_addresses(int listen_port);
+static struct addresses detect_listen_addresses(int listen_port);
+static int add_source_ip(struct addresses *addrs, const char *optarg);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
 
@@ -460,11 +462,25 @@ int main(int argc, char **argv) {
             }
             }
             break;
+        case 'I': { /* --source-ip */
+                if(add_source_ip(&engine_params.source_addresses, optarg) < 0) {
+                    fprintf(stderr, "--source-ip=%s: local IP address expected\n",
+                                    optarg);
+                    exit(EX_USAGE);
+                }
+            }
+            break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage(argv[0], &default_config);
             exit(EX_USAGE);
         }
+    }
+
+    if(engine_params.source_addresses.n_addrs > 0) {
+        fprint_addresses(stderr, "Source IP: ",
+                                 "\nSource IP: ", "\n",
+                                 engine_params.source_addresses);
     }
 
     /*
@@ -921,7 +937,7 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
     return value;
 }
 
-struct addresses detect_listen_addresses(int listen_port) {
+static struct addresses detect_listen_addresses(int listen_port) {
     struct addresses addresses = { 0, 0 };
     struct addrinfo hints = {
             .ai_family = AF_UNSPEC,
@@ -953,6 +969,53 @@ struct addresses detect_listen_addresses(int listen_port) {
 }
 
 /*
+ * Check whether we can bind to a specified IP.
+ */
+static int check_if_bindable_ip(struct sockaddr_storage *ss) {
+    int rc;
+    int lsock = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
+    assert(lsock != -1);
+    rc = bind(lsock, (struct sockaddr *)ss, sockaddr_len(ss));
+    close(lsock);
+    if(rc == -1) {
+        char buf[256];
+        fprintf(stderr, "%s is not local: %s\n",
+                        format_sockaddr(ss, buf, sizeof(buf)),
+                        strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+static int add_source_ip(struct addresses *addresses, const char *optarg) {
+    struct addrinfo hints = {
+            .ai_family = AF_UNSPEC,
+            .ai_socktype = SOCK_STREAM,
+            .ai_protocol = IPPROTO_TCP,
+            .ai_flags = AI_PASSIVE | AI_ADDRCONFIG };
+
+    struct addrinfo *res;
+    int err = getaddrinfo(optarg, NULL, &hints, &res);
+    if(err != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
+        return -1;
+    }
+
+    /* Move all of the addresses into the separate storage */
+    for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
+        address_add(addresses, tmp->ai_addr);
+        if(check_if_bindable_ip(&addresses->addrs[addresses->n_addrs-1]) < 0) {
+            freeaddrinfo(res);
+            return -1;
+        }
+    }
+
+    freeaddrinfo(res);
+
+    return 0;
+}
+
+/*
  * Display the Usage screen.
  */
 static void
@@ -968,6 +1031,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)\n"
     "  --rcvbuf <Sizebytes>         Set TCP receive buffers (set SO_RCVBUF)\n"
     "  --sndbuf <Sizebytes>         Set TCP rend buffers (set SO_SNDBUF)\n"
+    "  --source-ip <IP>             Use the specified IP address to connect\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>      Connections to keep open to the destinations\n"

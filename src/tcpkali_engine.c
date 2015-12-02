@@ -242,16 +242,6 @@ static void control_cb_uv(tk_io *w, int UNUSED status, int revents) {
 }
 #endif
 
-/* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
-static socklen_t sockaddr_len(struct sockaddr_storage *ss) {
-    switch(ss->ss_family) {
-    case AF_INET: return sizeof(struct sockaddr_in);
-    case AF_INET6: return sizeof(struct sockaddr_in6);
-    }
-    assert(!"Not IPv4 and not IPv6");
-    return 0;
-}
-
 #define DEBUG(level, fmt, args...) do {         \
         if((int)largs->params.verbosity_level >= level)  \
             fprintf(stderr, "%s" fmt, tcpkali_clear_eol(), ##args);       \
