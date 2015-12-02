@@ -43,7 +43,8 @@ During the build procedure listed below, some errors may be thrown if these pre-
     Where OPTIONS are:
       -h, --help                  Print this help screen, then exit
       --version                   Print version number, then exit
-      --verbose <level=1>         Verbosity level [0..3]
+      -v, --verbose <level=1>     Increase (-v) or set verbosity level [0..3]
+      -w, --workers <N>           Number of parallel threads to use
       --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)
       --rcvbuf <S>                Receive buffers (set SO_RCVBUF)
       --sndbuf <S>                Send buffers (set SO_SNDBUF)
@@ -59,7 +60,6 @@ During the build procedure listed below, some errors may be thrown if these pre-
       --listen-mode=<mode>        What to do upon client connect, where <mode> is:
                    "silent"       Do not send data, ignore received data (default)
                    "active"       Actively send messages
-      -w, --workers <N>           Number of parallel threads to use
       -T, --duration <T=10s>      Load test for the specified amount of time
 
       -e, --unescape-message-args Unescape the message data arguments
@@ -78,10 +78,12 @@ During the build procedure listed below, some errors may be thrown if these pre-
       --statsd-namespace <string> Metric namespace (default is "tcpkali")
 
     Variable units and recognized multipliers:
-      <N, R>:  k (1000, as in "5k" is 5000), m (1000000)
-      <S>:     k (1024, as in "5k" is 5120), m (1024*1024)
-      <Bw>:    kbps, Mbps (bits per second), kBps, MBps (bytes per second)
-      <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
+      <N>, <Rate>:  k (1000, as in "5k" is 5000), m (1000000)
+      <Sizebytes>:  k (1024, as in "5k" is 5120), m (1024*1024)
+      <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)
+      <T>:          ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
+      <Rate> and <T> can be fractional values, such as 0.25.
+
 
 # Examples
 

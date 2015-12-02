@@ -327,7 +327,7 @@ int main(int argc, char **argv) {
             engine_params.channel_recv_rate = RATE_BPS(Bps);
             break;
             }
-        case 'r': { /* --message-rate <R> */
+        case 'r': { /* --message-rate <Rate> */
             double rate = parse_with_multipliers(option, optarg,
                         km_multiplier,
                         sizeof(km_multiplier)/sizeof(km_multiplier[0]));
@@ -964,30 +964,30 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -h, --help                  Print this help screen, then exit\n"
     "  --version                   Print version number, then exit\n"
     "  -v, --verbose <level=1>     Increase (-v) or set verbosity level [0..%d]\n"
+    "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
     "  --nagle {on|off}            Control Nagle algorithm (set TCP_NODELAY)\n"
-    "  --rcvbuf <S>                Receive buffers (set SO_RCVBUF)\n"
-    "  --sndbuf <S>                Send buffers (set SO_SNDBUF)\n"
+    "  --rcvbuf <Sizebytes>        Set TCP receive buffers (set SO_RCVBUF)\n"
+    "  --sndbuf <Sizebytes>        Set TCP rend buffers (set SO_SNDBUF)\n"
     "\n"
     "  --ws, --websocket           Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>     Connections to keep open to the destinations\n"
-    "  --connect-rate <R=%g>      Limit number of new connections per second\n"
-    "  --connect-timeout <T=1s>    Limit time spent in a connection attempt\n"
-    "  --channel-lifetime <T>      Shut down each connection after T seconds\n"
-    "  --channel-bandwidth-upstream <Bw>     Limit upstream bandwidth\n"
-    "  --channel-bandwidth-downstream <Bw>   Limit downstream bandwidth\n"
+    "  --connect-rate <Rate=%g>   Limit number of new connections per second\n"
+    "  --connect-timeout <Time=1s> Limit time spent in a connection attempt\n"
+    "  --channel-lifetime <Time>   Shut down each connection after Time seconds\n"
+    "  --channel-bandwidth-upstream <Bandwidth>     Limit upstream bandwidth\n"
+    "  --channel-bandwidth-downstream <Bandwidth>   Limit downstream bandwidth\n"
     "  -l, --listen-port <port>    Listen on the specified port\n"
     "  --listen-mode=<mode>        What to do upon client connect, where <mode> is:\n"
     "               \"silent\"       Do not send data, ignore received data (default)\n"
     "               \"active\"       Actively send messages\n"
-    "  -w, --workers <N=%ld>%s        Number of parallel threads to use\n"
-    "  -T, --duration <T=10s>      Load test for the specified amount of time\n"
+    "  -T, --duration <Time=10s>   Exit after the specified amount of time\n"
     "\n"
     "  -e, --unescape-message-args Unescape the message data arguments\n"
     "  --first-message <string>    Send this message first, once\n"
     "  --first-message-file <name> Read the first message from a file\n"
     "  -m, --message <string>      Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>   Read message to send from a file\n"
-    "  -r, --message-rate <R>      Messages per second to send in a connection\n"
+    "  -r, --message-rate <Rate>   Messages per second to send in a connection\n"
     "\n"
     "  --latency-marker <string>   Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>   Ignore the first N occurrences of a marker\n"
@@ -998,14 +998,17 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-namespace <string> Metric namespace (default is \"%s\")\n"
     "\n"
     "Variable units and recognized multipliers:\n"
-    "  <N, R>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
-    "  <S>:     k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
-    "  <Bw>:    kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
+    "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
+    "  <Sizebytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
+    "  <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
+    "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
+    "  <Rate> and <Time> can be fractional values, such as 0.25.\n",
+
+
     (_DBG_MAX - 1),
+    number_of_cpus(), number_of_cpus() < 10 ? " " : "",
     conf->max_connections,
     conf->connect_rate,
-    number_of_cpus(), number_of_cpus() < 10 ? " " : "",
     conf->statsd_enable ? "enabled" : "disabled",
     conf->statsd_port,
     conf->statsd_namespace

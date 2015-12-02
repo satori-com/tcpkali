@@ -46,10 +46,10 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 :   Control Nagle algorithm (set `TCP_NODELAY` socket option).
 
 --rcvbuf *SizeBytes*
-:   Receive buffers (set `SO_RCVBUF` socket option).
+:   Set TCP receive buffers (set `SO_RCVBUF` socket option).
 
 --sndbuf *SizeBytes*
-:   Send buffers (set `SO_SNDBUF` socket option).
+:   Set TCP send buffers (set `SO_SNDBUF` socket option).
 
 ## TEST RUN OPTIONS
 
@@ -63,11 +63,11 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 :   Limit number of new connections per second.
     Default is 100 connections per second.
 
---connect-timeout *Duration*
+--connect-timeout *Time*
 :   Limit time spent in a connection attempt. Default is 1 second.
 
---channel-lifetime *Duration*
-:   Shut down each connection after *Duration* seconds.
+--channel-lifetime *Time*
+:   Shut down each connection after *Time* seconds.
 
 --channel-bandwidth-upstream *Bandwidth*
 :   Limit single connection bandwidth in the outgoing direction.
@@ -81,7 +81,7 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 --listen-mode=silent|active
 :   How to behave when a new client connection is received. In the `silent` mode we do not send data and ignore the data received. This is a default. In the `active` mode tcpkali sends messages to the connected clients.
 
--T, --duration *Duration*
+-T, --duration *Time*
 :   Exit and print final stats after the specified amount of time. Default is 10 seconds (`-T10s`).
 
 ## TRAFFIC CONTENT OPTIONS
@@ -176,11 +176,11 @@ Placeholder    Recognized unit suffixes
 *Bandwidth*    kbps, Mbps (for bits per second),
                kBps,\ MBps\ (for\ bytes\ per\ second).
 
-*Duration*     ms, s, m, h, d (milliseconds, seconds, minutes, etc).
+*Time*         ms, s, m, h, d (milliseconds, seconds, minutes, etc).
 -----------------------------------------------------------------------
 Table: tcpkali recognizes a number of suffixes for numeric values.
 
-*Rate* and *Duration* can be fractional values, such as 0.25.
+*Rate* and *Time* can be fractional values, such as 0.25.
 
 # EXAMPLES
 
