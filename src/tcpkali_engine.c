@@ -914,6 +914,7 @@ explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr, struct lo
 }
 
 static void start_new_connection(TK_P) {
+    char tmpbuf[INET6_ADDRSTRLEN+64];
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct remote_stats *remote_stats;
     size_t remote_index;
@@ -945,19 +946,43 @@ static void start_new_connection(TK_P) {
         set_socket_options(sockfd, largs);
     }
 
+    /* If --source-ip is specified, bind to the next one. */
+    if(largs->params.source_addresses.n_addrs) {
+        struct sockaddr_storage *bind_ss = &largs->params.source_addresses.addrs[largs->worker_connections_initiated%largs->params.source_addresses.n_addrs];
+        int rc = bind(sockfd, (struct sockaddr *)bind_ss, sockaddr_len(bind_ss));
+        if(rc == -1) {
+            atomic_increment(&remote_stats->connection_failures);
+            largs->worker_connection_failures++;
+            close(sockfd);
+            DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
+                    format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                    strerror(errno));
+            return;
+        }
+    }
+
     int conn_state;
     int rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
     if(rc == -1) {
-        char buf[INET6_ADDRSTRLEN+64];
         switch(errno) {
         case EINPROGRESS:
             break;
+        case EADDRNOTAVAIL: /* Bind failed */
+            if(largs->params.source_addresses.n_addrs) {
+                /* This is local problem, not remote address problem. */
+                largs->worker_connection_failures++;
+                DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
+                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                        strerror(errno));
+            }
+            /* FALL THROUGH */
         default:
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
             if(atomic_get(&remote_stats->connection_failures) == 1) {
                 DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
-                        format_sockaddr(ss, buf, sizeof(buf)), strerror(errno));
+                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                        strerror(errno));
             }
             close(sockfd);
             return;
