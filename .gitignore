@@ -9,9 +9,6 @@
 *.log
 *.trs
 
-# bison/lex files
-*_[ly].[ch]
-
 deps/libev/ev.3
 
 m4/*
