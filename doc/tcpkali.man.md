@@ -53,6 +53,8 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 
 --source-ip *IP*
 :   Use the specified IP address to connect to destination hosts.
+Using this option multiple times with different interface IPs
+(aliases) to generate more than 64k connections to a single *host:port*.
 
 
 ## TEST RUN OPTIONS
@@ -208,13 +210,15 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
     kern.maxfiles=10000+2*N         # BSD
     kern.maxfilesperproc=100+N      # BSD
+    kern.ipc.maxsockets=10000+2*N   # BSD
     fs.file-max=10000+2*N           # Linux
 
     # For load-generating clients.
     net.ipv4.ip_local_port_range="10000  65535"  # Linux.
     net.inet.ip.portrange.hifirst=10000  # BSD/Mac.
     net.inet.ip.portrange.hilast=65535   # (Enough for N < 55535)
-    net.ipv4.tcp_tw_reuse=1
+    net.ipv4.tcp_tw_reuse=1         # Linux
+    net.inet.tcp.maxtcptw=2*N       # BSD
 
     # If using netfilter on Linux:
     net.netfilter.nf_conntrack_max=N
