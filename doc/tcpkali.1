@@ -4,10 +4,10 @@
 .nh \" Turn off hyphenation
 .SH NAME
 .PP
-tcpkali \[en] fast TCP and WebSocket load generator and sink.
+tcpkali \-\- fast TCP and WebSocket load generator and sink.
 .SH SYNOPSIS
 .PP
-tcpkali [\f[I]OPTIONS\f[]] [\f[I]host:port\f[] \&...]
+tcpkali [\f[I]OPTIONS\f[]] [\f[I]host:port\f[] ...]
 .SH DESCRIPTION
 .PP
 tcpkali is a tool that helps stress\-test and bench TCP and WebSocket
@@ -73,7 +73,7 @@ Use RFC6455 WebSocket transport.
 .RS
 .RE
 .TP
-.B \-c, \[en]connections \f[I]N\f[]
+.B \-c, \-\-connections \f[I]N\f[]
 Number of concurrent connections to open to the destinations.
 Default is 1.
 .RS
@@ -170,8 +170,7 @@ the same thing.
 tcpkali supports injecting a limited form of variability into the
 generated content.
 All message data, be it the \f[B]\-m\f[] or \f[B]\-\-first\-message\f[],
-can contain the dynamic expressions in the form of
-\[lq]\\{EXPRESSION}\[rq].
+can contain the dynamic expressions in the form of "\\{EXPRESSION}".
 .PP
 Expressions can be of the following forms:
 .TS
@@ -192,7 +191,7 @@ T{
 connection.ptr
 T}@T{
 Pointer to a connection structure.
-Don't use.
+Don\[aq]t use.
 T}
 T{
 EXPRESSION % \f[I]int\f[]
@@ -208,7 +207,7 @@ different resources from an HTTP server:
 .PP
 tcpkali \f[B]\-em\f[]
 \f[C]\[aq]GET\ /image\-\\{connection.uid%10}.jpg\\r\\n\\r\\n\[aq]\f[]
-\&...
+...
 .PP
 Expressions are evaluated even if the \f[B]\-e\f[] option is not given.
 .SS LATENCY MEASUREMENT OPTIONS
@@ -253,7 +252,7 @@ Default is 8125.
 .TP
 .B \-\-statsd\-namespace \f[I]string\f[]
 Metric namespace.
-Default is \[lq]tcpkali\[rq].
+Default is "tcpkali".
 .RS
 .RE
 .SH VARIABLE UNITS
@@ -271,12 +270,12 @@ _
 T{
 \f[I]N\f[] and \f[I]Rate\f[]
 T}@T{
-k (1000, as in \[lq]5k\[rq] equals to 5000), m (1000000).
+k (1000, as in "5k" equals to 5000), m (1000000).
 T}
 T{
 \f[I]SizeBytes\f[]
 T}@T{
-k (1024, as in \[lq]5k\[rq] equals to 5120), m (1024*1024).
+k (1024, as in "5k" equals to 5120), m (1024*1024).
 T}
 T{
 \f[I]Bandwidth\f[]
@@ -300,7 +299,7 @@ connections (\f[B]\-c\f[]) to an HTTP server (\f[B]\-m\f[]), replacing
 \\n with newlines (\f[B]\-e\f[]):
 .RS 4
 .PP
-tcpkali \-c10k \-r42 \-em \[aq]GET / HTTP/1.0\\r\\n\\r\\n'
+tcpkali \-c10k \-r42 \-em \[aq]GET / HTTP/1.0\\r\\n\\r\\n\[aq]
 nonexistent.com:80
 .RE
 .IP "2." 3
@@ -333,8 +332,8 @@ fs.file\-max=10000+2*N\ \ \ \ \ \ \ \ \ \ \ #\ Linux
 
 #\ For\ load\-generating\ clients.
 net.ipv4.ip_local_port_range="10000\ \ 65535"\ \ #\ Linux.
-net.inet.ip.portrange.hifirst=10000\ \ \ \ \ \ \ \ \ \ #\ BSD/Mac.
-net.inet.ip.portrange.hilast=65535\ \ \ \ \ \ \ \ \ \ \ #\ (Enough\ for\ N\ <\ 55535)
+net.inet.ip.portrange.hifirst=10000\ \ #\ BSD/Mac.
+net.inet.ip.portrange.hilast=65535\ \ \ #\ (Enough\ for\ N\ <\ 55535)
 net.ipv4.tcp_tw_reuse=1
 
 #\ If\ using\ netfilter\ on\ Linux:

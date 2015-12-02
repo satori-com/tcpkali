@@ -22,98 +22,98 @@ tcpkali can throw unlimited or bandwidth-controlled traffic to the
 remote destinations both in the *client* and in the *server* mode.
 
 The *client* mode is triggered by specifying one or more *host:port* arguments
-on the command line. The *server* mode is triggered by specifying **-l**\ (**\--listen-port** *port*).
+on the command line. The *server* mode is triggered by specifying **-l**\ (**--listen-port** *port*).
 
 # OPTIONS
 ## GENERAL OPTIONS
 
--h, \--help
+-h, --help
 :   Print a help screen, then exit.
 
-\--version
+--version
 :   Print version number, then exit.
 
-\--verbose *level*
+--verbose *level*
 :   Output verbosity level [0..3]. Default is 1.
 
--w, \--workers *N*
+-w, --workers *N*
 :   Number of parallel threads to use. Default is to use as many as needed,
     up to the number of cores detected in the system.
 
 ## NETWORK STACK SETTINGS
 
-\--nagle=on|off
+--nagle=on|off
 :   Control Nagle algorithm (set `TCP_NODELAY` socket option).
 
-\--rcvbuf *SizeBytes*
+--rcvbuf *SizeBytes*
 :   Receive buffers (set `SO_RCVBUF` socket option).
 
-\--sndbuf *SizeBytes*
+--sndbuf *SizeBytes*
 :   Send buffers (set `SO_SNDBUF` socket option).
 
 ## TEST RUN OPTIONS
 
-\--ws, \--websocket
+--ws, --websocket
 :   Use RFC6455 WebSocket transport.
 
 -c, --connections *N*
 :   Number of concurrent connections to open to the destinations. Default is 1.
 
-\--connect-rate *Rate*
+--connect-rate *Rate*
 :   Limit number of new connections per second.
     Default is 100 connections per second.
 
-\--connect-timeout *Duration*
+--connect-timeout *Duration*
 :   Limit time spent in a connection attempt. Default is 1 second.
 
-\--channel-lifetime *Duration*
+--channel-lifetime *Duration*
 :   Shut down each connection after *Duration* seconds.
 
-\--channel-bandwidth-upstream *Bandwidth*
+--channel-bandwidth-upstream *Bandwidth*
 :   Limit single connection bandwidth in the outgoing direction.
 
-\--channel-bandwidth-downstream *Bandwidth*
+--channel-bandwidth-downstream *Bandwidth*
 :   Limit single connection bandwidth in the incoming direction.
 
--l, \--listen-port *port*
+-l, --listen-port *port*
 :   Accept connections on the specified port.
 
-\--listen-mode=silent|active
+--listen-mode=silent|active
 :   How to behave when a new client connection is received. In the `silent` mode we do not send data and ignore the data received. This is a default. In the `active` mode tcpkali sends messages to the connected clients.
 
--T, \--duration *Duration*
+-T, --duration *Duration*
 :   Exit and print final stats after the specified amount of time. Default is 10 seconds (`-T10s`).
 
 ## TRAFFIC CONTENT OPTIONS
 
--e, \--unescape-message-args
+-e, --unescape-message-args
 :   Unescape the message data specified by the **-m**, **-f**
     and the rest of the traffic content options on the command line.
     Transform \\xxx into a byte with corresponding octal value,
     \\n into a newline character, etc.
 
-\--first-message <string>
+--first-message <string>
 :   Send this message first, once at the beginning of each connection.
 
-\--first-message-file *filename*
+--first-message-file *filename*
 :   Read the message from a file and send it once at the beginning of each connection.
 
--m, \--message *string*
+-m, --message *string*
 :   Repeatedly send the specified message to each destination.
 
--f, \--message-file *filename*
+-f, --message-file *filename*
 :   Repeatedly send the message read from the file to each destination.
 
--r, \--message-rate *Rate*
+-r, --message-rate *Rate*
 :   Messages per second to send in a connection. tcpkali attempts to preserve
     message boundaries. This setting is mutually incompatible with
-    **\--channel-bandwidth-upstream** option, because they control
+    **--channel-bandwidth-upstream** option, because they control
     the same thing.
 
 ### Traffic content expressions
 
 tcpkali supports injecting a limited form of variability into the
-generated content. All message data, be it the **-m** or **\--first-message**,
+generated content. All message data, be it the **-m** or **--first-message**,
 can contain the dynamic expressions in the form of "\\{EXPRESSION}".
 
 ----------------------------------------------------------------------
@@ -143,25 +143,25 @@ and the time the latency marker is observed in the downstream traffic.
 Latency data is aggregated across all connections, and the
 latency percentiles are displayed during and after the tcpkali session is done.
 
-\--latency-marker *string*
+--latency-marker *string*
 :   Specify a per-message sequence of characters to look for in the data stream.
 
-\--latency-marker-skip *N*
-:   Ignore the first *N* observations of a **\--latency-marker**.
+--latency-marker-skip *N*
+:   Ignore the first *N* observations of a **--latency-marker**.
 
 
 ## STATSD OPTIONS
 
-\--statsd
+--statsd
 :   Enable StatsD output. StatsD output is disabled by default.
 
-\--statsd-host *host*
+--statsd-host *host*
 :   StatsD host to send metrics data to. Default is `localhost`.
 
-\--statsd-port *port*
+--statsd-port *port*
 :   StatsD port to use. Default is 8125.
 
-\--statsd-namespace *string*
+--statsd-namespace *string*
 :   Metric namespace. Default is "tcpkali".
 
 # VARIABLE UNITS
@@ -186,15 +186,15 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
 #. Throw 42 requests per second (**-r**) in each of the 10,000 connections (**-c**) to an HTTP server (**-m**), replacing \\n with newlines (**-e**):
 
-    tcpkali -c10k -r42 -em \'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
+    tcpkali -c10k -r42 -em 'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
 
-#. Create a WebSocket (**\--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
+#. Create a WebSocket (**--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
 
-    tcpkali \--ws -l8080 \--channel-bandwidth-downstream=0 -T1h
+    tcpkali --ws -l8080 --channel-bandwidth-downstream=0 -T1h
 
-#. Show server responses (**\--verbose**) when we ping SMTP server once a second (**\--connect-rate**) disconnecting promptly (**\--channel-lifetime**):
+#. Show server responses (**--verbose**) when we ping SMTP server once a second (**--connect-rate**) disconnecting promptly (**--channel-lifetime**):
 
-    tcpkali \--connect-rate=1 \--channel-lifetime=0.1  \--verbose 3 nonexistent.org:smtp
+    tcpkali --connect-rate=1 --channel-lifetime=0.1  --verbose 3 nonexistent.org:smtp
 
 # SEE ALSO
 
@@ -208,8 +208,8 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
     # For load-generating clients.
     net.ipv4.ip_local_port_range="10000  65535"  # Linux.
-    net.inet.ip.portrange.hifirst=10000          # BSD/Mac.
-    net.inet.ip.portrange.hilast=65535           # (Enough for N < 55535)
+    net.inet.ip.portrange.hifirst=10000  # BSD/Mac.
+    net.inet.ip.portrange.hilast=65535   # (Enough for N < 55535)
     net.ipv4.tcp_tw_reuse=1
 
     # If using netfilter on Linux:
