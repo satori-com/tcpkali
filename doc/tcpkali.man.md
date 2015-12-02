@@ -129,7 +129,7 @@ EXPRESSION % *int* Remainder of the expression value divided by *int*.
 
 Expressions can be used to provide some amount of variability to the
 outgoing data stream. For example, the following command line might be used to
-load 10 different resources from HTTP server:
+load 10 different resources from an HTTP server:
 
 tcpkali **-em** `'GET /image-\{connection.uid%10}.jpg\r\n\r\n'` ...
 
