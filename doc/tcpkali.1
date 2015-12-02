@@ -204,7 +204,7 @@ T}
 Expressions can be used to provide some amount of variability to the
 outgoing data stream.
 For example, the following command line might be used to load 10
-different resources from HTTP server:
+different resources from an HTTP server:
 .PP
 tcpkali \f[B]\-em\f[]
 \f[C]\[aq]GET\ /image\-\\{connection.uid%10}.jpg\\r\\n\\r\\n\[aq]\f[]
@@ -300,7 +300,7 @@ connections (\f[B]\-c\f[]) to an HTTP server (\f[B]\-m\f[]), replacing
 \\n with newlines (\f[B]\-e\f[]):
 .RS 4
 .PP
-tcpkali \-c10k \-r42 \-em `GET / HTTP/1.0\\r\\n\\r\\n'
+tcpkali \-c10k \-r42 \-em \[aq]GET / HTTP/1.0\\r\\n\\r\\n'
 nonexistent.com:80
 .RE
 .IP "2." 3

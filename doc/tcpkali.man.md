@@ -186,7 +186,7 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
 #. Throw 42 requests per second (**-r**) in each of the 10,000 connections (**-c**) to an HTTP server (**-m**), replacing \\n with newlines (**-e**):
 
-    tcpkali -c10k -r42 -em 'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
+    tcpkali -c10k -r42 -em \'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
 
 #. Create a WebSocket (**\--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
 
