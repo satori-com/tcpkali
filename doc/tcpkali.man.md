@@ -1,0 +1,200 @@
+% tcpkali(1) TCPKali user manual
+% Lev Walkin <lwalkin@machinezone.com>
+% 2015-12-01
+
+# NAME
+
+tcpkali -- fast TCP and WebSocket load generator and sink.
+
+# SYNOPSIS
+
+tcpkali [*OPTIONS*] [*host:port* ...]
+
+# DESCRIPTION
+
+tcpkali is a tool that helps stress-test and bench TCP and WebSocket based
+systems. In the *client* mode tcpkali connects to the list of specified
+hosts and ports and generates traffic for each of these connections. In the
+*server* mode tcpkali accepts incoming connections and throws away any
+incoming data.
+
+tcpkali can throw unlimited or bandwidth-controlled traffic to the
+remote destinations both in the *client* and in the *server* mode.
+
+The *client* mode is triggered by specifying one or more *host:port* arguments
+on the command line. The *server* mode is triggered by specifying **-l**\ (**\--listen-port** *port*).
+
+# OPTIONS
+## GENERAL OPTIONS
+
+-h, \--help
+:   Print a help screen, then exit.
+
+\--version
+:   Print version number, then exit.
+
+\--verbose *level*
+:   Output verbosity level [0..3]. Default is 1.
+
+-w, \--workers *N*
+:   Number of parallel threads to use. Default is to use as many as needed,
+    up to the number of cores detected in the system.
+
+## NETWORK STACK SETTINGS
+
+\--nagle=on|off
+:   Control Nagle algorithm (set `TCP_NODELAY` socket option).
+
+\--rcvbuf *SizeBytes*
+:   Receive buffers (set `SO_RCVBUF` socket option).
+
+\--sndbuf *SizeBytes*
+:   Send buffers (set `SO_SNDBUF` socket option).
+
+## TEST RUN OPTIONS
+
+\--ws, \--websocket
+:   Use RFC6455 WebSocket transport.
+
+-c, --connections *N*
+:   Number of concurrent connections to open to the destinations. Default is 1.
+
+\--connect-rate *Rate*
+:   Limit number of new connections per second.
+    Default is 100 connections per second.
+
+\--connect-timeout *Duration*
+:   Limit time spent in a connection attempt. Default is 1 second.
+
+\--channel-lifetime *Duration*
+:   Shut down each connection after *Duration* seconds.
+
+\--channel-bandwidth-upstream *Bandwidth*
+:   Limit single connection bandwidth in the outgoing direction.
+
+\--channel-bandwidth-downstream *Bandwidth*
+:   Limit single connection bandwidth in the incoming direction.
+
+-l, \--listen-port *port*
+:   Accept connections on the specified port.
+
+\--listen-mode=silent|active
+:   How to behave when a new client connection is received. In the `silent` mode we do not send data and ignore the data received. This is a default. In the `active` mode tcpkali sends messages to the connected clients.
+
+-T, \--duration *Duration*
+:   Exit and print final stats after the specified amount of time. Default is 10 seconds (`-T10s`).
+
+## TRAFFIC CONTENT OPTIONS
+
+-e, \--unescape-message-args
+:   Unescape the message data specified by the **-m**, **-f**
+    and the rest of the traffic content options on the command line.
+    Transform \\xxx into a byte with corresponding octal value,
+    \\n into a newline character, etc.
+
+\--first-message <string>
+:   Send this message first, once at the beginning of each connection.
+
+\--first-message-file *filename*
+:   Read the message from a file and send it once at the beginning of each connection.
+
+-m, \--message *string*
+:   Repeatedly send the specified message to each destination.
+
+-f, \--message-file *filename*
+:   Repeatedly send the message read from the file to each destination.
+
+-r, \--message-rate *Rate*
+:   Messages per second to send in a connection. tcpkali attempts to preserve
+    message boundaries. This setting is mutually incompatible with
+    **\--channel-bandwidth-upstream** option, because they control
+    the same thing.
+
+## LATENCY MEASUREMENT OPTIONS
+
+tcpkali measures latency by repeatedly recording the time difference between
+the time the message is sent (as specified by **-m** or **-f**)
+and the time the latency marker is observed in the downstream traffic.
+Latency data is aggregated across all connections, and the
+latency percentiles are displayed during and after the tcpkali session is done.
+
+\--latency-marker *string*
+:   Specify a per-message sequence of characters to look for in the data stream.
+
+\--latency-marker-skip *N*
+:   Ignore the first *N* observations of a **\--latency-marker**.
+
+
+## STATSD OPTIONS
+
+\--statsd
+:   Enable StatsD output. StatsD output is disabled by default.
+
+\--statsd-host *host*
+:   StatsD host to send metrics data to. Default is `localhost`.
+
+\--statsd-port *port*
+:   StatsD port to use. Default is 8125.
+
+\--statsd-namespace *string*
+:   Metric namespace. Default is "tcpkali".
+
+# VARIABLE UNITS
+
+-----------------------------------------------------------------------
+Placeholder    Recognized unit suffixes
+-------------- --------------------------------------------------------
+*N* and *Rate* k (1000, as in "5k" equals to 5000), m (1000000).
+
+*SizeBytes*    k (1024, as in "5k" equals to 5120), m (1024*1024).
+
+*Bandwidth*    kbps, Mbps (for bits per second),
+               kBps,\ MBps\ (for\ bytes\ per\ second).
+
+*Duration*     ms, s, m, h, d (milliseconds, seconds, minutes, etc).
+-----------------------------------------------------------------------
+Table: tcpkali recognizes a number of suffixes for numeric values.
+
+*Rate* and *Duration* can be fractional values, such as 0.25.
+
+# EXAMPLES
+
+#. Throw 42 requests per second (**-r**) in each of the 10,000 connections (**-c**) to an HTTP server (**-m**), replacing \\n with newlines (**-e**):
+
+    tcpkali -c10k -r42 -em 'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
+
+#. Create a WebSocket (**\--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
+
+    tcpkali \--ws -l8080 \--channel-bandwidth-downstream=0 -T1h
+
+#. Show server responses (**\--verbose**) when we ping SMTP server once a second (**\--connect-rate**) disconnecting promptly (**\--channel-lifetime**):
+
+    tcpkali \--connect-rate=1 \--channel-lifetime=0.1  \--verbose 3 nonexistent.org:smtp
+
+# SEE ALSO
+
+## Sysctls to tune the system to be able to open more connections
+
+...for N connections, such as 50k:
+
+    kern.maxfiles=10000+2*N         # BSD
+    kern.maxfilesperproc=100+N      # BSD
+    fs.file-max=10000+2*N           # Linux
+
+    # For load-generating clients.
+    net.ipv4.ip_local_port_range="10000  65535"  # Linux.
+    net.inet.ip.portrange.hifirst=10000          # BSD/Mac.
+    net.inet.ip.portrange.hilast=65535           # (Enough for N < 55535)
+    net.ipv4.tcp_tw_reuse=1
+
+    # If using netfilter on Linux:
+    net.netfilter.nf_conntrack_max=N
+
+## Readings
+
+* On TIME-WAIT state and its reuse:\
+http://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html
+
+* On netfliter settings:\
+http://serverfault.com/questions/482480/
+

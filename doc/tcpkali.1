@@ -1,0 +1,312 @@
+.\"t
+.ad l
+.TH "tcpkali" "1" "2015\-12\-01" "TCPKali user manual" "Version 0.6"
+.nh \" Turn off hyphenation
+.SH NAME
+.PP
+tcpkali \[en] fast TCP and WebSocket load generator and sink.
+.SH SYNOPSIS
+.PP
+tcpkali [\f[I]OPTIONS\f[]] [\f[I]host:port\f[] \&...]
+.SH DESCRIPTION
+.PP
+tcpkali is a tool that helps stress\-test and bench TCP and WebSocket
+based systems.
+In the \f[I]client\f[] mode tcpkali connects to the list of specified
+hosts and ports and generates traffic for each of these connections.
+In the \f[I]server\f[] mode tcpkali accepts incoming connections and
+throws away any incoming data.
+.PP
+tcpkali can throw unlimited or bandwidth\-controlled traffic to the
+remote destinations both in the \f[I]client\f[] and in the
+\f[I]server\f[] mode.
+.PP
+The \f[I]client\f[] mode is triggered by specifying one or more
+\f[I]host:port\f[] arguments on the command line.
+The \f[I]server\f[] mode is triggered by specifying
+\f[B]\-l\f[]\ (\f[B]\-\-listen\-port\f[] \f[I]port\f[]).
+.SH OPTIONS
+.SS GENERAL OPTIONS
+.TP
+.B \-h, \-\-help
+Print a help screen, then exit.
+.RS
+.RE
+.TP
+.B \-\-version
+Print version number, then exit.
+.RS
+.RE
+.TP
+.B \-\-verbose \f[I]level\f[]
+Output verbosity level [0..3].
+Default is 1.
+.RS
+.RE
+.TP
+.B \-w, \-\-workers \f[I]N\f[]
+Number of parallel threads to use.
+Default is to use as many as needed, up to the number of cores detected
+in the system.
+.RS
+.RE
+.SS NETWORK STACK SETTINGS
+.TP
+.B \-\-nagle=on|off
+Control Nagle algorithm (set \f[C]TCP_NODELAY\f[] socket option).
+.RS
+.RE
+.TP
+.B \-\-rcvbuf \f[I]SizeBytes\f[]
+Receive buffers (set \f[C]SO_RCVBUF\f[] socket option).
+.RS
+.RE
+.TP
+.B \-\-sndbuf \f[I]SizeBytes\f[]
+Send buffers (set \f[C]SO_SNDBUF\f[] socket option).
+.RS
+.RE
+.SS TEST RUN OPTIONS
+.TP
+.B \-\-ws, \-\-websocket
+Use RFC6455 WebSocket transport.
+.RS
+.RE
+.TP
+.B \-c, \[en]connections \f[I]N\f[]
+Number of concurrent connections to open to the destinations.
+Default is 1.
+.RS
+.RE
+.TP
+.B \-\-connect\-rate \f[I]Rate\f[]
+Limit number of new connections per second.
+Default is 100 connections per second.
+.RS
+.RE
+.TP
+.B \-\-connect\-timeout \f[I]Duration\f[]
+Limit time spent in a connection attempt.
+Default is 1 second.
+.RS
+.RE
+.TP
+.B \-\-channel\-lifetime \f[I]Duration\f[]
+Shut down each connection after \f[I]Duration\f[] seconds.
+.RS
+.RE
+.TP
+.B \-\-channel\-bandwidth\-upstream \f[I]Bandwidth\f[]
+Limit single connection bandwidth in the outgoing direction.
+.RS
+.RE
+.TP
+.B \-\-channel\-bandwidth\-downstream \f[I]Bandwidth\f[]
+Limit single connection bandwidth in the incoming direction.
+.RS
+.RE
+.TP
+.B \-l, \-\-listen\-port \f[I]port\f[]
+Accept connections on the specified port.
+.RS
+.RE
+.TP
+.B \-\-listen\-mode=silent|active
+How to behave when a new client connection is received.
+In the \f[C]silent\f[] mode we do not send data and ignore the data
+received.
+This is a default.
+In the \f[C]active\f[] mode tcpkali sends messages to the connected
+clients.
+.RS
+.RE
+.TP
+.B \-T, \-\-duration \f[I]Duration\f[]
+Exit and print final stats after the specified amount of time.
+Default is 10 seconds (\f[C]\-T10s\f[]).
+.RS
+.RE
+.SS TRAFFIC CONTENT OPTIONS
+.TP
+.B \-e, \-\-unescape\-message\-args
+Unescape the message data specified by the \f[B]\-m\f[], \f[B]\-f\f[]
+and the rest of the traffic content options on the command line.
+Transform \\xxx into a byte with corresponding octal value, \\n into a
+newline character, etc.
+.RS
+.RE
+.TP
+.B \-\-first\-message 
+Send this message first, once at the beginning of each connection.
+.RS
+.RE
+.TP
+.B \-\-first\-message\-file \f[I]filename\f[]
+Read the message from a file and send it once at the beginning of each
+connection.
+.RS
+.RE
+.TP
+.B \-m, \-\-message \f[I]string\f[]
+Repeatedly send the specified message to each destination.
+.RS
+.RE
+.TP
+.B \-f, \-\-message\-file \f[I]filename\f[]
+Repeatedly send the message read from the file to each destination.
+.RS
+.RE
+.TP
+.B \-r, \-\-message\-rate \f[I]Rate\f[]
+Messages per second to send in a connection.
+tcpkali attempts to preserve message boundaries.
+This setting is mutually incompatible with
+\f[B]\-\-channel\-bandwidth\-upstream\f[] option, because they control
+the same thing.
+.RS
+.RE
+.SS LATENCY MEASUREMENT OPTIONS
+.PP
+tcpkali measures latency by repeatedly recording the time difference
+between the time the message is sent (as specified by \f[B]\-m\f[] or
+\f[B]\-f\f[]) and the time the latency marker is observed in the
+downstream traffic.
+Latency data is aggregated across all connections, and the latency
+percentiles are displayed during and after the tcpkali session is done.
+.TP
+.B \-\-latency\-marker \f[I]string\f[]
+Specify a per\-message sequence of characters to look for in the data
+stream.
+.RS
+.RE
+.TP
+.B \-\-latency\-marker\-skip \f[I]N\f[]
+Ignore the first \f[I]N\f[] observations of a
+\f[B]\-\-latency\-marker\f[].
+.RS
+.RE
+.SS STATSD OPTIONS
+.TP
+.B \-\-statsd
+Enable StatsD output.
+StatsD output is disabled by default.
+.RS
+.RE
+.TP
+.B \-\-statsd\-host \f[I]host\f[]
+StatsD host to send metrics data to.
+Default is \f[C]localhost\f[].
+.RS
+.RE
+.TP
+.B \-\-statsd\-port \f[I]port\f[]
+StatsD port to use.
+Default is 8125.
+.RS
+.RE
+.TP
+.B \-\-statsd\-namespace \f[I]string\f[]
+Metric namespace.
+Default is \[lq]tcpkali\[rq].
+.RS
+.RE
+.SH VARIABLE UNITS
+.PP
+tcpkali recognizes a number of suffixes for numeric values.
+.TS
+tab(@);
+lw(14.6n) lw(54.4n).
+T{
+Placeholder
+T}@T{
+Recognized unit suffixes
+T}
+_
+T{
+\f[I]N\f[] and \f[I]Rate\f[]
+T}@T{
+k (1000, as in \[lq]5k\[rq] equals to 5000), m (1000000).
+T}
+T{
+\f[I]SizeBytes\f[]
+T}@T{
+k (1024, as in \[lq]5k\[rq] equals to 5120), m (1024*1024).
+T}
+T{
+\f[I]Bandwidth\f[]
+T}@T{
+kbps, Mbps (for bits per second),
+kBps,\ MBps\ (for\ bytes\ per\ second).
+T}
+T{
+\f[I]Duration\f[]
+T}@T{
+ms, s, m, h, d (milliseconds, seconds, minutes, etc).
+T}
+.TE
+.PP
+\f[I]Rate\f[] and \f[I]Duration\f[] can be fractional values, such as
+0.25.
+.SH EXAMPLES
+.IP "1." 3
+Throw 42 requests per second (\f[B]\-r\f[]) in each of the 10,000
+connections (\f[B]\-c\f[]) to an HTTP server (\f[B]\-m\f[]), replacing
+\\n with newlines (\f[B]\-e\f[]):
+.RS 4
+.PP
+tcpkali \-c10k \-r42 \-em `GET / HTTP/1.0\\r\\n\\r\\n'
+nonexistent.com:80
+.RE
+.IP "2." 3
+Create a WebSocket (\f[B]\-\-ws\f[]) server on a specifed port
+(\f[B]\-l\f[]) for an hour (\f[B]\-T\f[]), but block clients from
+actually sending data:
+.RS 4
+.PP
+tcpkali \-\-ws \-l8080 \-\-channel\-bandwidth\-downstream=0 \-T1h
+.RE
+.IP "3." 3
+Show server responses (\f[B]\-\-verbose\f[]) when we ping SMTP server
+once a second (\f[B]\-\-connect\-rate\f[]) disconnecting promptly
+(\f[B]\-\-channel\-lifetime\f[]):
+.RS 4
+.PP
+tcpkali \-\-connect\-rate=1 \-\-channel\-lifetime=0.1 \-\-verbose 3
+nonexistent.org:smtp
+.RE
+.SH SEE ALSO
+.SS Sysctls to tune the system to be able to open more connections
+.PP
+\&...for N connections, such as 50k:
+.IP
+.nf
+\f[C]
+kern.maxfiles=10000+2*N\ \ \ \ \ \ \ \ \ #\ BSD
+kern.maxfilesperproc=100+N\ \ \ \ \ \ #\ BSD
+fs.file\-max=10000+2*N\ \ \ \ \ \ \ \ \ \ \ #\ Linux
+
+#\ For\ load\-generating\ clients.
+net.ipv4.ip_local_port_range="10000\ \ 65535"\ \ #\ Linux.
+net.inet.ip.portrange.hifirst=10000\ \ \ \ \ \ \ \ \ \ #\ BSD/Mac.
+net.inet.ip.portrange.hilast=65535\ \ \ \ \ \ \ \ \ \ \ #\ (Enough\ for\ N\ <\ 55535)
+net.ipv4.tcp_tw_reuse=1
+
+#\ If\ using\ netfilter\ on\ Linux:
+net.netfilter.nf_conntrack_max=N
+\f[]
+.fi
+.SS Readings
+.IP \[bu] 2
+On TIME\-WAIT state and its reuse:
+.PD 0
+.P
+.PD
+http://vincent.bernat.im/en/blog/2014\-tcp\-time\-wait\-state\-linux.html
+.IP \[bu] 2
+On netfliter settings:
+.PD 0
+.P
+.PD
+http://serverfault.com/questions/482480/
+.SH AUTHORS
+Lev Walkin <lwalkin@machinezone.com>.
