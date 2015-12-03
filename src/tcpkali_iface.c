@@ -77,8 +77,7 @@ static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
         case AF_INET: {
             struct sockaddr_in *sia = (struct sockaddr_in *)sa;
             struct sockaddr_in *sib = (struct sockaddr_in *)sb;
-            if(sia->sin_len == sib->sin_len
-                && sia->sin_port == sib->sin_port
+            if(sia->sin_port == sib->sin_port
                 && sia->sin_addr.s_addr == sib->sin_addr.s_addr) {
                 return 1;
             }
@@ -87,8 +86,7 @@ static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
         case AF_INET6: {
             struct sockaddr_in6 *sia = (struct sockaddr_in6 *)sa;
             struct sockaddr_in6 *sib = (struct sockaddr_in6 *)sb;
-            if(sia->sin6_len == sib->sin6_len
-                && sia->sin6_port == sib->sin6_port
+            if(sia->sin6_port == sib->sin6_port
                 && 0 == memcmp(&sia->sin6_addr, &sib->sin6_addr,
                                sizeof(struct in6_addr))) {
                 return 1;
