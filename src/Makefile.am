@@ -36,11 +36,14 @@ tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
 check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
 check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
 
+check_tcpkali_iface_SOURCES = tcpkali_iface.c tcpkali_iface.h
+check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST
+
 check_platform_SOURCES = check_platform.c
 check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 
 TESTS = $(check_PROGRAMS)
-check_PROGRAMS = check_tcpkali_ring check_platform
+check_PROGRAMS = check_tcpkali_ring check_platform check_tcpkali_iface
 
 clean-local:
 	rm -f *_l.[ch]

@@ -41,7 +41,7 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "tcpkali.h"
+#include "tcpkali_common.h"
 #include "tcpkali_iface.h"
 
 /*
@@ -311,17 +311,64 @@ interface_by_addr(struct ifaddrs *ifp, struct sockaddr *addr) {
 
 static int
 compare_ifnames(const char *a, const char *b) {
-#define ENDCHAR(c)  ((c) == '\0' || (c) == ':')
-   for(; *a && *b; a++, b++) {
-        /* "bond0:0" <=> "bond0" <=> "bond0:5" */
-        if(ENDCHAR(*a) && ENDCHAR(*b))
-            return 0;
+   for(; ; a++, b++) {
+        switch(*a) {
+        case '\0':
+        case ':':
+            if(*b == '\0' || *b == ':')
+                break;
+            return -1;
+        default:
+            if(*a == *b)
+                continue;
+            return -1;
+        }
+        break;
     }
-    if(ENDCHAR(*a) && ENDCHAR(*b))
-        return 0;
 
-    return -1;
+    return 0;
 }
+
+#ifdef  TCPKALI_IFACE_UNIT_TEST
+int main() {
+    const char *non_equivalents[][5] = {
+            { "", "a", "b", "ab", "a0" },
+            { "a", "a0", "a1", "b0", "b1" }
+    };
+    const char *equivalents[][5] = {
+            { "", ":", ":0", ":1", ":123" },
+            { "a", "a:", "a:0", "a:1", "a:123" },
+            { "ab", "ab:", "ab:0", "ab:1", "ab:123" },
+            { "bond0", "bond0:", "bond0:0", "bond0:1", "bond0:123" }
+    };
+
+    /* Test non-equivalence */
+    for(size_t test = 0; test < 2; test++) {
+        for(size_t i = 0; i < 5; i++) {
+            for(size_t j = 0; j < 5; j++) {
+                if(i == j) continue;
+                const char *a = non_equivalents[test][i];
+                const char *b = non_equivalents[test][j];
+                assert(compare_ifnames(a, b) == -1);
+            }
+        }
+    }
+
+    /* Test equivalence */
+    for(size_t test = 0; test < 4; test++) {
+        for(size_t i = 0; i < 5; i++) {
+            for(size_t j = 0; j < 5; j++) {
+                if(i == j) continue;
+                const char *a = equivalents[test][i];
+                const char *b = equivalents[test][j];
+                assert(compare_ifnames(a, b) == 0);
+            }
+        }
+    }
+
+    return 0;
+}
+#endif
 
 
 static int
