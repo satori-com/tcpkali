@@ -10,8 +10,8 @@ fi
 PORT=1230
 
 check() {
-    local testno=$1
-    local togrep=$2
+    local testno="$1"
+    local togrep="$2"
     shift 2
     PORT=$(($PORT+1))
     local rest_opts="-T1 --source-ip 127.1 -l${PORT} 127.1:${PORT}"
