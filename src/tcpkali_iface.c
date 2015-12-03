@@ -263,14 +263,14 @@ detect_local_ip_for_remote(struct sockaddr_storage *ss, struct sockaddr_storage 
     char tmpbuf[128];
     int sockfd = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
-        fprintf(stderr, "Could not connect to %s: %s\n",
-                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+        fprintf(stderr, "Could not open %s socket: %s\n",
+                        ss->ss_family == AF_INET6 ? "IPv6" : "IPv4",
                         strerror(errno));
         return -1;
     }
     int rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
     if(rc == -1) {
-        fprintf(stderr, "Could not connect to %s: %s\n",
+        fprintf(stderr, "Could not pre-check connection to %s: %s\n",
                         format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
                         strerror(errno));
         close(sockfd);
