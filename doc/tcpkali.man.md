@@ -212,6 +212,7 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
     kern.maxfilesperproc=100+N      # BSD
     kern.ipc.maxsockets=10000+2*N   # BSD
     fs.file-max=10000+2*N           # Linux
+    net.ipv4.tcp_max_orphans=N      # Linux
 
     # For load-generating clients.
     net.ipv4.ip_local_port_range="10000  65535"  # Linux.
