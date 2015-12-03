@@ -309,6 +309,20 @@ interface_by_addr(struct ifaddrs *ifp, struct sockaddr *addr) {
     return NULL;
 }
 
+static int
+compare_ifnames(const char *a, const char *b) {
+#define ENDCHAR(c)  ((c) == '\0' || (c) == ':')
+   for(; *a && *b; a++, b++) {
+        /* "bond0:0" <=> "bond0" <=> "bond0:5" */
+        if(ENDCHAR(*a) && ENDCHAR(*b))
+            return 0;
+    }
+    if(ENDCHAR(*a) && ENDCHAR(*b))
+        return 0;
+
+    return -1;
+}
+
 
 static int
 collect_interface_addresses(struct ifaddrs *ifp, const char *ifname, sa_family_t family, struct addresses *ss) {
@@ -317,7 +331,7 @@ collect_interface_addresses(struct ifaddrs *ifp, const char *ifname, sa_family_t
 
     for(; ifp; ifp = ifp->ifa_next) {
         if(ifp->ifa_addr && family == ifp->ifa_addr->sa_family
-            && strcmp(ifp->ifa_name, ifname) == 0) {
+            && compare_ifnames(ifp->ifa_name, ifname) == 0) {
 
             /* Add address if it is not already there. */
             if(!address_is_member(ss, ifp->ifa_addr)) {
