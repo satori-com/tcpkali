@@ -629,12 +629,33 @@ static void *single_engine_loop_thread(void *argp) {
 
     tk_io global_control_watcher;
     tk_io private_control_watcher;
+    const int on_main_thread = (largs->thread_no == 0);
+
+#ifdef  SO_REUSEPORT
+    const int have_reuseport = 1;
+#else
+    const int have_reuseport = 0;
+#endif
+
+    /*
+     * If want to serve connections but don't have SO_REUSEPORT,
+     * tell the user upfront.
+     */
+    if(!have_reuseport && on_main_thread
+        && largs->params.listen_addresses.n_addrs) {
+        DEBUG(DBG_ALWAYS,
+            "WARNING: A system without SO_REUSEPORT detected."
+            " Using only one core for serving connections.\n");
+    }
+
     signal(SIGPIPE, SIG_IGN);
 
     /*
      * Open all listening sockets, if they are specified.
      */
-    if(largs->params.listen_addresses.n_addrs) {
+    if(largs->params.listen_addresses.n_addrs
+        /* Only listen on stuff on other cores when SO_REUSEPORT is available */
+        && (have_reuseport || on_main_thread)) {
         int opened_listening_sockets = 0;
         for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
             struct sockaddr_storage *ss = &largs->params.listen_addresses.addrs[n];
@@ -657,16 +678,12 @@ static void *single_engine_loop_thread(void *argp) {
             rc = bind(lsock, (struct sockaddr *)ss, sockaddr_len(ss));
             if(rc == -1) {
                 char buf[256];
-                DEBUG(DBG_ALWAYS, "Bind %s is not done: %s\n",
+                DEBUG(DBG_ALWAYS, "Bind %s is not done on thread %d: %s\n",
                         format_sockaddr(ss, buf, sizeof(buf)),
+                        largs->thread_no,
                         strerror(errno));
                 switch(errno) {
                 case EINVAL: continue;
-                case EADDRINUSE:
-#ifndef  SO_REUSEPORT
-                    DEBUG(DBG_ALWAYS, "A system without SO_REUSEPORT detected."
-                        " Use --workers=1 to avoid binding multiple times.\n");
-#endif
                 default:
                     exit(EX_UNAVAILABLE);
                 }
