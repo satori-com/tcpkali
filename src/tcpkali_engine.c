@@ -682,11 +682,7 @@ static void *single_engine_loop_thread(void *argp) {
                         format_sockaddr(ss, buf, sizeof(buf)),
                         largs->thread_no,
                         strerror(errno));
-                switch(errno) {
-                case EINVAL: continue;
-                default:
-                    exit(EX_UNAVAILABLE);
-                }
+                exit(EX_UNAVAILABLE);
             }
             assert(rc == 0);
             rc = listen(lsock, 256);
