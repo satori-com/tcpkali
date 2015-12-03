@@ -15,15 +15,17 @@ check() {
     $@
 }
 
-check 1  ${TCPKALI} --connections=20 --duration=1 -l1271 127.1:1271
-check 2  ${TCPKALI} -c10 -T1 --message Z --message-rate=1 -l1271 127.1:1271
-check 3  ${TCPKALI} -c10 -T1 -m Z --channel-bandwidth-upstream=10kbps -l1271 127.1:1271
-check 4  ${TCPKALI} --connections=10 --duration=1 -m Z -l1271 127.1:1271
+OPTS="-T1 --source-ip 127.1"
 
-check 5  ${TCPKALI} -T1s --ws -l1271 127.1:1271 | egrep -q "Total data sent:[ ]+149 bytes"
-check 6  ${TCPKALI} -T1s --ws -l1271 127.1:1271 | egrep -q "Total data received:[ ]+278 bytes"
-check 7  ${TCPKALI} -T1s --ws -l1271 127.1:1271 --first-message ABC | egrep -q "Total data sent:[ ]+158 bytes"
-check 8  ${TCPKALI} -T1s --ws -l1271 127.1:1271 --first-message ABC | egrep -q "Total data received:[ ]+287 bytes"
+check 1  ${TCPKALI} ${OPTS} --connections=20 --duration=1 -l1271 127.1:1271
+check 2  ${TCPKALI} ${OPTS} -c10 --message Z --message-rate=1 -l1271 127.1:1271
+check 3  ${TCPKALI} ${OPTS} -c10 -m Z --channel-bandwidth-upstream=10kbps -l1271 127.1:1271
+check 4  ${TCPKALI} ${OPTS} --connections=10 --duration=1 -m Z -l1271 127.1:1271
 
-check 9  ${TCPKALI} -T1s --ws -l1271 127.1:1271 --message ABC
-check 10 ${TCPKALI} -T1s --ws -l1271 127.1:1271 --first-message ABC --message foo
+check 5  ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 | egrep -q "Total data sent:[ ]+149 bytes"
+check 6  ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 | egrep -q "Total data received:[ ]+278 bytes"
+check 7  ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 --first-message ABC | egrep -q "Total data sent:[ ]+158 bytes"
+check 8  ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 --first-message ABC | egrep -q "Total data received:[ ]+287 bytes"
+
+check 9  ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 --message ABC
+check 10 ${TCPKALI} ${OPTS} --ws -l1271 127.1:1271 --first-message ABC --message foo
