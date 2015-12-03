@@ -13,7 +13,7 @@ check() {
     local testno
     testno=$1
     shift
-    echo "Test $testno: $@" >&2
+    echo "Test $testno: $*" >&2
     PORT=$(($PORT+1))
     $@ -T1 --source-ip 127.1 -l${PORT} 127.1:${PORT}
 }
