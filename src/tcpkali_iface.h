@@ -70,4 +70,10 @@ struct addresses detect_listen_addresses(int listen_port);
  */
 int add_source_ip(struct addresses *addresses, const char *str);
 
+/*
+ * Given a list of destination addresses, populate the list of source
+ * addresses with compatible source (local) IPs.
+ */
+int detect_source_ips(struct addresses *dsts, struct addresses *srcs);
+
 #endif  /* TCPKALI_IFACE_H */

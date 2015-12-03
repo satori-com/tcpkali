@@ -474,12 +474,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    if(engine_params.source_addresses.n_addrs > 0) {
-        fprint_addresses(stderr, "Source IP: ",
-                                 "\nSource IP: ", "\n",
-                                 engine_params.source_addresses);
-    }
-
     /*
      * Avoid spawning more threads than connections.
      */
@@ -527,6 +521,18 @@ int main(int argc, char **argv) {
             *conf.first_path++ = '\0';
         } else {
             conf.first_path = ""; /* "GET / HTTP/1.1" */
+        }
+
+        /* Figure out source IPs */
+        if(engine_params.source_addresses.n_addrs == 0) {
+            if(detect_source_ips(&engine_params.remote_addresses,
+                                 &engine_params.source_addresses) < 0) {
+                exit(EX_SOFTWARE);
+            }
+        } else {
+            fprint_addresses(stderr, "Source IP: ",
+                                     "\nSource IP: ", "\n",
+                                     engine_params.source_addresses);
         }
     } else {
         conf.max_connections = 0;

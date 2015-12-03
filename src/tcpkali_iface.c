@@ -32,6 +32,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>  /* gethostbyname(3) */
@@ -67,6 +69,48 @@ void address_add(struct addresses *aseq, struct sockaddr *sa) {
         assert(!"Not IPv4 and not IPv6");
         break;
     }
+}
+
+static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
+    if(sa->sa_family == sb->sa_family) {
+        switch(sa->sa_family) {
+        case AF_INET: {
+            struct sockaddr_in *sia = (struct sockaddr_in *)sa;
+            struct sockaddr_in *sib = (struct sockaddr_in *)sb;
+            if(sia->sin_len == sib->sin_len
+                && sia->sin_port == sib->sin_port
+                && sia->sin_addr.s_addr == sib->sin_addr.s_addr) {
+                return 1;
+            }
+            }
+            break;
+        case AF_INET6: {
+            struct sockaddr_in6 *sia = (struct sockaddr_in6 *)sa;
+            struct sockaddr_in6 *sib = (struct sockaddr_in6 *)sb;
+            if(sia->sin6_len == sib->sin6_len
+                && sia->sin6_port == sib->sin6_port
+                && 0 == memcmp(&sia->sin6_addr, &sib->sin6_addr,
+                               sizeof(struct in6_addr))) {
+                return 1;
+            }
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Return non-zero if such address already exists.
+ */
+static int address_is_member(struct addresses *aseq, struct sockaddr *sb) {
+    for(size_t i = 0; i < aseq->n_addrs; i++) {
+        struct sockaddr *sa = (struct sockaddr *)&aseq->addrs[i];
+        if(sockaddrs_match(sa, sb))
+            return 1;
+    }
+
+    return 0;
 }
 
 /*
@@ -194,5 +238,187 @@ int add_source_ip(struct addresses *addresses, const char *optarg) {
 
     freeaddrinfo(res);
 
+    return 0;
+}
+
+static void reset_port(struct sockaddr_storage *ss, in_port_t new_port_value) {
+    switch(ss->ss_family) {
+    case AF_INET: {
+            struct sockaddr_in *sin = (struct sockaddr_in *)ss;
+            sin->sin_port = new_port_value;
+        }
+        break;
+    case AF_INET6: {
+            struct sockaddr_in6 *sin = (struct sockaddr_in6 *)ss;
+            sin->sin6_port = new_port_value;
+        }
+        break;
+    default:
+        assert(!"Not IPv4 and not IPv6");
+        break;
+    }
+}
+
+static int
+detect_local_ip_for_remote(struct sockaddr_storage *ss, struct sockaddr_storage *local_addr) {
+    char tmpbuf[128];
+    int sockfd = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
+    if(sockfd == -1) {
+        fprintf(stderr, "Could not connect to %s: %s\n",
+                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                        strerror(errno));
+        return -1;
+    }
+    int rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
+    if(rc == -1) {
+        fprintf(stderr, "Could not connect to %s: %s\n",
+                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                        strerror(errno));
+        close(sockfd);
+        return -1;
+    }
+
+    socklen_t local_addrlen = sizeof(local_addr);
+    if(getsockname(sockfd, (struct sockaddr *)local_addr, &local_addrlen) == -1) {
+        fprintf(stderr,
+            "Could not get local address when connecting to %s: %s\n",
+            format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+            strerror(errno));
+        close(sockfd);
+        return -1;
+    } else {
+        /* We're going to bind to that port at some point. Must be zero. */
+        reset_port(local_addr, 0);
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+/*
+ * Return the name of the interface which contains given IP.
+ */
+static const char *
+interface_by_addr(struct ifaddrs *ifp, struct sockaddr *addr) {
+
+    for(; ifp; ifp = ifp->ifa_next) {
+        if(ifp->ifa_addr && sockaddrs_match(addr, ifp->ifa_addr)) {
+            return ifp->ifa_name;
+        }
+    }
+
+    return NULL;
+}
+
+
+static int
+collect_interface_addresses(struct ifaddrs *ifp, const char *ifname, sa_family_t family, struct addresses *ss) {
+    char tmpbuf[256];
+    int found = 0;
+
+    for(; ifp; ifp = ifp->ifa_next) {
+        if(ifp->ifa_addr && family == ifp->ifa_addr->sa_family
+            && strcmp(ifp->ifa_name, ifname) == 0) {
+
+            /* Add address if it is not already there. */
+            if(!address_is_member(ss, ifp->ifa_addr)) {
+                fprintf(stderr,
+                    "Interface %s address %s\n", ifname,
+                    format_sockaddr((struct sockaddr_storage *)ifp->ifa_addr,
+                        tmpbuf, sizeof(tmpbuf)));
+                address_add(ss, ifp->ifa_addr);
+            }
+            found = 1;
+        }
+    }
+
+    return found ? 0 : -1;
+}
+
+/*
+ * Given a list of destination addresses, populate the list of source
+ * addresses with compatible source (local) IPs.
+ */
+int detect_source_ips(struct addresses *dsts, struct addresses *srcs) {
+    struct ifaddrs *interfaces = 0;
+
+    int rc = getifaddrs(&interfaces);
+    if(rc == -1) {
+        /* Can't get interfaces... Won't try to use several source IPs. */
+        fprintf(stderr, "WARNING: Can't enumerate interfaces, "
+                        "won't use multiple source IPs: %s\n",
+                        strerror(errno));
+        return 0;
+    }
+
+    /* If we are not supposed to go anywhere, we won't invoke this function. */
+    if(dsts->n_addrs == 0) {
+        fprintf(stderr, "Source IP detection failed: "
+                        "No destination IPs are given\n");
+        freeifaddrs(interfaces);
+        return -1;
+    }
+
+    sa_family_t common_ss_family = 0;
+
+    for(size_t dst_idx = 0; dst_idx < dsts->n_addrs; dst_idx++) {
+        struct sockaddr_storage *ds = &dsts->addrs[dst_idx];
+        char tmpbuf[256];
+
+        /*
+         * For now, we can reliably detect source ips only
+         * when the address families of the destination ips are the same.
+         */
+        if(common_ss_family == 0) {
+            common_ss_family = ds->ss_family;
+        } else if(common_ss_family != ds->ss_family) {
+            fprintf(stderr,
+                "WARNING: Could not detect local address when connecting to %s:"
+                " Multiple incompatible address families in destination.\n",
+                format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
+            fprintf(stderr,
+                "WARNING: Would not open more than 64k connections to %s\n",
+                format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
+            srcs->n_addrs = 0;
+            freeifaddrs(interfaces);
+            return 0;
+        }
+
+        /*
+         * Attempt to create a connection and see what our
+         * local address looks like. Then search for that address
+         * among the interfaces.
+         */
+        struct sockaddr_storage local_addr;
+        if(detect_local_ip_for_remote(ds, &local_addr)) {
+            freeifaddrs(interfaces);
+            return -1;
+        }
+
+        const char *ifname = interface_by_addr(interfaces, (struct sockaddr *)&local_addr);
+        if(ifname == NULL) {
+            fprintf(stderr,
+                "WARNING: Can't determine local interface to connect to %s\n",
+                format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
+            fprintf(stderr,
+                "WARNING: Would not open more than 64k connections to %s\n",
+                format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
+            srcs->n_addrs = 0;
+            freeifaddrs(interfaces);
+            return 0;
+        }
+
+        if(collect_interface_addresses(interfaces, ifname, ds->ss_family, srcs) == 0) {
+            fprintf(stderr, "Using interface %s to connect to %s\n", ifname,
+                            format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
+        } else {
+            fprintf(stderr, "Failed to collect IPs from interface %s\n",
+                            ifname);
+            freeifaddrs(interfaces);
+            return -1;
+        }
+    }
+
+    freeifaddrs(interfaces);
     return 0;
 }
