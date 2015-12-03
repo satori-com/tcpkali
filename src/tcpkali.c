@@ -36,7 +36,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netdb.h>  /* gethostbyname(3) */
 #include <libgen.h> /* basename(3) */
 #include <ifaddrs.h>
 #include <err.h>
@@ -155,8 +154,6 @@ static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
-static struct addresses detect_listen_addresses(int listen_port);
-static int add_source_ip(struct addresses *addrs, const char *optarg);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
 
@@ -935,84 +932,6 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
         return -1;
     }
     return value;
-}
-
-static struct addresses detect_listen_addresses(int listen_port) {
-    struct addresses addresses = { 0, 0 };
-    struct addrinfo hints = {
-            .ai_family = AF_UNSPEC,
-            .ai_socktype = SOCK_STREAM,
-            .ai_protocol = IPPROTO_TCP,
-            .ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG };
-    char service[32];
-    snprintf(service, sizeof(service), "%d", listen_port);
-
-    struct addrinfo *res;
-    int err = getaddrinfo(NULL, service, &hints, &res);
-    if(err != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
-        exit(EXIT_FAILURE);
-    }
-
-    /* Move all of the addresses into the separate storage */
-    for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
-        address_add(&addresses, tmp->ai_addr);
-    }
-
-    freeaddrinfo(res);
-
-    fprint_addresses(stderr, "Listen on: ",
-                               "\nListen on: ", "\n",
-                               addresses);
-
-    return addresses;
-}
-
-/*
- * Check whether we can bind to a specified IP.
- */
-static int check_if_bindable_ip(struct sockaddr_storage *ss) {
-    int rc;
-    int lsock = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
-    assert(lsock != -1);
-    rc = bind(lsock, (struct sockaddr *)ss, sockaddr_len(ss));
-    close(lsock);
-    if(rc == -1) {
-        char buf[256];
-        fprintf(stderr, "%s is not local: %s\n",
-                        format_sockaddr(ss, buf, sizeof(buf)),
-                        strerror(errno));
-        return -1;
-    }
-    return 0;
-}
-
-static int add_source_ip(struct addresses *addresses, const char *optarg) {
-    struct addrinfo hints = {
-            .ai_family = AF_UNSPEC,
-            .ai_socktype = SOCK_STREAM,
-            .ai_protocol = IPPROTO_TCP,
-            .ai_flags = AI_PASSIVE | AI_ADDRCONFIG };
-
-    struct addrinfo *res;
-    int err = getaddrinfo(optarg, NULL, &hints, &res);
-    if(err != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
-        return -1;
-    }
-
-    /* Move all of the addresses into the separate storage */
-    for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
-        address_add(addresses, tmp->ai_addr);
-        if(check_if_bindable_ip(&addresses->addrs[addresses->n_addrs-1]) < 0) {
-            freeaddrinfo(res);
-            return -1;
-        }
-    }
-
-    freeaddrinfo(res);
-
-    return 0;
 }
 
 /*

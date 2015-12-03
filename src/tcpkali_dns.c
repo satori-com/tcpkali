@@ -42,34 +42,6 @@
 #include "tcpkali.h"
 
 /*
- * Note: struct sockaddr_in6 is larger than struct sockaddr, hence
- * the storage should be bigger. However, we shall not dereference
- * the AF_INET (struct sockaddr_in *) as it were a larger structure.
- * Therefore this code is rather complex.
- */
-void address_add(struct addresses *aseq, struct sockaddr *sa) {
-    /* Reallocate a bigger list and continue. Don't laugh. */
-    aseq->addrs = realloc(aseq->addrs,
-                          (aseq->n_addrs + 1) * sizeof(aseq->addrs[0]));
-    assert(aseq->addrs);
-    switch(sa->sa_family) {
-    case AF_INET:
-        *(struct sockaddr_in *)&aseq->addrs[aseq->n_addrs]
-                = *(struct sockaddr_in *)sa;
-        aseq->n_addrs++;
-        break;
-    case AF_INET6:
-        *(struct sockaddr_in6 *)&aseq->addrs[aseq->n_addrs]
-                = *(struct sockaddr_in6 *)sa;
-        aseq->n_addrs++;
-        break;
-    default:
-        assert(!"Not IPv4 and not IPv6");
-        break;
-    }
-}
-
-/*
  * Convert the given host:port strings into a sequence of all
  * socket addresses corresponding to the ip:port combinations.
  * Note: the number of socket addresses can be greater or less than
@@ -119,50 +91,5 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
     }
 
     return addresses;
-}
-    
-
-/*
- * Display destination addresses with a given prefix, separator and suffix.
- */
-void fprint_addresses(FILE *fp, char *prefix, char *separator, char *suffix, struct addresses addresses) {
-    for(size_t n = 0; n < addresses.n_addrs; n++) {
-        if(n == 0) {
-            fprintf(fp, "%s", prefix);
-        } else {
-            fprintf(fp, "%s", separator);
-        }
-        char buf[INET6_ADDRSTRLEN+64];
-        fprintf(stderr, "%s",
-            format_sockaddr(&addresses.addrs[n], buf, sizeof(buf)));
-        if(n == addresses.n_addrs - 1) {
-            fprintf(fp, "%s", suffix);
-        }
-    }
-}
-
-/*
- * Printable representation of a sockaddr.
- */
-const char *format_sockaddr(struct sockaddr_storage *ss, char *buf, size_t size) {
-    void *in_addr;
-    uint16_t nport;
-    switch(ss->ss_family) {
-    case AF_INET:
-        in_addr = &((struct sockaddr_in *)ss)->sin_addr;
-        nport = ((struct sockaddr_in *)ss)->sin_port;
-        break;
-    case AF_INET6:
-        in_addr = &((struct sockaddr_in6 *)ss)->sin6_addr;
-        nport = ((struct sockaddr_in6 *)ss)->sin6_port;
-        break;
-    default:
-        assert(!"ipv4 or ipv6 expected");
-        return "<unknown>";
-    }
-    char ipbuf[INET6_ADDRSTRLEN];
-    const char *ip = inet_ntop(ss->ss_family, in_addr, ipbuf, sizeof(ipbuf));
-    snprintf(buf, size, "[%s]:%d", ip, ntohs(nport));
-    return buf;
 }
 

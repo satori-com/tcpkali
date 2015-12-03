@@ -11,6 +11,7 @@ tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/boyer-moore-horspool
 tcpkali_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 tcpkali_SOURCES = \
+                tcpkali_iface.c tcpkali_iface.h           \
                 tcpkali_dns.c tcpkali_dns.h               \
                 tcpkali_engine.c tcpkali_engine.h         \
                 tcpkali_syslimits.c tcpkali_syslimits.h   \
