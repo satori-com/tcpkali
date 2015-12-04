@@ -38,6 +38,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>  /* gethostbyname(3) */
+#include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -72,13 +73,17 @@ void address_add(struct addresses *aseq, struct sockaddr *sa) {
     }
 }
 
-static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
+typedef enum {
+    SMATCH_ADDR_ONLY,
+    SMATCH_ADDR_PORT,
+} sockaddrs_cmp_e;
+static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb, sockaddrs_cmp_e cmp) {
     if(sa->sa_family == sb->sa_family) {
         switch(sa->sa_family) {
         case AF_INET: {
             struct sockaddr_in *sia = (struct sockaddr_in *)sa;
             struct sockaddr_in *sib = (struct sockaddr_in *)sb;
-            if(sia->sin_port == sib->sin_port
+            if((cmp != SMATCH_ADDR_PORT || sia->sin_port == sib->sin_port)
                 && sia->sin_addr.s_addr == sib->sin_addr.s_addr) {
                 return 1;
             }
@@ -87,7 +92,7 @@ static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
         case AF_INET6: {
             struct sockaddr_in6 *sia = (struct sockaddr_in6 *)sa;
             struct sockaddr_in6 *sib = (struct sockaddr_in6 *)sb;
-            if(sia->sin6_port == sib->sin6_port
+            if((cmp != SMATCH_ADDR_PORT || sia->sin6_port == sib->sin6_port)
                 && 0 == memcmp(&sia->sin6_addr, &sib->sin6_addr,
                                sizeof(struct in6_addr))) {
                 return 1;
@@ -105,7 +110,7 @@ static int sockaddrs_match(struct sockaddr *sa, struct sockaddr *sb) {
 static int address_is_member(struct addresses *aseq, struct sockaddr *sb) {
     for(size_t i = 0; i < aseq->n_addrs; i++) {
         struct sockaddr *sa = (struct sockaddr *)&aseq->addrs[i];
-        if(sockaddrs_match(sa, sb))
+        if(sockaddrs_match(sa, sb, SMATCH_ADDR_PORT))
             return 1;
     }
 
@@ -258,9 +263,26 @@ static void reset_port(struct sockaddr_storage *ss, in_port_t new_port_value) {
     }
 }
 
+/*
+ * Return the name of the interface which contains given IP.
+ */
+static const char *
+interface_by_addr(struct ifaddrs *ifp, struct sockaddr *addr) {
+
+    for(; ifp; ifp = ifp->ifa_next) {
+        if(ifp->ifa_addr
+            && sockaddrs_match(addr, ifp->ifa_addr, SMATCH_ADDR_ONLY)) {
+            return ifp->ifa_name;
+        }
+    }
+
+    return NULL;
+}
+
 static int
-detect_local_ip_for_remote(struct sockaddr_storage *ss, struct sockaddr_storage *local_addr) {
+detect_local_ip_for_remote(struct ifaddrs *ifp, struct sockaddr_storage *ss, struct sockaddr_storage *r_local_addr) {
     char tmpbuf[128];
+
     int sockfd = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
         fprintf(stderr, "Could not open %s socket: %s\n",
@@ -268,17 +290,43 @@ detect_local_ip_for_remote(struct sockaddr_storage *ss, struct sockaddr_storage 
                         strerror(errno));
         return -1;
     }
-    int rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
-    if(rc == -1) {
+
+    /* Enable non-blocking mode. */
+    int rc = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+    assert(rc != 1);
+
+    /*
+     * Try connecting to a destination, and figure out the IP of the local
+     * end of the connection while connection is pending. Then close quickly.
+     */
+    rc = connect(sockfd, (struct sockaddr *)ss, sockaddr_len(ss));
+    if(rc == -1 && errno != EINPROGRESS) {
         fprintf(stderr, "Could not pre-check connection to %s: %s\n",
                         format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
                         strerror(errno));
         close(sockfd);
         return -1;
+    } else {
+        /*
+         * We could not connect to an address. Supposedly this is related
+         * to the fact that the system rather early figured we're not
+         * supposed to connect there. It can be related to IP filtering,
+         * or socket resource exhaustion, or the fact that we're connecting
+         * to something very local. A non-blocking connection
+         * to a local host may also result in EINPROGRESS, but that's
+         * probably not guaranteed. So, we check using a different algorithm
+         * if destination IP is local, then just use that interface.
+         */
+        const char *iface = interface_by_addr(ifp, (struct sockaddr *)ss);
+        if(iface) {
+            *r_local_addr = *ss;
+            reset_port(r_local_addr, 0);
+            return 0;
+        }
     }
 
-    socklen_t local_addrlen = sizeof(local_addr);
-    if(getsockname(sockfd, (struct sockaddr *)local_addr, &local_addrlen) == -1) {
+    socklen_t local_addrlen = sizeof(*r_local_addr);
+    if(getsockname(sockfd, (struct sockaddr *)r_local_addr, &local_addrlen) == -1) {
         fprintf(stderr,
             "Could not get local address when connecting to %s: %s\n",
             format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
@@ -287,26 +335,11 @@ detect_local_ip_for_remote(struct sockaddr_storage *ss, struct sockaddr_storage 
         return -1;
     } else {
         /* We're going to bind to that port at some point. Must be zero. */
-        reset_port(local_addr, 0);
+        reset_port(r_local_addr, 0);
     }
 
     close(sockfd);
     return 0;
-}
-
-/*
- * Return the name of the interface which contains given IP.
- */
-static const char *
-interface_by_addr(struct ifaddrs *ifp, struct sockaddr *addr) {
-
-    for(; ifp; ifp = ifp->ifa_next) {
-        if(ifp->ifa_addr && sockaddrs_match(addr, ifp->ifa_addr)) {
-            return ifp->ifa_name;
-        }
-    }
-
-    return NULL;
 }
 
 static int
@@ -450,7 +483,7 @@ int detect_source_ips(struct addresses *dsts, struct addresses *srcs) {
          * among the interfaces.
          */
         struct sockaddr_storage local_addr;
-        if(detect_local_ip_for_remote(ds, &local_addr)) {
+        if(detect_local_ip_for_remote(interfaces, ds, &local_addr)) {
             freeifaddrs(interfaces);
             return -1;
         }

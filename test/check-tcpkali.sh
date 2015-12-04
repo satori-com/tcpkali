@@ -14,15 +14,19 @@ check() {
     local togrep="$2"
     shift 2
     PORT=$(($PORT+1))
-    local rest_opts="-T1 --source-ip 127.1 -l${PORT} 127.1:${PORT}"
-    echo "Test $testno: $* ${rest_opts}" >&2
+    local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
+    echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
+    $@ ${rest_opts} | egrep "$togrep"
+    PORT=$(($PORT+1))
+    local rest_opts="-T1s -l${PORT} 127.1:${PORT}"
+    echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
     $@ ${rest_opts} | egrep "$togrep"
 }
 
 check 1 "." ${TCPKALI} --connections=20 --duration=1
-check 2 "." ${TCPKALI} -c10 --message Z --message-rate=1
-check 3 "." ${TCPKALI} -c10 -m Z --channel-bandwidth-upstream=10kbps
-check 4 "." ${TCPKALI} --connections=10 --duration=1 -m Z
+check 2 "." ${TCPKALI} --connections=10 --duration=1 -m Z
+check 3 "." ${TCPKALI} -c10 --message Z --message-rate=2
+check 4 "." ${TCPKALI} -c10 -m Z --channel-bandwidth-upstream=10kbps
 
 check 5 "Total data sent:[ ]+149 bytes"     ${TCPKALI} --ws
 check 6 "Total data received:[ ]+278 bytes" ${TCPKALI} --ws
