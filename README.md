@@ -20,7 +20,8 @@
 
 # Pre-requisites
 
-During the build procedure listed below, some errors may be thrown if these pre-requisites are not met. However, installing these at runtime can still result in a problematic installation (for example, "make" does not succeed). So, better to ensure these pre-requisites are satisfied before building & installing tcpkali.
+Install the following packages first:
+
  * autoconf
  * automake
  * libtool
