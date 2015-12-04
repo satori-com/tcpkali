@@ -10,6 +10,7 @@ tcpkali.1: tcpkali.man.md
 	    --template templates/default.man        \
 	    --variable header="Version ${VERSION}"  \
 	    --variable adjusting:l                  \
+	    --variable hyphenate:""                 \
 	    $<
 
 

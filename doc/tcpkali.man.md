@@ -52,10 +52,14 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 :   Set TCP send buffers (set `SO_SNDBUF` socket option).
 
 --source-ip *IP*
-:   Use the specified IP address to connect to destination hosts.
-Using this option multiple times with different interface IPs
-(aliases) to generate more than 64k connections to a single *host:port*.
+:   By default, tcpkali automatically detects and uses all interface aliases
+to connect to destination hosts. This default behavior allows tcpkali to
+open more than 64k connections to destinations.
 
+    Use the **--source-ip** to override this behavior
+    by specifying a particular source IP to use.
+    Specifying **--source-ip** option multiple times builds
+    a list of source IPs to use.
 
 ## TEST RUN OPTIONS
 
