@@ -1,7 +1,7 @@
 
-EXTRA_DIST = images/
+EXTRA_DIST = images/ tcpkali.man.md
 
-man_MANS = tcpkali.1
+dist_man_MANS = tcpkali.1
 
 if HAVE_PANDOC
 
