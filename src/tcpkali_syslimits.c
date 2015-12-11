@@ -122,6 +122,17 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
     }
 
     if(i == limits_count) {
+        /*
+         * Some continuous integration environments do not allow messing
+         * with rlimits.
+         * If we have just enough file descriptors to satisfy our test case,
+         * ignore failures to adjust rlimits.
+         */
+        if(expected_sockets == 0
+        || (expected_sockets > 0
+                && limits[limits_count-1] <= prev_limit.rlim_cur)) {
+            return 0;
+        }
         fprintf(stderr, "Could not adjust open files limit from %ld to %ld\n",
             (long)prev_limit.rlim_cur, (long)limits[limits_count - 1]);
         return -1;
