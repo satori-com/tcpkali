@@ -107,14 +107,10 @@ AC_ARG_ENABLE([tsan],
     dnl We can't do anything about this message in GCC; use clang.
   ])
 
-
 dnl We use pandoc to generate documentation.
 AC_PATH_PROG([PANDOC], pandoc)
 AM_CONDITIONAL([HAVE_PANDOC], [test -n "$PANDOC"])
 
-dnl Newer bison 3.x breaks backward compatibility.
-dnl Fight that by not recompiling .y file unnecessarily.
-AC_CONFIG_COMMANDS([bison_compat_fix], [touch src/*_y.c src/*_l.c])
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile

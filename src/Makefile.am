@@ -23,7 +23,8 @@ tcpkali_SOURCES = \
                 tcpkali_ring.c tcpkali_ring.h             \
                 tcpkali_terminfo.c tcpkali_terminfo.h     \
                 tcpkali_data.c tcpkali_data.h             \
-                tcpkali_expr_y.y tcpkali_expr_l.l         \
+                tcpkali_expr_y.c tcpkali_expr_y.h         \
+                                 tcpkali_expr_l.c         \
                 tcpkali_expr.c tcpkali_expr.h             \
                 tcpkali_common.h tcpkali_rate.h           \
                 tcpkali.c tcpkali.h
@@ -45,5 +46,3 @@ check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 TESTS = $(check_PROGRAMS)
 check_PROGRAMS = check_tcpkali_ring check_platform check_tcpkali_iface
 
-clean-local:
-	rm -f *_l.[ch]

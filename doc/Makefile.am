@@ -1,5 +1,5 @@
 
-EXTRA_DIST = images/ tcpkali.man.md
+EXTRA_DIST = images/ templates/ tcpkali.man.md
 
 dist_man_MANS = tcpkali.1
 
