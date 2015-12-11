@@ -1,12 +1,12 @@
 
-0.?:
-    * --latency-marker-skip <N> to ignore the first occurrences of a marker.
-    * "Bandwidth per channel:" output line changed to reflect bi-direction⇅
-    * --listen-mode=active to send data for connections received through -l.
-    * Go over 64k connections limit by using IP aliases on network interfaces.
-      This is now a default behavior.
-    * --source-ip <IP> option to restrict or change source IPs.
+0.7:    2015-Dec-11
     * Added a manual page.
+    * Exceed 64k connections limit by using IP aliases on network interfaces.
+      This is a default behavior.
+    * --latency-marker-skip <N> to ignore the first occurrences of a marker.
+    * --listen-mode=active to send data for connections received through -l.
+    * --source-ip <IP> option to restrict or change source IPs.
+    * "Bandwidth per channel:" output changed to ⇅ to reflect bi-direction.
 
 0.6:    2015-May-13
     * Parse \{connection.uid} type expressions in
