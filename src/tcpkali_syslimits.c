@@ -231,9 +231,31 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         if(fscanf(f, "%d", &n) == 1) {
             if(expected_sockets > n) {
                 fprintf(stderr, "WARNING: IP filter might not allow "
-                    "opening %d simultaneous connections."
+                    "opening %d simultaneous connections. "
                     "Adjust \"%s\" value.\n",
                     expected_sockets, nf_conntrack_filename);
+                return_value = -1;
+            }
+        }
+        fclose(f);
+    }
+
+    /*
+     * Check that IP filter tracking is efficient by checking buckets.
+     * If number of buckets is severely off the optimal value, lots of
+     * CPU will be wasted.
+     * See http://serverfault.com/questions/482480/
+     */
+    const char *nf_hash_filename = "/sys/module/nf_conntrack/parameters/hashsize";
+    f = fopen(nf_hash_filename, "r");
+    if(f) {
+        int n;
+        if(fscanf(f, "%d", &n) == 1) {
+            if(n < (expected_sockets/8)) {
+                fprintf(stderr, "WARNING: IP filter is not properly sized for "
+                    "tracking %d simultaneous connections. "
+                    "Adjust \"%s\" value to at least %d.\n",
+                    expected_sockets, nf_hash_filename, expected_sockets/8);
                 return_value = -1;
             }
         }
