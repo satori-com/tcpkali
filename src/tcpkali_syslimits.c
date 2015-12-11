@@ -54,16 +54,21 @@ static int compare_rlimits(const void *ap, const void *bp) {
  */
 static rlim_t max_open_files() {
     long value = sysconf(_SC_OPEN_MAX);
+#ifdef  OPEN_MAX
+    if(value != -1) {
+        return value > OPEN_MAX ? value : OPEN_MAX;
+    } else {
+        perror("sysconf(_SC_OPEN_MAX)");
+        return OPEN_MAX;
+    }
+#else
     if(value != -1) {
         return value;
     } else {
         perror("sysconf(_SC_OPEN_MAX)");
-#ifdef  OPEN_MAX
-        return OPEN_MAX;
-#else
         return 1024;
-#endif
     }
+#endif
 }
 
 /*
@@ -86,17 +91,13 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
      */
     rlim_t limits[] = {
         prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : max_open,
+        expected_sockets * 2 + 100 + workers,
         expected_sockets + 100 + workers,
         expected_sockets + 4 + workers, /* n cores and other overhead */
     };
     size_t limits_count = sizeof(limits)/sizeof(limits[0]);
 
     qsort(limits, limits_count, sizeof(limits[0]), compare_rlimits);
-
-    /* Current limits exceed requirements, OK. */
-    if(prev_limit.rlim_cur >= limits[0]) {
-        return 0;
-    }
 
     /*
      * Attempt to set the largest limit out of the given set.
@@ -105,7 +106,7 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
     for(i = 0; i < limits_count; i++) {
         struct rlimit rlp;
         rlp.rlim_cur = limits[i];
-        rlp.rlim_max = limits[i];
+        rlp.rlim_max = RLIM_INFINITY;
         if(setrlimit(RLIMIT_NOFILE, &rlp) == -1) {
             if(errno == EPERM || errno == EINVAL) {
                 continue;
@@ -127,9 +128,11 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
         fprintf(stderr, "Adjusted open files limit from %ld to %ld, but still too low for --connections=%d.\n",
             (long)prev_limit.rlim_cur, (long)limits[i], expected_sockets);
         return -1;
-    } else {
+    } else if(expected_sockets == 0) {
         fprintf(stderr, "Adjusted open files limit from %ld to %ld.\n",
             (long)prev_limit.rlim_cur, (long)limits[i]);
+        return 0;
+    } else {
         return 0;
     }
 }
