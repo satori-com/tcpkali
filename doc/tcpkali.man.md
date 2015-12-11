@@ -227,6 +227,7 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
     # If using netfilter on Linux:
     net.netfilter.nf_conntrack_max=N
+    echo $((N/8)) > /sys/module/nf_conntrack/parameters/hashsize
 
 ## Readings
 

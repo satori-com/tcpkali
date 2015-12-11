@@ -356,6 +356,7 @@ net.inet.tcp.maxtcptw=2*N\ \ \ \ \ \ \ #\ BSD
 
 #\ If\ using\ netfilter\ on\ Linux:
 net.netfilter.nf_conntrack_max=N
+echo\ $((N/8))\ >\ /sys/module/nf_conntrack/parameters/hashsize
 \f[]
 .fi
 .SS Readings

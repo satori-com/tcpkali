@@ -148,6 +148,7 @@ Open connection to the local server and send a JSON frame every second:
 
     # If using netfilter on Linux:
     net.netfilter.nf_conntrack_max=N
+    echo $((N/8)) > /sys/module/nf_conntrack/parameters/hashsize
 
 # Readings
 
