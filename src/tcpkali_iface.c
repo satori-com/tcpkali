@@ -321,6 +321,7 @@ detect_local_ip_for_remote(struct ifaddrs *ifp, struct sockaddr_storage *ss, str
         if(iface) {
             *r_local_addr = *ss;
             reset_port(r_local_addr, 0);
+            close(sockfd);
             return 0;
         }
     }
