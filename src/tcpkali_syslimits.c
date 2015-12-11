@@ -90,6 +90,7 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
      * be arbitrary spikes. So we want to set our limit as high as we can.
      */
     rlim_t limits[] = {
+        max_open,
         prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : max_open,
         expected_sockets * 2 + 100 + workers,
         expected_sockets + 100 + workers,
