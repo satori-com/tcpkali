@@ -144,7 +144,7 @@ struct loop_arguments {
     unsigned long worker_connections_accepted;
     unsigned long worker_connection_failures;
     unsigned long worker_connection_timeouts;
-    struct hdr_histogram *histogram;
+    struct hdr_histogram *marker_histogram_local;
 
     /*******************************************
      * WORKER DATA SHARED WITH OTHER PROCESSES *
@@ -161,8 +161,8 @@ struct loop_arguments {
      * Reporting histogram should not be touched unless asked through
      * a private control pipe.
      */
-    struct hdr_histogram *reporting_histogram;
-    pthread_mutex_t       reporting_histogram_lock;
+    struct hdr_histogram *marker_histogram_shared;
+    pthread_mutex_t       marker_histogram_lock;
 
     /*
      * Per-remote server stats, pointing to a global table.
@@ -345,13 +345,13 @@ struct engine *engine_start(struct engine_params params) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
                 100 * decims_in_1s,  /* 100 seconds is a max storable value */
-                3, &largs->histogram);
+                3, &largs->marker_histogram_local);
             assert(ret == 0);
             DEBUG(DBG_DETAIL,
                 "Initialized HdrHistogram with size %ld\n",
-                    (long)hdr_get_memory_size(largs->histogram));
+                    (long)hdr_get_memory_size(largs->marker_histogram_local));
         }
-        pthread_mutex_init(&largs->reporting_histogram_lock, 0);
+        pthread_mutex_init(&largs->marker_histogram_lock, 0);
 
         int private_pipe[2];
         int rc = pipe(private_pipe);
@@ -389,16 +389,17 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         pthread_join(eng->threads[n], &value);
         eng->total_data_sent += atomic_wide_get(&largs->worker_data_sent);
         eng->total_data_rcvd += atomic_wide_get(&largs->worker_data_rcvd);
-        if(largs->histogram) {
+        if(largs->marker_histogram_local) {
             if(!histogram) {
                 int ret;
-                ret = hdr_init(largs->histogram->lowest_trackable_value,
-                         largs->histogram->highest_trackable_value,
-                         largs->histogram->significant_figures,
-                         &histogram);
+                ret = hdr_init(
+                        largs->marker_histogram_local->lowest_trackable_value,
+                        largs->marker_histogram_local->highest_trackable_value,
+                        largs->marker_histogram_local->significant_figures,
+                        &histogram);
                 assert(ret == 0);
             }
-            int64_t nret = hdr_add(histogram, largs->histogram);
+            int64_t nret = hdr_add(histogram, largs->marker_histogram_local);
             assert(nret == 0);
         }
     }
@@ -475,7 +476,7 @@ void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t 
 
 struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
 
-    if(!eng->loops[0].histogram)
+    if(!eng->loops[0].marker_histogram_local)
         return 0;
 
     struct hdr_histogram *histogram;
@@ -503,19 +504,19 @@ struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
      * we correctly deal with memory barriers (which we don't
      * have to on x86).
      */
-    pthread_mutex_lock(&eng->loops[0].reporting_histogram_lock);
+    pthread_mutex_lock(&eng->loops[0].marker_histogram_lock);
     int ret = hdr_init(
-            eng->loops[0].reporting_histogram->lowest_trackable_value,
-            eng->loops[0].reporting_histogram->highest_trackable_value,
-            eng->loops[0].reporting_histogram->significant_figures,
+            eng->loops[0].marker_histogram_shared->lowest_trackable_value,
+            eng->loops[0].marker_histogram_shared->highest_trackable_value,
+            eng->loops[0].marker_histogram_shared->significant_figures,
             &histogram);
-    pthread_mutex_unlock(&eng->loops[0].reporting_histogram_lock);
+    pthread_mutex_unlock(&eng->loops[0].marker_histogram_lock);
     assert(ret == 0);
 
     for(int n = 0; n < eng->n_workers; n++) {
-        pthread_mutex_lock(&eng->loops[n].reporting_histogram_lock);
-        hdr_add(histogram, eng->loops[n].reporting_histogram);
-        pthread_mutex_unlock(&eng->loops[n].reporting_histogram_lock);
+        pthread_mutex_lock(&eng->loops[n].marker_histogram_lock);
+        hdr_add(histogram, eng->loops[n].marker_histogram_shared);
+        pthread_mutex_unlock(&eng->loops[n].marker_histogram_lock);
     }
 
     return histogram;
@@ -784,20 +785,21 @@ static void *single_engine_loop_thread(void *argp) {
         largs->worker_connection_timeouts,
         atomic_wide_get(&largs->worker_data_sent),
         atomic_wide_get(&largs->worker_data_rcvd));
-    if(largs->histogram) {
+    if(largs->marker_histogram_local) {
+        struct hdr_histogram *hist = largs->marker_histogram_local;
         DEBUG(DBG_DETAIL,
             "  %.1f latency_95_ms\n"
             "  %.1f latency_99_ms\n"
             "  %.1f latency_99_5_ms\n"
             "  %.1f latency_mean_ms\n"
             "  %.1f latency_max_ms\n",
-            hdr_value_at_percentile(largs->histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(largs->histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(largs->histogram, 99.5) / 10.0,
-            hdr_mean(largs->histogram) / 10.0,
-            hdr_max(largs->histogram) / 10.0);
+            hdr_value_at_percentile(hist, 95.0) / 10.0,
+            hdr_value_at_percentile(hist, 99.0) / 10.0,
+            hdr_value_at_percentile(hist, 99.5) / 10.0,
+            hdr_mean(hist) / 10.0,
+            hdr_max(hist) / 10.0);
         if(largs->params.verbosity_level >= DBG_DATA)
-            hdr_percentiles_print(largs->histogram, stderr, 5, 10, CLASSIC);
+            hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
 
     return 0;
@@ -807,26 +809,28 @@ static void *single_engine_loop_thread(void *argp) {
  * Each worker maintains two histogram data structures:
  *  1) the working one, which is not protected by mutex and directly
  *     writable by connections, when they die.
- *  2) the reporting_histogram, which is protected by the mutex and
+ *  2) the marker_histogram_shared, which is protected by the mutex and
  *     is only updated from time to time. This one is used for reporting
  *     to external observers.
  */
 static void worker_update_reporting_histogram(struct loop_arguments *largs) {
-    assert(largs->histogram);
-    pthread_mutex_lock(&largs->reporting_histogram_lock);
-    if(largs->reporting_histogram) {
-        hdr_reset(largs->reporting_histogram);
+    assert(largs->marker_histogram_local);
+    struct hdr_histogram *hist = largs->marker_histogram_local;
+
+    pthread_mutex_lock(&largs->marker_histogram_lock);
+    if(largs->marker_histogram_shared) {
+        hdr_reset(largs->marker_histogram_shared);
     } else {
-        int ret = hdr_init(largs->histogram->lowest_trackable_value,
-                         largs->histogram->highest_trackable_value,
-                         largs->histogram->significant_figures,
-                         &largs->reporting_histogram);
+        int ret = hdr_init(hist->lowest_trackable_value,
+                         hist->highest_trackable_value,
+                         hist->significant_figures,
+                         &largs->marker_histogram_shared);
         assert(ret == 0);
     }
     /*
      * 1. Copy accumulated worker-bound histogram data.
      */
-    hdr_add(largs->reporting_histogram, largs->histogram);
+    hdr_add(largs->marker_histogram_shared, hist);
     /*
      * 2. There are connections with accumulated data,
      *    process a few of them (all would be expensive)
@@ -838,11 +842,11 @@ static void worker_update_reporting_histogram(struct loop_arguments *largs) {
     TAILQ_FOREACH(conn, &largs->open_conns, hook) {
         if(conn->latency.histogram) {
             /* Only active connections might histograms */
-            hdr_add(largs->reporting_histogram, conn->latency.histogram);
+            hdr_add(largs->marker_histogram_shared, conn->latency.histogram);
             if(--nmax == 0) break;
         }
     }
-    pthread_mutex_unlock(&largs->reporting_histogram_lock);
+    pthread_mutex_unlock(&largs->marker_histogram_lock);
 }
 
 /*
@@ -1219,10 +1223,11 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
              * parameter from the loop arguments.
              */
             conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-            int ret = hdr_init(largs->histogram->lowest_trackable_value,
-                             largs->histogram->highest_trackable_value,
-                             largs->histogram->significant_figures,
-                             &conn->latency.histogram);
+            int ret = hdr_init(
+                    largs->marker_histogram_local->lowest_trackable_value,
+                    largs->marker_histogram_local->highest_trackable_value,
+                    largs->marker_histogram_local->significant_figures,
+                    &conn->latency.histogram);
             assert(ret == 0);
         }
     }
@@ -1914,7 +1919,8 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     connection_flush_stats(TK_A_ conn);
 
     if(conn->latency.histogram) {
-        int64_t n = hdr_add(largs->histogram, conn->latency.histogram);
+        int64_t n = hdr_add(largs->marker_histogram_local,
+                            conn->latency.histogram);
         assert(n == 0);
     }
 
