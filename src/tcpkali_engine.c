@@ -125,12 +125,12 @@ struct connection {
 };
 
 struct loop_arguments {
+    /**************************
+     * NON-SHARED WORKER DATA *
+     **************************/
     struct engine_params params;    /* A copy of engine parameters */
     unsigned int address_offset;    /* An offset into the params.remote_addresses[] */
-    struct remote_stats {
-        atomic_narrow_t connection_attempts;
-        atomic_narrow_t connection_failures;
-    } *remote_stats;    /* Per-thread remote server stats */
+
     tk_timer stats_timer;
     tk_timer channel_lifetime_timer;
     int global_control_pipe_rd_nbio;    /* Non-blocking pipe anyone could read from. */
@@ -138,6 +138,40 @@ struct loop_arguments {
     int private_control_pipe_rd;    /* Private blocking pipe for this worker (read side). */
     int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
     int thread_no;
+
+    TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
+    unsigned long worker_connections_initiated;
+    unsigned long worker_connections_accepted;
+    unsigned long worker_connection_failures;
+    unsigned long worker_connection_timeouts;
+    struct hdr_histogram *histogram;
+
+    /*******************************************
+     * WORKER DATA SHARED WITH OTHER PROCESSES *
+     *******************************************/
+
+    /*
+     * Connection identifier counter is shared between all connections
+     * across all workers. We don't allocate it per worker, so it points
+     * to the same memory in the parameters of all workers.
+     */
+    atomic_narrow_t *connection_unique_id_atomic;
+
+    /*
+     * Reporting histogram should not be touched unless asked through
+     * a private control pipe.
+     */
+    struct hdr_histogram *reporting_histogram;
+    pthread_mutex_t       reporting_histogram_lock;
+
+    /*
+     * Per-remote server stats, pointing to a global table.
+     */
+    struct remote_stats {
+        atomic_narrow_t connection_attempts;
+        atomic_narrow_t connection_failures;
+    } *remote_stats;
+
     /* The following atomic members are accessed outside of worker thread */
     atomic_wide_t worker_data_sent;
     atomic_wide_t worker_data_rcvd;
@@ -145,21 +179,6 @@ struct loop_arguments {
     atomic_narrow_t outgoing_established;
     atomic_narrow_t incoming_established;
     atomic_narrow_t connections_counter;
-    TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
-    unsigned long worker_connections_initiated;
-    unsigned long worker_connections_accepted;
-    unsigned long worker_connection_failures;
-    unsigned long worker_connection_timeouts;
-    struct hdr_histogram *histogram;
-    /* Reporting histogram should not be touched unless asked. */
-    struct hdr_histogram *reporting_histogram;
-    pthread_mutex_t       reporting_histogram_lock;
-    /*
-     * Connection identifier counter is shared between all connections
-     * across all workers. We don't allocate it per worker, so it points
-     * to the same memory in the parameters of all workers.
-     */
-    atomic_narrow_t *connection_unique_id_atomic;
 };
 
 /*
