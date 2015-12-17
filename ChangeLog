@@ -1,4 +1,8 @@
 
+0.?:
+    * Added --latency-connect to measure connect latency.
+    * Added --latency-first-byte to measure latency to first byte.
+
 0.7:    2015-Dec-11
     * Added a manual page.
     * Exceed 64k connections limit by using IP aliases on network interfaces.
