@@ -126,14 +126,14 @@ tcpkali supports injecting a limited form of variability into the
 generated content. All message data, be it the **-m** or **--first-message**,
 can contain the dynamic expressions in the form of "\\{EXPRESSION}".
 
-----------------------------------------------------------------------
-Expression         Description
---------------     ---------------------------------------------------
-connection.uid     Unique number incremented for each new connection.
+-----------------------------------------------------------------------
+Expression          Description
+--------------      ---------------------------------------------------
+ connection.uid     Unique number incremented for each new connection.
 
-connection.ptr     Pointer to a connection structure. Don't use.
+ connection.ptr     Pointer to a connection structure. Don't use.
 
-EXPRESSION % *int* Remainder of the expression value divided by *int*.
+ EXPRESSION % *int* Remainder of the expression value divided by *int*.
 -----------------------------------------------------------------------
 : Expressions can be of the following forms:
 
@@ -203,15 +203,15 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 
 # EXAMPLES
 
-#. Throw 42 requests per second (**-r**) in each of the 10,000 connections (**-c**) to an HTTP server (**-m**), replacing \\n with newlines (**-e**):
+ 1. Throw 42 requests per second (**-r**) in each of the 10,000 connections (**-c**) to an HTTP server (**-m**), replacing \\n with newlines (**-e**):
 
     tcpkali -c10k -r42 -em 'GET / HTTP/1.0\\r\\n\\r\\n' nonexistent.com:80
 
-#. Create a WebSocket (**--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
+ 2. Create a WebSocket (**--ws**) server on a specifed port (**-l**) for an hour (**-T**), but block clients from actually sending data:
 
     tcpkali --ws -l8080 --channel-bandwidth-downstream=0 -T1h
 
-#. Show server responses (**--verbose**) when we ping SMTP server once a second (**--connect-rate**) disconnecting promptly (**--channel-lifetime**):
+ 3. Show server responses (**--verbose**) when we ping SMTP server once a second (**--connect-rate**) disconnecting promptly (**--channel-lifetime**):
 
     tcpkali --connect-rate=1 --channel-lifetime=0.1 -vvv nonexistent.org:smtp
 
