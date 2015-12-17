@@ -63,6 +63,7 @@
 #define CLI_CHAN_OFFSET     (1<<10)
 #define CLI_CONN_OFFSET     (1<<11)
 #define CLI_SOCKET_OPT      (1<<12)
+#define CLI_LATENCY         (1<<13)
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
     { "channel-bandwidth-upstream", 1, 0, 'u' },
@@ -74,8 +75,10 @@ static struct option cli_long_options[] = {
     { "first-message", 1, 0, '1' },
     { "first-message-file", 1, 0, 'F' },
     { "help", 0, 0, 'h' },
-    { "latency-marker", 1, 0, 'L' },
-    { "latency-marker-skip", 1, 0, 'S' },
+    { "latency-connect", 0, 0,      CLI_LATENCY + 'c' },
+    { "latency-first-byte", 0, 0,   CLI_LATENCY + 'f' },
+    { "latency-marker", 1, 0,       CLI_LATENCY + 'm' },
+    { "latency-marker-skip", 1, 0,  CLI_LATENCY + 's' },
     { "listen-port", 1, 0, 'l' },
     { "listen-mode", 1, 0, 'M' },
     { "message", 1, 0, 'm' },
@@ -144,7 +147,7 @@ typedef struct {
     size_t bps_out;
     size_t rcvd;
     size_t sent;
-    struct hdr_histogram *histogram;
+    struct latency_snapshot *latency;
 } statsd_feedback;
 
 /*
@@ -431,7 +434,14 @@ int main(int argc, char **argv) {
         case 'W':   /* --websocket: Enable WebSocket framing */
             engine_params.websocket_enable = 1;
             break;
-        case 'L': { /* --latency-marker */
+        case CLI_LATENCY + 'c': /* --latency-connect */
+            engine_params.latency_setting |= LMEASURE_CONNECT;
+            break;
+        case CLI_LATENCY + 'f': /* --latency-first-byte */
+            engine_params.latency_setting |= LMEASURE_FIRSTBYTE;
+            break;
+        case CLI_LATENCY + 'm': { /* --latency-marker */
+            engine_params.latency_setting |= LMEASURE_MARKER;
             char *data  = strdup(optarg);
             size_t size = strlen(optarg);
             if(unescape_message_data)
@@ -447,7 +457,7 @@ int main(int argc, char **argv) {
             }
             }
             break;
-        case 'S': { /* --latency-marker-skip */
+        case CLI_LATENCY + 's': { /* --latency-marker-skip */
             engine_params.latency_marker_skip =
                             parse_with_multipliers(option, optarg,
                             km_multiplier,
@@ -721,6 +731,30 @@ static const char *time_progress(double start, double now, double stop) {
     return clocks[pos];
 }
 
+static void format_latencies(char *buf, size_t size, struct latency_snapshot *latency) {
+    if(latency->connect_histogram
+      || latency->firstbyte_histogram
+      || latency->marker_histogram) {
+        char *p = buf;
+        p += snprintf(p, size, " (");
+        if(latency->connect_histogram)
+            p += snprintf(p, size-(p-buf),
+                    "c=%.1f ", hdr_value_at_percentile(
+                    latency->connect_histogram, 95.0) / 10.0);
+        if(latency->firstbyte_histogram)
+            p += snprintf(p, size-(p-buf),
+                    "fb=%.1f ", hdr_value_at_percentile(
+                    latency->firstbyte_histogram, 95.0) / 10.0);
+        if(latency->marker_histogram)
+            p += snprintf(p, size-(p-buf),
+                    "m=%.1f ", hdr_value_at_percentile(
+                    latency->marker_histogram, 95.0) / 10.0);
+        snprintf(p, size-(p-buf), "ms⁹⁵ᵖ)");
+    } else {
+        buf[0] = '\0';
+    }
+}
+
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
@@ -789,7 +823,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
 
-        struct hdr_histogram *histogram = engine_get_latency_stats(eng);
+        struct latency_snapshot *latency = engine_get_latency_snapshot(eng);
         report_to_statsd(statsd,
             &(statsd_feedback){
                 .opened = to_start,
@@ -799,7 +833,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 .bps_out = bps_out,
                 .rcvd = rcvd,
                 .sent = sent,
-                .histogram = histogram
+                .latency = latency
             });
 
         if(print_stats) {
@@ -807,15 +841,9 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 print_connections_line(conns_out, max_connections,
                                        conns_counter);
             } else {
-                char latency_buf[64];
-                if(histogram) {
-                    snprintf(latency_buf, sizeof(latency_buf),
-                            " (%.1fms @ 95%%)",
-                            hdr_value_at_percentile(histogram, 95.0)/10.0
-                    );
-                } else {
-                    latency_buf[0] = '\0';
-                }
+                char latency_buf[256];
+                format_latencies(latency_buf, sizeof(latency_buf), latency);
+
                 fprintf(stderr,
                     "%sTraffic %.3f↓, %.3f↑ Mbps "
                     "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
@@ -828,7 +856,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
             }
         }
 
-        free(histogram);
+        engine_free_latency_snapshot(latency);
     }
 
     return (now >= epoch_end || *term_flag) ? -1 : 0;
@@ -863,7 +891,7 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->rcvd);
     SBATCH(STATSD_COUNT, "traffic.data.sent", sf->sent);
 
-    if(sf->histogram || sf == &empty_feedback) {
+    if(sf->latency->marker_histogram || sf == &empty_feedback) {
 
         struct {
             unsigned p50;
@@ -874,13 +902,14 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
             unsigned max;
         } lat;
 
-        if(sf->histogram) {
-            lat.p50 = hdr_value_at_percentile(sf->histogram, 50.0) / 10.0;
-            lat.p95 = hdr_value_at_percentile(sf->histogram, 95.0) / 10.0;
-            lat.p99 = hdr_value_at_percentile(sf->histogram, 99.0) / 10.0;
-            lat.p99_5 = hdr_value_at_percentile(sf->histogram, 99.5) / 10.0;
-            lat.mean = hdr_mean(sf->histogram)/10.0;
-            lat.max = hdr_max(sf->histogram)/10.0;
+        if(sf->latency->marker_histogram) {
+            struct hdr_histogram *hist = sf->latency->marker_histogram;
+            lat.p50 = hdr_value_at_percentile(hist, 50.0) / 10.0;
+            lat.p95 = hdr_value_at_percentile(hist, 95.0) / 10.0;
+            lat.p99 = hdr_value_at_percentile(hist, 99.0) / 10.0;
+            lat.p99_5 = hdr_value_at_percentile(hist, 99.5) / 10.0;
+            lat.mean = hdr_mean(hist)/10.0;
+            lat.max = hdr_max(hist)/10.0;
             assert(lat.p95 < 1000000);
             assert(lat.mean < 1000000);
             assert(lat.max < 1000000);
@@ -978,6 +1007,8 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -f, --message-file <name>    Read message to send from a file\n"
     "  -r, --message-rate <Rate>    Messages per second to send in a connection\n"
     "\n"
+    "  --latency-connect            Measure connection establishment latency\n"
+    "  --latency-first-byte         Measure first byte response latency\n"
     "  --latency-marker <string>    Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>    Ignore the first N occurrences of a marker\n"
     "\n"

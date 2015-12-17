@@ -75,6 +75,11 @@ struct engine_params {
     /* Pre-computed message data template */
     struct message_collection    message_collection; /* A descr. what to send */
     struct transport_data_spec  *data_templates[2]; /* client, server tmpls */
+    enum {
+        LMEASURE_CONNECT    = (1<<0),
+        LMEASURE_FIRSTBYTE  = (1<<1),
+        LMEASURE_MARKER     = (1<<2)
+    } latency_setting;
     tk_expr_t *latency_marker;      /* --latency-marker */
     int        latency_marker_skip;    /* --latency-marker-skip <N> */
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
@@ -88,7 +93,18 @@ struct engine *engine_start(struct engine_params);
  */
 void engine_get_connection_stats(struct engine *,
     size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
-struct hdr_histogram *engine_get_latency_stats(struct engine *);
+
+/*
+ * Snapshot of the current latency.
+ */
+struct latency_snapshot {
+    struct hdr_histogram *connect_histogram;
+    struct hdr_histogram *firstbyte_histogram;
+    struct hdr_histogram *marker_histogram;
+};
+struct latency_snapshot *engine_get_latency_snapshot(struct engine *);
+void engine_free_latency_snapshot(struct latency_snapshot *);
+
 void engine_traffic(struct engine *, non_atomic_wide_t *sent, non_atomic_wide_t *received);
 
 

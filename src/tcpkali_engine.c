@@ -110,8 +110,9 @@ struct connection {
     struct sockaddr_storage peer_name;  /* For CONN_INCOMING */
     /* Latency */
     struct {
+        double connection_initiated;
         struct ring_buffer *sent_timestamps;
-        struct hdr_histogram *histogram;
+        struct hdr_histogram *marker_histogram;
         unsigned message_bytes_credit;  /* See (EXPL:1) below. */
         unsigned lm_occurrences_skip;   /* See --latency-marker-skip */
         /* Boyer-Moore-Horspool substring search algorithm data */
@@ -144,7 +145,9 @@ struct loop_arguments {
     unsigned long worker_connections_accepted;
     unsigned long worker_connection_failures;
     unsigned long worker_connection_timeouts;
-    struct hdr_histogram *marker_histogram_local;
+    struct hdr_histogram *connect_histogram_local;  /* --latency-connect */
+    struct hdr_histogram *firstbyte_histogram_local;/* --latency-first-byte */
+    struct hdr_histogram *marker_histogram_local;   /* --latency-marker */
 
     /*******************************************
      * WORKER DATA SHARED WITH OTHER PROCESSES *
@@ -158,11 +161,13 @@ struct loop_arguments {
     atomic_narrow_t *connection_unique_id_atomic;
 
     /*
-     * Reporting histogram should not be touched unless asked through
-     * a private control pipe.
+     * Reporting histograms should not be touched
+     * unless asked through a private control pipe.
      */
+    struct hdr_histogram *connect_histogram_shared;
+    struct hdr_histogram *firstbyte_histogram_shared;
     struct hdr_histogram *marker_histogram_shared;
-    pthread_mutex_t       marker_histogram_lock;
+    pthread_mutex_t       shared_histograms_lock;
 
     /*
      * Per-remote server stats, pointing to a global table.
@@ -179,6 +184,9 @@ struct loop_arguments {
     atomic_narrow_t outgoing_established;
     atomic_narrow_t incoming_established;
     atomic_narrow_t connections_counter;
+
+    /* Avoid mixing output from several threads when dumping complex state */
+    pthread_mutex_t *serialize_output_lock;
 };
 
 /*
@@ -193,6 +201,7 @@ enum control_message_type_e {
  * Engine abstracts over workers.
  */
 struct engine {
+    struct engine_params params;    /* A copy of engine parameters */
     struct loop_arguments *loops;
     pthread_t *threads;
     int global_control_pipe_wr;
@@ -202,6 +211,7 @@ struct engine {
     non_atomic_wide_t total_data_sent;
     non_atomic_wide_t total_data_rcvd;
     atomic_narrow_t connection_unique_id_global;
+    pthread_mutex_t serialize_output_lock;
 };
 
 /*
@@ -314,11 +324,13 @@ struct engine *engine_start(struct engine_params params) {
         replicate_payload(params.data_templates[1], REPLICATE_MAX_SIZE);
 
     struct engine *eng = calloc(1, sizeof(*eng));
+    eng->params = params;
     eng->loops = calloc(n_workers, sizeof(eng->loops[0]));
     eng->threads = calloc(n_workers, sizeof(eng->threads[0]));
     eng->n_workers = n_workers;
     eng->global_control_pipe_wr = gctl_pipe_wr;
     eng->global_feedback_pipe_rd = gfbk_pipe_rd;
+    pthread_mutex_init(&eng->serialize_output_lock, 0);
 
     /*
      * Initialize the Boyer-Moore-Horspool occurrences table once,
@@ -340,8 +352,23 @@ struct engine *engine_start(struct engine_params params) {
         largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
         largs->thread_no = n;
-        if(params.latency_marker) {
-            int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
+        largs->serialize_output_lock = &eng->serialize_output_lock;
+        const int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
+        if(params.latency_setting & LMEASURE_CONNECT) {
+            int ret = hdr_init(
+                1, /* 1/10 milliseconds is the lowest storable value. */
+                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                3, &largs->connect_histogram_local);
+            assert(ret == 0);
+        }
+        if(params.latency_setting & LMEASURE_FIRSTBYTE) {
+            int ret = hdr_init(
+                1, /* 1/10 milliseconds is the lowest storable value. */
+                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                3, &largs->firstbyte_histogram_local);
+            assert(ret == 0);
+        }
+        if(params.latency_setting & LMEASURE_MARKER) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
                 100 * decims_in_1s,  /* 100 seconds is a max storable value */
@@ -351,7 +378,7 @@ struct engine *engine_start(struct engine_params params) {
                 "Initialized HdrHistogram with size %ld\n",
                     (long)hdr_get_memory_size(largs->marker_histogram_local));
         }
-        pthread_mutex_init(&largs->marker_histogram_lock, 0);
+        pthread_mutex_init(&largs->shared_histograms_lock, 0);
 
         int private_pipe[2];
         int rc = pipe(private_pipe);
@@ -474,12 +501,20 @@ void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t 
     *counter = c_count;
 }
 
-struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
+void engine_free_latency_snapshot(struct latency_snapshot *latency) {
+    if(latency) {
+        free(latency->connect_histogram);
+        free(latency->firstbyte_histogram);
+        free(latency->marker_histogram);
+        free(latency);
+    }
+}
 
-    if(!eng->loops[0].marker_histogram_local)
-        return 0;
+struct latency_snapshot *engine_get_latency_snapshot(struct engine *eng) {
+    struct latency_snapshot *latency = calloc(1, sizeof(*latency));
 
-    struct hdr_histogram *histogram;
+    if(eng->params.latency_setting == 0)
+        return latency;
 
     /*
      * If histogram is requested, we first need to ask each worker to
@@ -498,28 +533,85 @@ struct hdr_histogram *engine_get_latency_stats(struct engine *eng) {
         assert(c == '.');
     }
 
+    struct hdr_init_values {
+        int64_t lowest_trackable_value;
+        int64_t highest_trackable_value;
+        int64_t significant_figures;
+    } conn_init = {0,0,0}, fb_init = {0,0,0}, mark_init = {0,0,0};
+
     /* There's going to be no wait or contention here due
      * to the pipe-driven command-response logic. However,
      * we still lock the reporting histogram to pretend that
      * we correctly deal with memory barriers (which we don't
      * have to on x86).
      */
-    pthread_mutex_lock(&eng->loops[0].marker_histogram_lock);
-    int ret = hdr_init(
-            eng->loops[0].marker_histogram_shared->lowest_trackable_value,
-            eng->loops[0].marker_histogram_shared->highest_trackable_value,
-            eng->loops[0].marker_histogram_shared->significant_figures,
-            &histogram);
-    pthread_mutex_unlock(&eng->loops[0].marker_histogram_lock);
-    assert(ret == 0);
+    pthread_mutex_lock(&eng->loops[0].shared_histograms_lock);
+    if(eng->loops[0].connect_histogram_shared) {
+        conn_init.lowest_trackable_value =
+            eng->loops[0].connect_histogram_shared->lowest_trackable_value;
+        conn_init.highest_trackable_value =
+            eng->loops[0].connect_histogram_shared->highest_trackable_value;
+        conn_init.significant_figures=
+            eng->loops[0].connect_histogram_shared->significant_figures;
+    }
+    if(eng->loops[0].firstbyte_histogram_shared) {
+        fb_init.lowest_trackable_value =
+            eng->loops[0].firstbyte_histogram_shared->lowest_trackable_value;
+        fb_init.highest_trackable_value =
+            eng->loops[0].firstbyte_histogram_shared->highest_trackable_value;
+        fb_init.significant_figures=
+            eng->loops[0].firstbyte_histogram_shared->significant_figures;
+    }
+    if(eng->loops[0].marker_histogram_shared) {
+        mark_init.lowest_trackable_value =
+            eng->loops[0].marker_histogram_shared->lowest_trackable_value;
+        mark_init.highest_trackable_value =
+            eng->loops[0].marker_histogram_shared->highest_trackable_value;
+        mark_init.significant_figures=
+            eng->loops[0].marker_histogram_shared->significant_figures;
+    }
+    pthread_mutex_unlock(&eng->loops[0].shared_histograms_lock);
 
-    for(int n = 0; n < eng->n_workers; n++) {
-        pthread_mutex_lock(&eng->loops[n].marker_histogram_lock);
-        hdr_add(histogram, eng->loops[n].marker_histogram_shared);
-        pthread_mutex_unlock(&eng->loops[n].marker_histogram_lock);
+    if(conn_init.significant_figures) {
+        int ret = hdr_init(
+            conn_init.lowest_trackable_value,
+            conn_init.highest_trackable_value,
+            conn_init.significant_figures,
+            &latency->connect_histogram);
+        assert(ret == 0);
+    }
+    if(fb_init.significant_figures) {
+        int ret = hdr_init(
+            fb_init.lowest_trackable_value,
+            fb_init.highest_trackable_value,
+            fb_init.significant_figures,
+            &latency->firstbyte_histogram);
+        assert(ret == 0);
+    }
+    if(mark_init.significant_figures) {
+        int ret = hdr_init(
+            mark_init.lowest_trackable_value,
+            mark_init.highest_trackable_value,
+            mark_init.significant_figures,
+            &latency->marker_histogram);
+        assert(ret == 0);
     }
 
-    return histogram;
+    for(int n = 0; n < eng->n_workers; n++) {
+        pthread_mutex_lock(&eng->loops[n].shared_histograms_lock);
+        if(latency->connect_histogram)
+            hdr_add(latency->connect_histogram,
+                    eng->loops[n].connect_histogram_shared);
+        if(latency->firstbyte_histogram)
+            hdr_add(latency->firstbyte_histogram,
+                    eng->loops[n].firstbyte_histogram_shared);
+        if(latency->marker_histogram)
+            hdr_add(latency->marker_histogram,
+                    eng->loops[n].marker_histogram_shared);
+        pthread_mutex_unlock(&eng->loops[n].shared_histograms_lock);
+    }
+
+    return latency;
 }
 
 void engine_traffic(struct engine *eng, non_atomic_wide_t *sent, non_atomic_wide_t *received) {
@@ -765,6 +857,9 @@ static void *single_engine_loop_thread(void *argp) {
 
     close_all_connections(TK_A_ CCR_CLEAN);
 
+    /* Avoid mixing debug output from several threads. */
+    pthread_mutex_lock(largs->serialize_output_lock);
+
     DEBUG(DBG_DETAIL, "Exiting worker %d\n"
             "  %"PRIan"↓, %"PRIan"↑ open connections (%"PRIan" connecting)\n"
             "  %"PRIan" connections_counter \n"
@@ -785,14 +880,33 @@ static void *single_engine_loop_thread(void *argp) {
         largs->worker_connection_timeouts,
         atomic_wide_get(&largs->worker_data_sent),
         atomic_wide_get(&largs->worker_data_rcvd));
+
+    if(largs->connect_histogram_local) {
+        struct hdr_histogram *hist = largs->connect_histogram_local;
+        DEBUG(DBG_DETAIL,
+            "  Connect latency:\n"
+            "    %.1f latency_95_ms\n"
+            "    %.1f latency_99_ms\n"
+            "    %.1f latency_99_5_ms\n"
+            "    %.1f latency_mean_ms\n"
+            "    %.1f latency_max_ms\n",
+            hdr_value_at_percentile(hist, 95.0) / 10.0,
+            hdr_value_at_percentile(hist, 99.0) / 10.0,
+            hdr_value_at_percentile(hist, 99.5) / 10.0,
+            hdr_mean(hist) / 10.0,
+            hdr_max(hist) / 10.0);
+        if(largs->params.verbosity_level >= DBG_DATA)
+            hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
+    }
     if(largs->marker_histogram_local) {
         struct hdr_histogram *hist = largs->marker_histogram_local;
         DEBUG(DBG_DETAIL,
-            "  %.1f latency_95_ms\n"
-            "  %.1f latency_99_ms\n"
-            "  %.1f latency_99_5_ms\n"
-            "  %.1f latency_mean_ms\n"
-            "  %.1f latency_max_ms\n",
+            "  Marker latency:\n"
+            "    %.1f latency_95_ms\n"
+            "    %.1f latency_99_ms\n"
+            "    %.1f latency_99_5_ms\n"
+            "    %.1f latency_mean_ms\n"
+            "    %.1f latency_max_ms\n",
             hdr_value_at_percentile(hist, 95.0) / 10.0,
             hdr_value_at_percentile(hist, 99.0) / 10.0,
             hdr_value_at_percentile(hist, 99.5) / 10.0,
@@ -802,51 +916,79 @@ static void *single_engine_loop_thread(void *argp) {
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
 
+    pthread_mutex_unlock(largs->serialize_output_lock);
+
     return 0;
 }
 
 /*
- * Each worker maintains two histogram data structures:
- *  1) the working one, which is not protected by mutex and directly
- *     writable by connections, when they die.
- *  2) the marker_histogram_shared, which is protected by the mutex and
- *     is only updated from time to time. This one is used for reporting
- *     to external observers.
+ * Copy a histogram by erasing the destination histogram first and adding
+ * the source histogram into it.
  */
-static void worker_update_reporting_histogram(struct loop_arguments *largs) {
-    assert(largs->marker_histogram_local);
-    struct hdr_histogram *hist = largs->marker_histogram_local;
-
-    pthread_mutex_lock(&largs->marker_histogram_lock);
-    if(largs->marker_histogram_shared) {
-        hdr_reset(largs->marker_histogram_shared);
-    } else {
-        int ret = hdr_init(hist->lowest_trackable_value,
-                         hist->highest_trackable_value,
-                         hist->significant_figures,
-                         &largs->marker_histogram_shared);
-        assert(ret == 0);
+static void histogram_data_copy_to_shared(struct hdr_histogram *src,
+                                     struct hdr_histogram **dst) {
+    if(src) {
+        if(*dst) {
+            hdr_reset(*dst);
+        } else {
+            int ret = hdr_init(src->lowest_trackable_value,
+                               src->highest_trackable_value,
+                               src->significant_figures,
+                               dst);
+            assert(ret == 0);
+        }
+        hdr_add(*dst, src);
     }
-    /*
-     * 1. Copy accumulated worker-bound histogram data.
-     */
-    hdr_add(largs->marker_histogram_shared, hist);
-    /*
-     * 2. There are connections with accumulated data,
-     *    process a few of them (all would be expensive)
-     *    and add their data as well.
-     * FYI: 10 hdr_adds() take ~0.2ms.
-     */
-    struct connection *conn;
-    int nmax = 10;
-    TAILQ_FOREACH(conn, &largs->open_conns, hook) {
-        if(conn->latency.histogram) {
-            /* Only active connections might histograms */
-            hdr_add(largs->marker_histogram_shared, conn->latency.histogram);
-            if(--nmax == 0) break;
+}
+
+/*
+ * Each worker maintains two sets of histogram data structures:
+ *  1) the xxx_histogram_local ones, which are not protected by mutex
+ *     and are directly writable by connections when they operate and die.
+ *  2) the xxx_histogram_shared, which are protected by the mutex and
+ *     are only updated from time to time.
+ *     The shared ones are used for reporting to external observers.
+ */
+static void worker_update_shared_histograms(struct loop_arguments *largs) {
+
+    if(largs->params.latency_setting == 0)
+        return;
+
+    pthread_mutex_lock(&largs->shared_histograms_lock);
+
+    /* --latency-connect */
+    histogram_data_copy_to_shared(largs->connect_histogram_local,
+                                 &largs->connect_histogram_shared);
+
+    /* --latency-firstbyte */
+    histogram_data_copy_to_shared(largs->firstbyte_histogram_local,
+                                 &largs->firstbyte_histogram_shared);
+
+    /* --latency-marker */
+    histogram_data_copy_to_shared(largs->marker_histogram_local,
+                                 &largs->marker_histogram_shared);
+
+    if(largs->marker_histogram_local) {
+        /*
+         * 2. There are connections with accumulated data,
+         *    process a few of them (all would be expensive)
+         *    and add their data as well.
+         * FYI: 10 hdr_adds() take ~0.2ms.
+         */
+        struct connection *conn;
+        int nmax = 10;
+        TAILQ_FOREACH(conn, &largs->open_conns, hook) {
+            if(conn->latency.marker_histogram) {
+                /* Only active connections might histograms */
+                hdr_add(largs->marker_histogram_shared,
+                        conn->latency.marker_histogram);
+                if(--nmax == 0) break;
+            }
         }
     }
-    pthread_mutex_unlock(&largs->marker_histogram_lock);
+
+
+    pthread_mutex_unlock(&largs->shared_histograms_lock);
 }
 
 /*
@@ -871,7 +1013,7 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         tk_stop(TK_A);
         break;
     case 'h':
-        worker_update_reporting_histogram(largs);
+        worker_update_shared_histograms(largs);
         int wrote = write(largs->global_feedback_pipe_wr, ".", 1);
         assert(wrote == 1);
         break;
@@ -1033,6 +1175,8 @@ static void start_new_connection(TK_P) {
         }
         atomic_increment(&largs->outgoing_established);
         conn_state = CSTATE_CONNECTED;
+        if(largs->connect_histogram_local)
+            hdr_record_value(largs->connect_histogram_local, 0);
     }
 
     /*
@@ -1151,6 +1295,10 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
 
     double now = tk_now(TK_A);
 
+    if(largs->params.latency_setting != 0) {
+        conn->latency.connection_initiated = now;
+    }
+
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
             setup_channel_lifetime_timer(TK_A_ largs->params.channel_lifetime);
@@ -1227,7 +1375,7 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
                     largs->marker_histogram_local->lowest_trackable_value,
                     largs->marker_histogram_local->highest_trackable_value,
                     largs->marker_histogram_local->significant_figures,
-                    &conn->latency.histogram);
+                    &conn->latency.marker_histogram);
             assert(ret == 0);
         }
     }
@@ -1584,7 +1732,7 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
         if(got) {
             int64_t latency = 10000 * (now - ts);
-            if(hdr_record_value(conn->latency.histogram, latency) == false) {
+            if(hdr_record_value(conn->latency.marker_histogram, latency) == false) {
                 fprintf(stderr, "Latency value %g is too large, "
                                 "can't record.\n", now - ts);
             }
@@ -1660,6 +1808,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         atomic_decrement(&largs->outgoing_connecting);
         atomic_increment(&largs->outgoing_established);
         conn->conn_state = CSTATE_CONNECTED;
+        if(largs->connect_histogram_local) {
+            int64_t latency = 10000 * (tk_now(TK_A)
+                                        - conn->latency.connection_initiated);
+            hdr_record_value(largs->connect_histogram_local, latency);
+        }
 
         /*
          * We were asked to produce the WRITE event
@@ -1729,6 +1882,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     conn->ws_state = WSTATE_WS_ESTABLISHED;
                     conn->conn_wish |= CW_WRITE_INTEREST;
                     update_io_interest(TK_A_ conn);
+                }
+                if(conn->data_rcvd == 0 && largs->firstbyte_histogram_local) {
+                    int64_t latency = 10000 * (tk_now(TK_A)
+                                        - conn->latency.connection_initiated);
+                    hdr_record_value(largs->firstbyte_histogram_local, latency);
                 }
                 conn->data_rcvd += rd;
                 if(largs->params.verbosity_level >= DBG_DATA) {
@@ -1859,8 +2017,8 @@ static void connection_free_internals(struct connection *conn) {
     ring_buffer_free(conn->latency.sent_timestamps);
 
     /* Remove latency histogram data */
-    if(conn->latency.histogram)
-        free(conn->latency.histogram);
+    if(conn->latency.marker_histogram)
+        free(conn->latency.marker_histogram);
 
     /* Remove Boyer-Moore-Horspool string search context. */
     if(conn->latency.sbmh_ctx) {
@@ -1918,9 +2076,9 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     /* Propagate connection stats back to the worker */
     connection_flush_stats(TK_A_ conn);
 
-    if(conn->latency.histogram) {
+    if(conn->latency.marker_histogram) {
         int64_t n = hdr_add(largs->marker_histogram_local,
-                            conn->latency.histogram);
+                            conn->latency.marker_histogram);
         assert(n == 0);
     }
 
