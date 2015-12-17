@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2015-12-11
+% 2015-12-17
 
 # NAME
 
@@ -147,11 +147,20 @@ Expressions are evaluated even if the **-e** option is not given.
 
 ## LATENCY MEASUREMENT OPTIONS
 
-tcpkali measures latency by repeatedly recording the time difference between
-the time the message is sent (as specified by **-m** or **-f**)
-and the time the latency marker is observed in the downstream traffic.
-Latency data is aggregated across all connections, and the
-latency percentiles are displayed during and after the tcpkali session is done.
+tcpkali can measure TCP connect latency, time to first byte, and
+request-response latencies.
+
+--latency-connect
+: Measure TCP connect latency.
+
+--latency-first-byte
+: Measure latency to first byte. Works only for the active sockets.
+
+tcpkali measures request-response latency by repeatedly recording
+the time difference between the time the message is sent
+(as specified by **-m** or **-f**)
+and the time the latency marker is observed in the downstream traffic
+(as set by **--latency-marker**).
 
 --latency-marker *string*
 :   Specify a per-message sequence of characters to look for in the data stream.
