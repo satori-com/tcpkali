@@ -71,6 +71,7 @@ During the build procedure listed below, some errors may be thrown if these pre-
 
       --latency-marker <string>   Measure latency using a per-message marker
       --latency-marker-skip <N>   Ignore the first N occurrences of a marker
+      --latency-percentiles <F>   Report latency at specified percentiles
 
       --statsd                    Enable StatsD output (default disabled)
       --statsd-host <host>        StatsD host to send data (default is localhost)
