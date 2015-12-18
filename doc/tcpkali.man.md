@@ -181,6 +181,9 @@ and the time the latency marker is observed in the downstream traffic
 --latency-marker-skip *N*
 :   Ignore the first *N* observations of a **--latency-marker**.
 
+--latency-percentiles *list*
+:   Report latency at specified percentiles. The option takes comma-separated
+    list of percentile numbers. Default is `95.0,99.0,99.5`.
 
 ## STATSD OPTIONS
 
