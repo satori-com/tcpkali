@@ -397,21 +397,30 @@ struct engine *engine_start(struct engine_params params) {
 }
 
 /*
- * Init HDR Histogram with properties similar to a given one.
+ * Format and print latency snapshot.
  */
-static struct hdr_histogram *
-hdr_init_similar(struct hdr_histogram *htemplate) {
-    if(htemplate) {
-        struct hdr_histogram *dst = 0;
-        if(hdr_init(
-            htemplate->lowest_trackable_value,
-            htemplate->highest_trackable_value,
-            htemplate->significant_figures,
-            &dst) == 0) {
-            return dst;
-        }
+static void latency_snapshot_print(struct latency_snapshot *latency) {
+    if(latency->connect_histogram) {
+        printf("TCP connect latency: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
+            hdr_value_at_percentile(latency->connect_histogram, 95.0) / 10.0,
+            hdr_value_at_percentile(latency->connect_histogram, 99.0) / 10.0,
+            hdr_value_at_percentile(latency->connect_histogram, 99.5) / 10.0);
     }
-    return NULL;
+    if(latency->firstbyte_histogram) {
+        printf("First byte latency: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
+            hdr_value_at_percentile(latency->firstbyte_histogram, 95.0) / 10.0,
+            hdr_value_at_percentile(latency->firstbyte_histogram, 99.0) / 10.0,
+            hdr_value_at_percentile(latency->firstbyte_histogram, 99.5) / 10.0);
+    }
+    if(latency->marker_histogram) {
+        printf("Message latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
+            hdr_value_at_percentile(latency->marker_histogram, 95.0) / 10.0,
+            hdr_value_at_percentile(latency->marker_histogram, 99.0) / 10.0,
+            hdr_value_at_percentile(latency->marker_histogram, 99.5) / 10.0);
+        printf("Mean and max message latencies: %.1f/%.1f (mean/max)\n",
+            hdr_mean(latency->marker_histogram) / 10.0,
+            hdr_max(latency->marker_histogram) / 10.0);
+    }
 }
 
 /*
@@ -430,20 +439,20 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         assert(rc == 1);
     }
 
-    struct hdr_histogram *marker_histogram =
-        hdr_init_similar(eng->loops[0].marker_histogram_local);
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
         void *value;
         pthread_join(eng->threads[n], &value);
         eng->total_data_sent += atomic_wide_get(&largs->worker_data_sent);
         eng->total_data_rcvd += atomic_wide_get(&largs->worker_data_rcvd);
-        if(marker_histogram) {
-            int64_t nret = hdr_add(marker_histogram,
-                                   largs->marker_histogram_local);
-            assert(nret == 0);
-        }
     }
+
+    /*
+     * The engine termination (using 'T') will implicitly prepare
+     * latency snapshots. We only need to collect it now.
+     */
+    struct latency_snapshot *latency = engine_collect_latency_snapshot(eng);
+
     eng->n_workers = 0;
 
     /* Data snd/rcv after ramp-up (since epoch) */
@@ -470,16 +479,9 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
         8 * (epoch_data_rcvd / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
-    if(marker_histogram) {
-        printf("Latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
-            hdr_value_at_percentile(marker_histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(marker_histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(marker_histogram, 99.5) / 10.0);
-        printf("Mean and max latencies: %.1f/%.1f (mean/max)\n",
-            hdr_mean(marker_histogram) / 10.0,
-            hdr_max(marker_histogram) / 10.0);
-        free(marker_histogram);
-    }
+    latency_snapshot_print(latency);
+
+    engine_free_latency_snapshot(latency);
     printf("Test duration: %g s.\n", test_duration);
 }
 
@@ -946,6 +948,26 @@ static void *single_engine_loop_thread(void *argp) {
 }
 
 /*
+ * Init HDR Histogram with properties similar to a given one.
+ */
+static struct hdr_histogram *
+hdr_init_similar(struct hdr_histogram *htemplate) {
+    if(htemplate) {
+        struct hdr_histogram *dst = 0;
+        if(hdr_init(
+            htemplate->lowest_trackable_value,
+            htemplate->highest_trackable_value,
+            htemplate->significant_figures,
+            &dst) == 0) {
+            return dst;
+        } else {
+            assert(!"Can't create copy of histogram");
+        }
+    }
+    return NULL;
+}
+
+/*
  * Copy a histogram by erasing the destination histogram first and adding
  * the source histogram into it.
  */
@@ -955,11 +977,8 @@ static void histogram_data_copy_to_shared(struct hdr_histogram *src,
         if(*dst) {
             hdr_reset(*dst);
         } else {
-            int ret = hdr_init(src->lowest_trackable_value,
-                               src->highest_trackable_value,
-                               src->significant_figures,
-                               dst);
-            assert(ret == 0);
+            *dst = hdr_init_similar(src);
+            assert(*dst);
         }
         hdr_add(*dst, src);
     }
@@ -1396,12 +1415,8 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
              * parameter from the loop arguments.
              */
             conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-            int ret = hdr_init(
-                    largs->marker_histogram_local->lowest_trackable_value,
-                    largs->marker_histogram_local->highest_trackable_value,
-                    largs->marker_histogram_local->significant_figures,
-                    &conn->latency.marker_histogram);
-            assert(ret == 0);
+            conn->latency.marker_histogram = hdr_init_similar(
+                                                largs->marker_histogram_local);
         }
     }
 
