@@ -102,7 +102,8 @@ struct latency_snapshot {
     struct hdr_histogram *firstbyte_histogram;
     struct hdr_histogram *marker_histogram;
 };
-struct latency_snapshot *engine_get_latency_snapshot(struct engine *);
+void engine_prepare_latency_snapshot(struct engine *);
+struct latency_snapshot *engine_collect_latency_snapshot(struct engine *);
 void engine_free_latency_snapshot(struct latency_snapshot *);
 
 void engine_traffic(struct engine *, non_atomic_wide_t *sent, non_atomic_wide_t *received);

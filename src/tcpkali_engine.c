@@ -397,36 +397,50 @@ struct engine *engine_start(struct engine_params params) {
 }
 
 /*
+ * Init HDR Histogram with properties similar to a given one.
+ */
+static struct hdr_histogram *
+hdr_init_similar(struct hdr_histogram *htemplate) {
+    if(htemplate) {
+        struct hdr_histogram *dst = 0;
+        if(hdr_init(
+            htemplate->lowest_trackable_value,
+            htemplate->highest_trackable_value,
+            htemplate->significant_figures,
+            &dst) == 0) {
+            return dst;
+        }
+    }
+    return NULL;
+}
+
+/*
  * Send a signal to finish work and wait for all workers to terminate.
  */
 void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd) {
     size_t connecting, conn_in, conn_out, conn_counter;
-    struct hdr_histogram *histogram = 0;
 
     engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out, &conn_counter);
 
-    /* Terminate all threads. */
+    /*
+     * Terminate all workers.
+     */
     for(int n = 0; n < eng->n_workers; n++) {
         int rc = write(eng->loops[n].private_control_pipe_wr, "T", 1);
         assert(rc == 1);
     }
+
+    struct hdr_histogram *marker_histogram =
+        hdr_init_similar(eng->loops[0].marker_histogram_local);
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
         void *value;
         pthread_join(eng->threads[n], &value);
         eng->total_data_sent += atomic_wide_get(&largs->worker_data_sent);
         eng->total_data_rcvd += atomic_wide_get(&largs->worker_data_rcvd);
-        if(largs->marker_histogram_local) {
-            if(!histogram) {
-                int ret;
-                ret = hdr_init(
-                        largs->marker_histogram_local->lowest_trackable_value,
-                        largs->marker_histogram_local->highest_trackable_value,
-                        largs->marker_histogram_local->significant_figures,
-                        &histogram);
-                assert(ret == 0);
-            }
-            int64_t nret = hdr_add(histogram, largs->marker_histogram_local);
+        if(marker_histogram) {
+            int64_t nret = hdr_add(marker_histogram,
+                                   largs->marker_histogram_local);
             assert(nret == 0);
         }
     }
@@ -456,15 +470,15 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
         8 * (epoch_data_rcvd / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
-    if(histogram) {
+    if(marker_histogram) {
         printf("Latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
-            hdr_value_at_percentile(histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(histogram, 99.5) / 10.0);
+            hdr_value_at_percentile(marker_histogram, 95.0) / 10.0,
+            hdr_value_at_percentile(marker_histogram, 99.0) / 10.0,
+            hdr_value_at_percentile(marker_histogram, 99.5) / 10.0);
         printf("Mean and max latencies: %.1f/%.1f (mean/max)\n",
-            hdr_mean(histogram) / 10.0,
-            hdr_max(histogram) / 10.0);
-        free(histogram);
+            hdr_mean(marker_histogram) / 10.0,
+            hdr_max(marker_histogram) / 10.0);
+        free(marker_histogram);
     }
     printf("Test duration: %g s.\n", test_duration);
 }
@@ -510,28 +524,38 @@ void engine_free_latency_snapshot(struct latency_snapshot *latency) {
     }
 }
 
-struct latency_snapshot *engine_get_latency_snapshot(struct engine *eng) {
+/*
+ * Prepare latency snapshot data.
+ */
+void engine_prepare_latency_snapshot(struct engine *eng) {
+    if(eng->params.latency_setting != 0) {
+        /*
+         * If histogram is requested, we first need to ask each worker to
+         * assemble that information among its connections.
+         */
+        for(int n = 0; n < eng->n_workers; n++) {
+            int fd = eng->loops[n].private_control_pipe_wr;
+            int wrote = write(fd, "h", 1);
+            assert(wrote == 1);
+        }
+        /* Gather feedback. */
+        for(int n = 0; n < eng->n_workers; n++) {
+            char c;
+            int rd = read(eng->global_feedback_pipe_rd, &c, 1);
+            assert(rd == 1);
+            assert(c == '.');
+        }
+    }
+}
+
+/*
+ * Grab the prepared latency snapshot data.
+ */
+struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
     struct latency_snapshot *latency = calloc(1, sizeof(*latency));
 
     if(eng->params.latency_setting == 0)
         return latency;
-
-    /*
-     * If histogram is requested, we first need to ask each worker to
-     * assemble that information among its connections.
-     */
-    for(int n = 0; n < eng->n_workers; n++) {
-        int fd = eng->loops[n].private_control_pipe_wr;
-        int wrote = write(fd, "h", 1);
-        assert(wrote == 1);
-    }
-    /* Gather feedback. */
-    for(int n = 0; n < eng->n_workers; n++) {
-        char c;
-        int rd = read(eng->global_feedback_pipe_rd, &c, 1);
-        assert(rd == 1);
-        assert(c == '.');
-    }
 
     struct hdr_init_values {
         int64_t lowest_trackable_value;
@@ -1010,6 +1034,7 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         start_new_connection(TK_A);
         break;
     case 'T':
+        worker_update_shared_histograms(largs);
         tk_stop(TK_A);
         break;
     case 'h':

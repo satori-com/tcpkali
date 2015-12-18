@@ -823,7 +823,8 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
 
-        struct latency_snapshot *latency = engine_get_latency_snapshot(eng);
+        engine_prepare_latency_snapshot(eng);
+        struct latency_snapshot *latency = engine_collect_latency_snapshot(eng);
         report_to_statsd(statsd,
             &(statsd_feedback){
                 .opened = to_start,
