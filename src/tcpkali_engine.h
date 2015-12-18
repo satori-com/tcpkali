@@ -80,9 +80,9 @@ struct engine_params {
     struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
 };
 
-struct latency_percentiles {
+struct array_of_doubles {
     size_t size;
-    double *percentiles;
+    double *doubles;
 };
 
 struct engine *engine_start(struct engine_params);
@@ -102,7 +102,8 @@ size_t engine_initiate_new_connections(struct engine *, size_t n);
 void engine_terminate(struct engine *, double epoch_start,
     non_atomic_wide_t initial_data_sent,     /* Data sent during ramp-up */
     non_atomic_wide_t initial_data_received, /* Data received during ramp-up */
-    struct latency_percentiles latency_percentiles /* Report this %'iles */
+    struct array_of_doubles latency_percentiles /* Report latencies at specified
+                                                   %'iles */
     );
 
 #endif  /* TCPKALI_ENGINE_H */

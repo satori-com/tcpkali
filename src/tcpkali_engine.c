@@ -363,7 +363,7 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd, struct latency_percentiles latency_percentiles) {
+void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd, struct array_of_doubles latency_percentiles) {
     size_t connecting, conn_in, conn_out, conn_counter;
     struct hdr_histogram *histogram = 0;
 
@@ -421,19 +421,28 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         8 * (epoch_data_sent / test_duration) / 1000000.0);
     if(histogram) {
         printf("Latency at percentiles: ");
-        if(latency_percentiles.size == 0) {
-            printf("%.1f/%.1f/%.1f (95/99/99.5%%)\n",
-                hdr_value_at_percentile(histogram, 95.0) / 10.0,
-                hdr_value_at_percentile(histogram, 99.0) / 10.0,
-                hdr_value_at_percentile(histogram, 99.5) / 10.0);
-        } else {
-            puts("");
-            for(size_t i = 0; i < latency_percentiles.size; i++) {
-                double perc = latency_percentiles.percentiles[i];
-                printf("    %7.3f%% %.1f ms\n", perc,
-                    hdr_value_at_percentile(histogram, perc) / 10.0);
-            }
+        double default_percentiles[] = { 95.0, 99.0, 99.5 };
+        size_t default_size = sizeof(default_percentiles) / sizeof(double);
+        double *percentiles = latency_percentiles.doubles;
+        size_t size = latency_percentiles.size;
+
+        if(size == 0) {
+            size = default_size;
+            percentiles = default_percentiles;
         }
+        for(size_t i = 0; i < size; i++) {
+            double perc = percentiles[i];
+            printf("%.1f%s",
+                    hdr_value_at_percentile(histogram, perc) / 10.0,
+                    i == size - 1 ? "" : "/");
+        }
+        printf(" (");
+        for(size_t i = 0; i < size; i++) {
+            double perc = percentiles[i];
+            printf("%.1f%s", perc, i == size - 1 ? "" : "/");
+        }
+        printf("%%)\n");
+
         printf("Mean and max latencies: %.1f/%.1f (mean/max)\n",
             hdr_mean(histogram) / 10.0,
             hdr_max(histogram) / 10.0);

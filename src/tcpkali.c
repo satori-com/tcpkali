@@ -154,7 +154,7 @@ typedef struct {
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
-static int parse_latency_percentiles_list(char *str, struct latency_percentiles *latency_percentiles);
+static int parse_array_of_doubles(const char * option, char *str, struct array_of_doubles *array);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 struct addresses detect_listen_addresses(int listen_port);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
@@ -196,9 +196,9 @@ int main(int argc, char **argv) {
     };
     int unescape_message_data = 0;
 
-    struct latency_percentiles latency_percentiles = {
+    struct array_of_doubles latency_percentiles = {
         .size = 0,
-        .percentiles = NULL,
+        .doubles = NULL,
     };
 
     while(1) {
@@ -462,7 +462,7 @@ int main(int argc, char **argv) {
             }
             break;
         case CLI_LAT_OFFSET + 'P': { /* --latency-percentiles */
-            if(parse_latency_percentiles_list(optarg, &latency_percentiles))
+            if(parse_array_of_doubles(option, optarg, &latency_percentiles))
                 exit(EX_USAGE);
             }
             break;
@@ -929,38 +929,32 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
 }
 
 static int
-parse_latency_percentiles_list(char *str, struct latency_percentiles *latency_percentiles) {
-    double *percentiles = NULL;
-    size_t size = 0;
+parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *array) {
+    double *doubles = array->doubles;
+    size_t size = array->size;
 
     for (char *pos = str; *pos; pos++) {
         char *endpos;
         double got = strtod(pos, &endpos);
         if(pos == endpos) {
-            fprintf(stderr, "Latency percentiles: "
-                    "Failed to parse: bad number\n");
+            fprintf(stderr, "%s: Failed to parse: bad number\n", option);
             return -1;
         }
-        if(got < 0.0 || 100.0 < got) {
-            fprintf(stderr, "Latency percentiles: "
-                    "%%'ile isn't in a [0..100] range\n");
+        if(*endpos != 0 && *endpos != ',') {
+            fprintf(stderr, "%s: Failed to parse:"
+                    "invalid separator, use ','\n", option);
             return -1;
         }
-        percentiles = realloc(percentiles, ++size * sizeof(double));
-        percentiles[size-1] = got;
+        doubles = realloc(doubles, ++size * sizeof(double));
+        doubles[size-1] = got;
 
         pos = endpos;
         if(*pos == 0)
             break;
-        if(*pos != ',') {
-            fprintf(stderr, "Latency percentiles: "
-                    "Failed to parse: invalid separator, use ','\n");
-            return -1;
-        }
     }
 
-    latency_percentiles->percentiles = percentiles;
-    latency_percentiles->size = size;
+    array->doubles = doubles;
+    array->size = size;
     return 0;
 }
 
@@ -1035,7 +1029,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "\n"
     "  --latency-marker <string>   Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>   Ignore the first N occurrences of a marker\n"
-    "  --latency-percentiles <Fs>  Report this percentiles\n"
+    "  --latency-percentiles <F>   Report latency at specified percentiles\n"
     "\n"
     "  --statsd                    Enable StatsD output (default %s)\n"
     "  --statsd-host <host>        StatsD host to send data (default is localhost)\n"
@@ -1046,9 +1040,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  <N, R>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <S>:     k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
     "  <Bw>:    kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
-    "\n"
-    "  <Fs>:    comma-separated list of real numbers\n",
+    "  <T>:     ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n",
     (_DBG_MAX - 1),
     conf->max_connections,
     conf->connect_rate,
