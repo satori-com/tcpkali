@@ -36,6 +36,19 @@ on the command line. The *server* mode is triggered by specifying **-l** (**--li
 -v, --verbose *level*
 :   Increase (**-v**) or set (**--verbose**) output verbosity level [0..3]. Default is 1.
 
+-d, --dump-one
+: Dump input and output data on a single arbitrarily chosen connection.
+When connection gets closed, some other connection is used for dumping.
+
+--dump-one-in
+: Dump only the input data on a single connection.
+
+--dump-one-out
+: Dump only the output data on a single connection.
+
+--dump-{all,all-in,all-out}
+: Dump input and/or output data on *all* connections.
+
 -w, --workers *N*
 :   Number of parallel threads to use. Default is to use as many as needed,
     up to the number of cores detected in the system.

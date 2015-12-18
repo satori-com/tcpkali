@@ -47,6 +47,27 @@ Default is 1.
 .RS
 .RE
 .TP
+.B \-d, \-\-dump\-one
+Dump input and output data on a single arbitrarily chosen connection.
+When connection gets closed, some other connection is used for dumping.
+.RS
+.RE
+.TP
+.B \-\-dump\-one\-in
+Dump only the input data on a single connection.
+.RS
+.RE
+.TP
+.B \-\-dump\-one\-out
+Dump only the output data on a single connection.
+.RS
+.RE
+.TP
+.B \-\-dump\-{all,all\-in,all\-out}
+Dump input and/or output data on \f[I]all\f[] connections.
+.RS
+.RE
+.TP
 .B \-w, \-\-workers \f[I]N\f[]
 Number of parallel threads to use.
 Default is to use as many as needed, up to the number of cores detected

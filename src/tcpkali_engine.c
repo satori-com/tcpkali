@@ -139,6 +139,7 @@ struct loop_arguments {
     int private_control_pipe_rd;    /* Private blocking pipe for this worker (read side). */
     int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
     int thread_no;
+    int dump_connect_fd;            /* Which connection to dump */
 
     TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
     unsigned long worker_connections_initiated;
@@ -1329,6 +1330,36 @@ static void setup_channel_lifetime_timer(TK_P_ double first_timeout) {
 }
 
 /*
+ * If we're not dumping something on a main thread, and we need
+ * to keep dumping some connection, enable data dumping for that connection.
+ */
+static void
+maybe_enable_dump(struct loop_arguments *largs, enum conn_type ctype, int fd) {
+    /*
+     * Enable dumping only on main (first) worker.
+     * It spares us from too much coordination over
+     * which worker's channel should get its data dumped.
+     */
+    const int main_thread = (largs->thread_no == 0);
+
+    if(main_thread
+        /* DS_DUMP_ALL is handled differently */
+        && (largs->params.dump_setting & DS_DUMP_ONE)
+        && largs->dump_connect_fd == 0
+        /*
+         * In case tcpkali acts as both client and listener (-l), we only dump
+         * client-side connections.
+         */
+        && (ctype == CONN_OUTGOING
+            || largs->params.remote_addresses.n_addrs == 0)) {
+        /*
+         * Enable dumping on a chosen file descriptor.
+         */
+        largs->dump_connect_fd = fd;
+    }
+}
+
+/*
  * Initialize common connection parameters.
  */
 static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd) {
@@ -1336,6 +1367,8 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
 
     conn->conn_type = conn_type;
     conn->conn_state = conn_state;
+
+    maybe_enable_dump(largs, conn_type, sockfd);
 
     double now = tk_now(TK_A);
 
@@ -1544,10 +1577,10 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  * Debug data by dumping it in a format escaping all the special
  * characters.
  */
-static void debug_dump_data(const char *prefix, const void *data, size_t size) {
+static void debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
     char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
-    fprintf(stderr, "%s%s(%ld): ➧%s⬅︎\n",
-            tcpkali_clear_eol(), prefix, (long)size,
+    fprintf(stderr, "%s%s(%d, %ld): ➧%s⬅︎\n",
+            tcpkali_clear_eol(), prefix, fd, (long)size,
             printable_data(buffer, sizeof(buffer), data, size, 0));
 }
 
@@ -1631,8 +1664,10 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 return;
             default:
                 conn->data_rcvd += rd;
-                if(largs->params.verbosity_level >= DBG_DATA) {
-                    debug_dump_data("Data", buf, rd);
+                if(largs->params.dump_setting & DS_DUMP_ALL_IN
+                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
+                            && largs->dump_connect_fd == tk_fd(w))) {
+                    debug_dump_data("In", tk_fd(w), buf, rd);
                 }
 
                 /*
@@ -1929,8 +1964,10 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     hdr_record_value(largs->firstbyte_histogram_local, latency);
                 }
                 conn->data_rcvd += rd;
-                if(largs->params.verbosity_level >= DBG_DATA) {
-                    debug_dump_data("Data", buf, rd);
+                if(largs->params.dump_setting & DS_DUMP_ALL_IN
+                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
+                            && largs->dump_connect_fd == tk_fd(w))) {
+                    debug_dump_data("In", tk_fd(w), buf, rd);
                 }
                 latency_record_incoming_ts(TK_A_ conn, buf, rd);
 
@@ -1999,6 +2036,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             if(wrote > 0) {
                 /* Record latencies for the body only, not headers */
                 latency_record_outgoing_ts(TK_A_ conn, wrote);
+                if(largs->params.dump_setting & DS_DUMP_ALL_OUT
+                    || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
+                            && largs->dump_connect_fd == tk_fd(w))) {
+                    debug_dump_data("Out", tk_fd(w), position, wrote);
+                }
             }
         }
     }
@@ -2144,6 +2186,11 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
     }
 
     connection_free_internals(conn);
+
+    /* Stop dumping a given connection, if being dumped. */
+    if(largs->dump_connect_fd == tk_fd(&conn->watcher)) {
+        largs->dump_connect_fd = 0;
+    }
 
     tk_close(&conn->watcher, free_connection_by_handle);
 }

@@ -76,6 +76,14 @@ struct engine_params {
     struct message_collection    message_collection; /* A descr. what to send */
     struct transport_data_spec  *data_templates[2]; /* client, server tmpls */
     enum {
+        DS_DUMP_ONE_IN  = 1,
+        DS_DUMP_ONE_OUT = 2,
+        DS_DUMP_ONE     = 3,    /* 2|1 */
+        DS_DUMP_ALL_IN  = 4,
+        DS_DUMP_ALL_OUT = 8,
+        DS_DUMP_ALL     = 12    /* 8|4 */
+    } dump_setting;
+    enum {
         LMEASURE_CONNECT    = (1<<0),
         LMEASURE_FIRSTBYTE  = (1<<1),
         LMEASURE_MARKER     = (1<<2)

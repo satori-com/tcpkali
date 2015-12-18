@@ -64,14 +64,21 @@
 #define CLI_CONN_OFFSET     (1<<11)
 #define CLI_SOCKET_OPT      (1<<12)
 #define CLI_LATENCY         (1<<13)
+#define CLI_DUMP            (1<<14)
 static struct option cli_long_options[] = {
     { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
-    { "channel-bandwidth-upstream", 1, 0, 'u' },
-    { "channel-bandwidth-downstream", 1, 0, 'd' },
+    { "channel-bandwidth-upstream", 1, 0, 'U' },
+    { "channel-bandwidth-downstream", 1, 0, 'D' },
     { "connections", 1, 0, 'c' },
     { "connect-rate", 1, 0, 'R' },
     { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
     { "duration", 1, 0, 'T' },
+    { "dump-one", 0, 0, CLI_DUMP + '1' },
+    { "dump-one-in", 0, 0, CLI_DUMP + 'i' },
+    { "dump-one-out", 0, 0, CLI_DUMP + 'o' },
+    { "dump-all", 0, 0, CLI_DUMP + 'a' },
+    { "dump-all-in", 0, 0, CLI_DUMP + 'I' },
+    { "dump-all-out", 0, 0, CLI_DUMP + 'O' },
     { "first-message", 1, 0, '1' },
     { "first-message-file", 1, 0, 'F' },
     { "help", 0, 0, 'h' },
@@ -199,7 +206,7 @@ int main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "hc:em:f:r:l:vw:T:", cli_long_options, NULL);
+        c = getopt_long(argc, argv, "dhc:em:f:r:l:vw:T:", cli_long_options, NULL);
         if(c == -1)
             break;
         switch(c) {
@@ -220,6 +227,8 @@ int main(int argc, char **argv) {
             if(engine_params.verbosity_level >= _DBG_MAX) {
                 engine_params.verbosity_level = (_DBG_MAX-1);
             }
+            if(engine_params.verbosity_level >= DBG_DATA)
+                engine_params.dump_setting = DS_DUMP_ALL;
             break;
         case CLI_VERBOSE_OFFSET + 'v':  /* --verbose <level> */
             engine_params.verbosity_level = atoi(optarg);
@@ -228,6 +237,28 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Expecting --verbose=[0..%d]\n", _DBG_MAX-1);
                 exit(EX_USAGE);
             }
+            if(engine_params.verbosity_level >= DBG_DATA)
+                engine_params.dump_setting = DS_DUMP_ALL;
+            break;
+        case 'd':   /* -d */
+            /* FALL THROUGH */
+        case CLI_DUMP + '1':    /* --dump-one */
+            engine_params.dump_setting |= DS_DUMP_ONE;
+            break;
+        case CLI_DUMP + 'i':    /* --dump-one-in */
+            engine_params.dump_setting |= DS_DUMP_ONE_IN;
+            break;
+        case CLI_DUMP + 'o':    /* --dump-one-out */
+            engine_params.dump_setting |= DS_DUMP_ONE_OUT;
+            break;
+        case CLI_DUMP + 'a':    /* --dump-all */
+            engine_params.dump_setting |= DS_DUMP_ALL;
+            break;
+        case CLI_DUMP + 'I':    /* --dump-all-in */
+            engine_params.dump_setting |= DS_DUMP_ALL_IN;
+            break;
+        case CLI_DUMP + 'O':    /* --dump-all-out */
+            engine_params.dump_setting |= DS_DUMP_ALL_OUT;
             break;
         case 'c':
             conf.max_connections = parse_with_multipliers(option, optarg,
@@ -307,7 +338,7 @@ int main(int argc, char **argv) {
             engine_params.requested_workers = n;
             break;
             }
-        case 'u': { /* --channel-bandwidth-upstream <Bw> */
+        case 'U': { /* --channel-bandwidth-upstream <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
@@ -318,7 +349,7 @@ int main(int argc, char **argv) {
             engine_params.channel_send_rate = RATE_BPS(Bps);
             break;
             }
-        case 'd': { /* --channel-bandwidth-downstream <Bw> */
+        case 'D': { /* --channel-bandwidth-downstream <Bw> */
             double Bps = parse_with_multipliers(option, optarg,
                         bw_multiplier,
                         sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
@@ -982,6 +1013,10 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  -h, --help                   Print this help screen, then exit\n"
     "  --version                    Print version number, then exit\n"
     "  -v, --verbose <level=1>      Increase (-v) or set verbosity level [0..%d]\n"
+    "  -d, --dump-one               Dump i/o data for a single connection\n"
+    "  --dump-one-in                Dump incoming data for a single connection\n"
+    "  --dump-one-out               Dump outgoing data for a single connection\n"
+    "  --dump-{all,all-in,all-out}  Dump i/o data for all connections\n"
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "  --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)\n"
     "  --rcvbuf <SizeBytes>         Set TCP receive buffers (set SO_RCVBUF)\n"
