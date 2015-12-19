@@ -2,6 +2,9 @@
 0.?:
     * Added --latency-connect to measure connect latency.
     * Added --latency-first-byte to measure latency to first byte.
+    * Added --latency-percentiles to control percentile reporting.
+    * Mean/max latencies for messages are not reported, for UI consistency.
+      Use --latency-percentiles 50,100 to display.
     * Added --dump-{one,all}{,-in,-out} to dump all or one connections' i/o.
 
 0.7:    2015-Dec-11

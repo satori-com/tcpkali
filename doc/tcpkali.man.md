@@ -182,8 +182,10 @@ and the time the latency marker is observed in the downstream traffic
 :   Ignore the first *N* observations of a **--latency-marker**.
 
 --latency-percentiles *list*
-:   Report latency at specified percentiles. The option takes comma-separated
-    list of percentile numbers. Default is `95.0,99.0,99.5`.
+:   Report latency at specified percentiles.
+    The option takes a comma-separated list of floating point values.
+    Mean and maximum values can be reported using **--latency-percentiles 50,100**.
+    Default is `95,99,99.5`.
 
 ## STATSD OPTIONS
 

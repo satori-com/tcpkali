@@ -283,8 +283,10 @@ Ignore the first \f[I]N\f[] observations of a
 .TP
 .B \-\-latency\-percentiles \f[I]list\f[]
 Report latency at specified percentiles.
-The option takes comma\-separated list of percentile numbers.
-Default is \f[C]95.0,99.0,99.5\f[].
+The option takes a comma\-separated list of floating point values.
+Mean and maximum values can be reported using
+\f[B]\-\-latency\-percentiles 50,100\f[].
+Default is \f[C]95,99,99.5\f[].
 .RS
 .RE
 .SS STATSD OPTIONS

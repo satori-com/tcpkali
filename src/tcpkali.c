@@ -1100,7 +1100,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --latency-first-byte         Measure time to first byte latency\n"
     "  --latency-marker <string>    Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>    Ignore the first N occurrences of a marker\n"
-    "  --latency-percentiles <F>    Report latency at specified percentiles\n"
+    "  --latency-percentiles <list> Report latency at specified percentiles\n"
     "\n"
     "  --statsd                     Enable StatsD output (default %s)\n"
     "  --statsd-host <host>         StatsD host to send data (default is localhost)\n"
