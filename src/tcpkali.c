@@ -1036,9 +1036,9 @@ parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *a
             fprintf(stderr, "%s: Failed to parse: bad number\n", option);
             return -1;
         }
-        if(*endpos != 0 && *endpos != ',') {
+        if(*endpos != 0 && *endpos != ',' && *endpos != '/') {
             fprintf(stderr, "%s: Failed to parse: "
-                    "invalid separator, use ','\n", option);
+                    "invalid separator, use ',' or '/'\n", option);
             return -1;
         }
         doubles = realloc(doubles, ++size * sizeof(double));
