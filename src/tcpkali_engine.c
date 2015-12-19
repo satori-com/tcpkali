@@ -441,9 +441,6 @@ static void latency_snapshot_print(struct array_of_doubles want_percentiles, str
     if(latency->marker_histogram) {
         print_latency_hdr_histrogram_percentiles("Message",
             want_percentiles, latency->marker_histogram);
-        printf("Mean and max message latencies: %.1f/%.1f (mean/max)\n",
-            hdr_mean(latency->marker_histogram) / 10.0,
-            hdr_max(latency->marker_histogram) / 10.0);
     }
 }
 
