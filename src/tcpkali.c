@@ -86,6 +86,7 @@ static struct option cli_long_options[] = {
     { "latency-first-byte", 0, 0,   CLI_LATENCY + 'f' },
     { "latency-marker", 1, 0,       CLI_LATENCY + 'm' },
     { "latency-marker-skip", 1, 0,  CLI_LATENCY + 's' },
+    { "latency-percentiles", 1, 0,  CLI_LATENCY + 'p'},
     { "listen-port", 1, 0, 'l' },
     { "listen-mode", 1, 0, 'M' },
     { "message", 1, 0, 'm' },
@@ -163,6 +164,7 @@ typedef struct {
 static void usage(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
+static int parse_array_of_doubles(const char * option, char *str, struct array_of_doubles *array);
 static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
@@ -202,6 +204,11 @@ int main(int argc, char **argv) {
         .nagle_setting = NSET_UNSET
     };
     int unescape_message_data = 0;
+
+    struct array_of_doubles latency_percentiles = {
+        .size = 0,
+        .doubles = NULL,
+    };
 
     while(1) {
         char *option = argv[optind];
@@ -500,6 +507,19 @@ int main(int argc, char **argv) {
             }
             }
             break;
+        case CLI_LATENCY + 'p': { /* --latency-percentiles */
+            if(parse_array_of_doubles(option, optarg, &latency_percentiles))
+                exit(EX_USAGE);
+            for(size_t i = 0; i < latency_percentiles.size; i++) {
+                double number = latency_percentiles.doubles[i];
+                if(number < 0.0 || number > 100.0) {
+                    fprintf(stderr, "--latency-percentiles: "
+                            "Percentile number should be within [0..100] range\n");
+                    exit(EX_USAGE);
+                }
+            }
+            }
+            break;
         case 'I': { /* --source-ip */
                 if(add_source_ip(&engine_params.source_addresses, optarg) < 0) {
                     fprintf(stderr, "--source-ip=%s: local IP address expected\n",
@@ -741,7 +761,10 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
         checkpoint.initial_data_sent,
-        checkpoint.initial_data_received);
+        checkpoint.initial_data_received,
+        latency_percentiles);
+
+    free(latency_percentiles.doubles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0);
@@ -1001,6 +1024,36 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
     return value;
 }
 
+static int
+parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *array) {
+    double *doubles = array->doubles;
+    size_t size = array->size;
+
+    for (char *pos = str; *pos; pos++) {
+        char *endpos;
+        double got = strtod(pos, &endpos);
+        if(pos == endpos) {
+            fprintf(stderr, "%s: Failed to parse: bad number\n", option);
+            return -1;
+        }
+        if(*endpos != 0 && *endpos != ',') {
+            fprintf(stderr, "%s: Failed to parse: "
+                    "invalid separator, use ','\n", option);
+            return -1;
+        }
+        doubles = realloc(doubles, ++size * sizeof(double));
+        doubles[size-1] = got;
+
+        pos = endpos;
+        if(*pos == 0)
+            break;
+    }
+
+    array->doubles = doubles;
+    array->size = size;
+    return 0;
+}
+
 /*
  * Display the Usage screen.
  */
@@ -1047,6 +1100,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --latency-first-byte         Measure time to first byte latency\n"
     "  --latency-marker <string>    Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>    Ignore the first N occurrences of a marker\n"
+    "  --latency-percentiles <F>    Report latency at specified percentiles\n"
     "\n"
     "  --statsd                     Enable StatsD output (default %s)\n"
     "  --statsd-host <host>         StatsD host to send data (default is localhost)\n"

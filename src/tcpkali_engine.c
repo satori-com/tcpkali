@@ -400,24 +400,47 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Format and print latency snapshot.
  */
-static void latency_snapshot_print(struct latency_snapshot *latency) {
+static void print_latency_hdr_histrogram_percentiles(char *title, struct array_of_doubles want_percentiles, struct hdr_histogram *histogram) {
+    assert(histogram);
+
+    double *percentiles = want_percentiles.doubles;
+    size_t size = want_percentiles.size;
+
+    double default_percentiles[] = { 95.0, 99.0, 99.5 };
+    size_t default_size = sizeof(default_percentiles) / sizeof(double);
+
+    if(size == 0) {
+        size = default_size;
+        percentiles = default_percentiles;
+    }
+
+    printf("%s latency at percentiles: ", title);
+    for(size_t i = 0; i < size; i++) {
+        double perc = percentiles[i];
+        printf("%.1f%s",
+                hdr_value_at_percentile(histogram, perc) / 10.0,
+                i == size - 1 ? "" : "/");
+    }
+    printf(" (");
+    for(size_t i = 0; i < size; i++) {
+        double perc = percentiles[i];
+        printf("%.1f%s", perc, i == size - 1 ? "" : "/");
+    }
+    printf("%%)\n");
+}
+
+static void latency_snapshot_print(struct array_of_doubles want_percentiles, struct latency_snapshot *latency) {
     if(latency->connect_histogram) {
-        printf("TCP connect latency: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
-            hdr_value_at_percentile(latency->connect_histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(latency->connect_histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(latency->connect_histogram, 99.5) / 10.0);
+        print_latency_hdr_histrogram_percentiles("TCP connect",
+            want_percentiles, latency->connect_histogram);
     }
     if(latency->firstbyte_histogram) {
-        printf("First byte latency: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
-            hdr_value_at_percentile(latency->firstbyte_histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(latency->firstbyte_histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(latency->firstbyte_histogram, 99.5) / 10.0);
+        print_latency_hdr_histrogram_percentiles("First byte",
+            want_percentiles, latency->firstbyte_histogram);
     }
     if(latency->marker_histogram) {
-        printf("Message latency at percentiles: %.1f/%.1f/%.1f (95/99/99.5%%)\n",
-            hdr_value_at_percentile(latency->marker_histogram, 95.0) / 10.0,
-            hdr_value_at_percentile(latency->marker_histogram, 99.0) / 10.0,
-            hdr_value_at_percentile(latency->marker_histogram, 99.5) / 10.0);
+        print_latency_hdr_histrogram_percentiles("Message",
+            want_percentiles, latency->marker_histogram);
         printf("Mean and max message latencies: %.1f/%.1f (mean/max)\n",
             hdr_mean(latency->marker_histogram) / 10.0,
             hdr_max(latency->marker_histogram) / 10.0);
@@ -427,7 +450,7 @@ static void latency_snapshot_print(struct latency_snapshot *latency) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd) {
+void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd, struct array_of_doubles want_latency_percentiles) {
     size_t connecting, conn_in, conn_out, conn_counter;
 
     engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out, &conn_counter);
@@ -480,7 +503,7 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
         8 * (epoch_data_rcvd / test_duration) / 1000000.0,
         8 * (epoch_data_sent / test_duration) / 1000000.0);
-    latency_snapshot_print(latency);
+    latency_snapshot_print(want_latency_percentiles, latency);
 
     engine_free_latency_snapshot(latency);
     printf("Test duration: %g s.\n", test_duration);
