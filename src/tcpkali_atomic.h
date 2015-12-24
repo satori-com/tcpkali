@@ -76,12 +76,12 @@ atomic_inc_and_get(atomic_narrow_t *i) {
 
 static inline non_atomic_narrow_t UNUSED
 atomic_get(const atomic_narrow_t *i) {
-    return __sync_add_and_fetch(&i->_atomic_val, 0);
+    return __sync_add_and_fetch(&((atomic_narrow_t *)i)->_atomic_val, 0);
 }
 
 static non_atomic_wide_t UNUSED
 atomic_wide_get(const atomic_wide_t *i) {
-    return __sync_add_and_fetch(&i->_atomic_val, 0);
+    return __sync_add_and_fetch(&((atomic_wide_t *)i)->_atomic_val, 0);
 }
 
 #else   /* No builtin atomics, emulate */
