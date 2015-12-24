@@ -39,6 +39,7 @@
 #include <term.h>
 #endif
 
+#include "tcpkali_common.h"
 #include "tcpkali_terminfo.h"
 
 static int int_utf8 = 0;
@@ -56,7 +57,7 @@ static void enable_cursor(void) {
 
 static sig_atomic_t terminal_width_changed = 0;
 
-static void raise_terminal_width_changed(int _sig) {
+static void raise_terminal_width_changed(int _sig UNUSED) {
     terminal_width_changed = 1;
 }
 
