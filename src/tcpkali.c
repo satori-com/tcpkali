@@ -133,10 +133,8 @@ static struct tcpkali_config {
 struct stats_checkpoint {
     double epoch_start;   /* Start of current checkpoint epoch */
     double last_update;   /* Last we updated the checkpoint structure */
-    non_atomic_wide_t initial_data_sent;
-    non_atomic_wide_t initial_data_received;
-    non_atomic_wide_t last_data_sent;
-    non_atomic_wide_t last_data_received;
+    non_atomic_traffic_stats initial_traffic_stats; /* Ramp-up phase traffic */
+    non_atomic_traffic_stats last_traffic_stats;
 };
 
 enum work_phase {
@@ -153,8 +151,7 @@ typedef struct {
     size_t conns_out;
     size_t bps_in;
     size_t bps_out;
-    size_t rcvd;
-    size_t sent;
+    non_atomic_traffic_stats traffic_delta;
     struct latency_snapshot *latency;
 } statsd_feedback;
 
@@ -709,7 +706,7 @@ int main(int argc, char **argv) {
     mavg traffic_mavgs[2];
     mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
     mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
-    struct stats_checkpoint checkpoint = { 0, 0, 0, 0, 0, 0 };
+    struct stats_checkpoint checkpoint = { 0, 0, {0,0,0,0}, {0,0,0,0} };
 
     /*
      * Ramp up to the specified number of connections by opening them at a
@@ -742,9 +739,10 @@ int main(int argc, char **argv) {
     /*
      * Start measuring the steady-state performance, as opposed to
      * ramping up and waiting for the connections to be established.
+     * (initial_traffic_stats) contain traffic numbers accumulated duing
+     * ramp-up time.
      */
-    engine_traffic(eng, &checkpoint.initial_data_sent,
-                        &checkpoint.initial_data_received);
+    checkpoint.initial_traffic_stats = engine_traffic(eng);
     checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
@@ -760,9 +758,8 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
-        checkpoint.initial_data_sent,
-        checkpoint.initial_data_received,
-        latency_percentiles);
+                     checkpoint.initial_traffic_stats,
+                     latency_percentiles);
 
     free(latency_percentiles.doubles);
 
@@ -861,18 +858,16 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         }
 
         /*
-         * sent & rcvd to contain bytes sent/rcvd within the last
+         * traffic_delta.* contains traffic observed within the last
          * period (now - checkpoint->last_stats_sent).
          */
-        size_t sent = checkpoint->last_data_sent;
-        size_t rcvd = checkpoint->last_data_received;
-        engine_traffic(eng, &checkpoint->last_data_sent,
-                            &checkpoint->last_data_received);
-        sent = checkpoint->last_data_sent - sent;
-        rcvd = checkpoint->last_data_received - rcvd;
+        non_atomic_traffic_stats _last = checkpoint->last_traffic_stats;
+        checkpoint->last_traffic_stats = engine_traffic(eng);
+        non_atomic_traffic_stats traffic_delta =
+            subtract_traffic_stats(checkpoint->last_traffic_stats, _last);
 
-        mavg_bump(&traffic_mavgs[0], now, (double)rcvd);
-        mavg_bump(&traffic_mavgs[1], now, (double)sent);
+        mavg_bump(&traffic_mavgs[0], now, (double)traffic_delta.bytes_rcvd);
+        mavg_bump(&traffic_mavgs[1], now, (double)traffic_delta.bytes_sent);
 
         double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
@@ -886,8 +881,7 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 .conns_out = conns_out,
                 .bps_in = bps_in,
                 .bps_out = bps_out,
-                .rcvd = rcvd,
-                .sent = sent,
+                .traffic_delta = traffic_delta,
                 .latency = latency
             });
 
@@ -942,9 +936,10 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     SBATCH(STATSD_GAUGE, "traffic.bitrate", sf->bps_in + sf->bps_out);
     SBATCH(STATSD_GAUGE, "traffic.bitrate.in", sf->bps_in);
     SBATCH(STATSD_GAUGE, "traffic.bitrate.out", sf->bps_out);
-    SBATCH(STATSD_COUNT, "traffic.data", sf->rcvd + sf->sent);
-    SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->rcvd);
-    SBATCH(STATSD_COUNT, "traffic.data.sent", sf->sent);
+    SBATCH(STATSD_COUNT, "traffic.data", sf->traffic_delta.bytes_rcvd
+                                       + sf->traffic_delta.bytes_sent);
+    SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->traffic_delta.bytes_rcvd);
+    SBATCH(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
 
     if(sf->latency->marker_histogram || sf == &empty_feedback) {
 

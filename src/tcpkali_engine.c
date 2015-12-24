@@ -60,6 +60,7 @@
 #include "tcpkali_terminfo.h"
 #include "tcpkali_expr.h"
 #include "tcpkali_data.h"
+#include "tcpkali_traffic_stats.h"
 
 #ifndef TAILQ_FOREACH_SAFE
 #define TAILQ_FOREACH_SAFE(var, head, field, tvar)             \
@@ -76,10 +77,8 @@ struct connection {
     tk_timer timer;
     off_t write_offset;
     struct transport_data_spec data;
-    non_atomic_wide_t data_sent;
-    non_atomic_wide_t data_rcvd;
-    non_atomic_wide_t data_sent_reported;
-    non_atomic_wide_t data_rcvd_reported;
+    non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
+    non_atomic_traffic_stats traffic_reported; /* Reported to worker */
     float channel_eol_point;    /* End of life time, since epoch */
     struct pacefier   send_pace;
     struct pacefier   recv_pace;
@@ -179,8 +178,7 @@ struct loop_arguments {
     } *remote_stats;
 
     /* The following atomic members are accessed outside of worker thread */
-    atomic_wide_t worker_data_sent;
-    atomic_wide_t worker_data_rcvd;
+    atomic_traffic_stats worker_traffic_stats;
     atomic_narrow_t outgoing_connecting;
     atomic_narrow_t outgoing_established;
     atomic_narrow_t incoming_established;
@@ -209,8 +207,7 @@ struct engine {
     int global_feedback_pipe_rd;
     int next_worker_order[_CONTROL_MESSAGES_MAXID];
     int n_workers;
-    non_atomic_wide_t total_data_sent;
-    non_atomic_wide_t total_data_rcvd;
+    non_atomic_traffic_stats total_traffic_stats;
     atomic_narrow_t connection_unique_id_global;
     pthread_mutex_t serialize_output_lock;
 };
@@ -447,7 +444,7 @@ static void latency_snapshot_print(struct array_of_doubles want_percentiles, str
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initial_data_sent, non_atomic_wide_t initial_data_rcvd, struct array_of_doubles want_latency_percentiles) {
+void engine_terminate(struct engine *eng, double epoch, non_atomic_traffic_stats initial_traffic_stats, struct array_of_doubles want_latency_percentiles) {
     size_t connecting, conn_in, conn_out, conn_counter;
 
     engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out, &conn_counter);
@@ -464,8 +461,8 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         struct loop_arguments *largs = &eng->loops[n];
         void *value;
         pthread_join(eng->threads[n], &value);
-        eng->total_data_sent += atomic_wide_get(&largs->worker_data_sent);
-        eng->total_data_rcvd += atomic_wide_get(&largs->worker_data_rcvd);
+        add_traffic_numbers_AtoN(&largs->worker_traffic_stats,
+                                 &eng->total_traffic_stats);
     }
 
     /*
@@ -479,18 +476,20 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
     /* Data snd/rcv after ramp-up (since epoch) */
     double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
-    non_atomic_wide_t epoch_data_sent = eng->total_data_sent-initial_data_sent;
-    non_atomic_wide_t epoch_data_rcvd = eng->total_data_rcvd-initial_data_rcvd;
-    non_atomic_wide_t epoch_data_transmitted = epoch_data_sent+epoch_data_rcvd;
+    non_atomic_traffic_stats epoch_traffic =
+            subtract_traffic_stats(eng->total_traffic_stats,
+                                   initial_traffic_stats);
+    non_atomic_wide_t epoch_data_transmitted = epoch_traffic.bytes_sent
+                                             + epoch_traffic.bytes_rcvd;
 
     char buf[64];
 
     printf("Total data sent:     %s (%" PRIu64 " bytes)\n",
-        express_bytes(epoch_data_sent, buf, sizeof(buf)),
-        (uint64_t)epoch_data_sent);
+        express_bytes(epoch_traffic.bytes_sent, buf, sizeof(buf)),
+        (uint64_t)epoch_traffic.bytes_sent);
     printf("Total data received: %s (%" PRIu64 " bytes)\n",
-        express_bytes(epoch_data_rcvd, buf, sizeof(buf)),
-        (uint64_t)epoch_data_rcvd);
+        express_bytes(epoch_traffic.bytes_rcvd, buf, sizeof(buf)),
+        (uint64_t)epoch_traffic.bytes_rcvd);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f⇅ Mbps (%.1f kBps)\n",
@@ -498,8 +497,8 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_wide_t initia
         (epoch_data_transmitted / test_duration) / conns / 1000.0
     );
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * (epoch_data_rcvd / test_duration) / 1000000.0,
-        8 * (epoch_data_sent / test_duration) / 1000000.0);
+        8 * (epoch_traffic.bytes_rcvd / test_duration) / 1000000.0,
+        8 * (epoch_traffic.bytes_sent / test_duration) / 1000000.0);
     latency_snapshot_print(want_latency_percentiles, latency);
 
     engine_free_latency_snapshot(latency);
@@ -661,13 +660,12 @@ struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
     return latency;
 }
 
-void engine_traffic(struct engine *eng, non_atomic_wide_t *sent, non_atomic_wide_t *received) {
-    *sent = 0;
-    *received = 0;
+non_atomic_traffic_stats engine_traffic(struct engine *eng) {
+    non_atomic_traffic_stats traffic = { 0, 0, 0, 0 };
     for(int n = 0; n < eng->n_workers; n++) {
-        *sent += atomic_wide_get(&eng->loops[n].worker_data_sent);
-        *received += atomic_wide_get(&eng->loops[n].worker_data_rcvd);
+        add_traffic_numbers_AtoN(&eng->loops[n].worker_traffic_stats, &traffic);
     }
+    return traffic;
 }
 
 /*
@@ -915,7 +913,9 @@ static void *single_engine_loop_thread(void *argp) {
             "  %lu connection_failures\n"
             "  ↳ %lu connection_timeouts\n"
             "  %"PRIaw" worker_data_sent\n"
-            "  %"PRIaw" worker_data_rcvd\n",
+            "  %"PRIaw" worker_data_rcvd\n"
+            "  %"PRIaw" worker_num_writes\n"
+            "  %"PRIaw" worker_num_reads\n",
         largs->thread_no,
         atomic_get(&largs->incoming_established),
         atomic_get(&largs->outgoing_established),
@@ -925,8 +925,10 @@ static void *single_engine_loop_thread(void *argp) {
         largs->worker_connections_accepted,
         largs->worker_connection_failures,
         largs->worker_connection_timeouts,
-        atomic_wide_get(&largs->worker_data_sent),
-        atomic_wide_get(&largs->worker_data_rcvd));
+        atomic_wide_get(&largs->worker_traffic_stats.bytes_sent),
+        atomic_wide_get(&largs->worker_traffic_stats.bytes_rcvd),
+        atomic_wide_get(&largs->worker_traffic_stats.num_writes),
+        atomic_wide_get(&largs->worker_traffic_stats.num_reads));
 
     if(largs->connect_histogram_local) {
         struct hdr_histogram *hist = largs->connect_histogram_local;
@@ -1683,7 +1685,7 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
-                conn->data_rcvd += rd;
+                conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                             && largs->dump_connect_fd == tk_fd(w))) {
@@ -1854,8 +1856,8 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
      * should be limited by the HTTP upgrade headers.
      * We then wait for the server reply.
      */
-    if(conn->data_rcvd == 0
-            && conn->data_sent <= conn->data.ws_hdr_size
+    if(conn->traffic_ongoing.bytes_rcvd == 0
+            && conn->traffic_ongoing.bytes_sent <= conn->data.ws_hdr_size
             && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
             && largs->params.websocket_enable) {
         accessible_size = conn->data.ws_hdr_size;
@@ -1866,9 +1868,9 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
         return;
     }
 
-    if(conn->data_sent < conn->data.once_size) {
+    if(conn->traffic_ongoing.bytes_sent < conn->data.once_size) {
         /* Send header... once per connection lifetime */
-        *available_header = conn->data.once_size - conn->data_sent;
+        *available_header = conn->data.once_size - conn->traffic_ongoing.bytes_sent;
         assert(available);
     } else {
         *available_header = 0;    /* Sending body */
@@ -1969,7 +1971,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                  * the server response before sending rest, unblock our WRITE
                  * side.
                  */
-                if(conn->data_rcvd == 0
+                if(conn->traffic_ongoing.bytes_rcvd == 0
                 && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
                 && largs->params.websocket_enable
                 && conn->data.ws_hdr_size
@@ -1978,12 +1980,12 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     conn->conn_wish |= CW_WRITE_INTEREST;
                     update_io_interest(TK_A_ conn);
                 }
-                if(conn->data_rcvd == 0 && largs->firstbyte_histogram_local) {
+                if(conn->traffic_ongoing.bytes_rcvd == 0 && largs->firstbyte_histogram_local) {
                     int64_t latency = 10000 * (tk_now(TK_A)
                                         - conn->latency.connection_initiated);
                     hdr_record_value(largs->firstbyte_histogram_local, latency);
                 }
-                conn->data_rcvd += rd;
+                conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                             && largs->dump_connect_fd == tk_fd(w))) {
@@ -2047,7 +2049,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             }
         } else {
             conn->write_offset += wrote;
-            conn->data_sent += wrote;
+            conn->traffic_ongoing.bytes_sent += wrote;
             if(record_moved)
                 pacefier_moved(&conn->send_pace,
                                conn->send_limit.bytes_per_second,
@@ -2098,12 +2100,11 @@ static void connections_flush_stats(TK_P) {
  */
 static void connection_flush_stats(TK_P_ struct connection *conn) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    size_t sent_delta = conn->data_sent - conn->data_sent_reported;
-    size_t rcvd_delta = conn->data_rcvd - conn->data_rcvd_reported;
-    conn->data_sent_reported = conn->data_sent;
-    conn->data_rcvd_reported = conn->data_rcvd;
-    atomic_add(&largs->worker_data_sent, sent_delta);
-    atomic_add(&largs->worker_data_rcvd, rcvd_delta);
+    non_atomic_traffic_stats delta = subtract_traffic_stats(
+                                        conn->traffic_ongoing,
+                                        conn->traffic_reported);
+    conn->traffic_reported = conn->traffic_ongoing;
+    add_traffic_numbers_NtoA(&delta, &largs->worker_traffic_stats);
 }
 
 static void free_connection_by_handle(tk_io *w) {

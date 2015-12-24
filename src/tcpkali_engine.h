@@ -30,6 +30,7 @@
 #include <StreamBoyerMooreHorspool.h>
 #include <hdr_histogram.h>
 
+#include "tcpkali_traffic_stats.h"
 #include "tcpkali_transport.h"
 #include "tcpkali_atomic.h"
 #include "tcpkali_rate.h"
@@ -120,16 +121,15 @@ void engine_prepare_latency_snapshot(struct engine *);
 struct latency_snapshot *engine_collect_latency_snapshot(struct engine *);
 void engine_free_latency_snapshot(struct latency_snapshot *);
 
-void engine_traffic(struct engine *, non_atomic_wide_t *sent, non_atomic_wide_t *received);
-
-
 size_t engine_initiate_new_connections(struct engine *, size_t n);
 
+non_atomic_traffic_stats engine_traffic(struct engine *);
+
 void engine_terminate(struct engine *, double epoch_start,
-    non_atomic_wide_t initial_data_sent,     /* Data sent during ramp-up */
-    non_atomic_wide_t initial_data_received, /* Data received during ramp-up */
-    struct array_of_doubles want_latency_percentiles /* Report latencies at
-                                                        specified %'iles */
+    /* Traffic observed during ramp-up phase */
+    non_atomic_traffic_stats initial_traffic,
+    /* Report latencies at specified %'iles */
+    struct array_of_doubles want_latency_percentiles
     );
 
 #endif  /* TCPKALI_ENGINE_H */
