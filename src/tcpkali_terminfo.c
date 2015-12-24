@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 #include "config.h"
 
@@ -41,6 +42,7 @@
 #include "tcpkali_terminfo.h"
 
 static int int_utf8 = 0;
+static int terminal_width = 80;
 static char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
 
 const char *tcpkali_clear_eol() { return str_clear_eol; }
@@ -52,11 +54,30 @@ static void enable_cursor(void) {
     printf("%s", tgetstr("ve", 0)); /* cursor_normal */
 }
 
+static sig_atomic_t terminal_width_changed = 0;
+
+static void raise_terminal_width_changed(int _sig) {
+    terminal_width_changed = 1;
+}
+
+int tcpkali_terminal_width(void) {
+    if(terminal_width_changed) {
+        terminal_width_changed = 0;
+        tcpkali_init_terminal();
+    }
+    return terminal_width;
+}
+
 void
 tcpkali_init_terminal(void) {
     char *term = getenv("TERM");
     if(!term) return;
     tgetent(0, term);
+
+    signal(SIGWINCH, raise_terminal_width_changed);
+    int n = tgetnum("co");
+    if(n > 0)
+        terminal_width = n;
 
     if(strcasestr(getenv("LANG") ? : "", "utf-8"))
         int_utf8 = 1;
@@ -72,5 +93,6 @@ tcpkali_init_terminal(void) {
 #else   /* !HAVE_LIBNCURSES */
 
 void tcpkali_init_terminal(void) { return; }
+int tcpkali_terminal_width(void) { return terminal_width; }
 
 #endif  /* HAVE_LIBNCURSES */

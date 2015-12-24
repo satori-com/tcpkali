@@ -37,5 +37,4 @@ void block_term_signals();
  */
 void flagify_term_signals(int *flag);
 
-
 #endif  /* TCPKALI_SIGNAL_H */

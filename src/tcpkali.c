@@ -982,18 +982,33 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
 
 static void
 print_connections_line(int conns, int max_conns, int conns_counter) {
-    char buf[80];
-    buf[0] = '|';
-    const int ribbon_width = 50;
+    int terminal_width = tcpkali_terminal_width();
+
+    char info[terminal_width + 1];
+    ssize_t info_width = snprintf(info, sizeof(info),
+                    "| %d of %d (%d)", conns, max_conns, conns_counter);
+
+    int ribbon_width = terminal_width - info_width - 1;
+    if(ribbon_width > 0.6 * terminal_width)
+        ribbon_width = 0.6 * terminal_width;
+    if(ribbon_width > 50) ribbon_width = 50;
+
+    if(info_width > terminal_width || ribbon_width < 5) {
+        /* Can't fit stuff on the screen, make dumb print-outs */
+        printf("| %d of %d (%d)\n", conns, max_conns, conns_counter);
+        return;
+    }
+
+    char ribbon[ribbon_width + 1];
+    ribbon[0] = '|';
     int at = 1 + ((ribbon_width - 2) * conns) / max_conns;
     for(int i = 1; i < ribbon_width; i++) {
-        if (i < at)      buf[i] = '=';
-        else if(i  > at) buf[i] = '-';
-        else if(i == at) buf[i] = '>';
+        if (i < at)      ribbon[i] = '=';
+        else if(i  > at) ribbon[i] = '-';
+        else if(i == at) ribbon[i] = '>';
     }
-    snprintf(buf+ribbon_width, sizeof(buf)-ribbon_width,
-        "| %d of %d (%d)", conns, max_conns, conns_counter);
-    fprintf(stderr, "%s%s\r", buf, tcpkali_clear_eol());
+    ribbon[ribbon_width] = 0;
+    fprintf(stderr, "%s%s%s\r", ribbon, info, tcpkali_clear_eol());
 }
 
 static double

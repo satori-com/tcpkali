@@ -40,4 +40,9 @@ const char *tcpkali_clear_eol(void);
  */
 int tcpkali_is_utf8();
 
+/*
+ * Width of the terminal output, in columns.
+ */
+int tcpkali_terminal_width();
+
 #endif  /* TCPKALI_TERMINFO_H */
