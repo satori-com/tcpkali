@@ -940,6 +940,8 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
                                        + sf->traffic_delta.bytes_sent);
     SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->traffic_delta.bytes_rcvd);
     SBATCH(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
+    SBATCH(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
+    SBATCH(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
 
     if(sf->latency->marker_histogram || sf == &empty_feedback) {
 

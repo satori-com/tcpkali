@@ -442,6 +442,20 @@ static void latency_snapshot_print(struct array_of_doubles want_percentiles, str
 }
 
 /*
+ * Estimate packets per second.
+ */
+static unsigned int
+estimate_segments_per_op(non_atomic_wide_t ops, non_atomic_wide_t bytes) {
+    const int tcp_mss = 1460;   /* TCP Maximum Segment Size, estimate! */
+    return ops ? ((bytes/ops) + (tcp_mss-1)) / tcp_mss : 0;
+}
+static double
+estimate_pps(double duration, non_atomic_wide_t ops, non_atomic_wide_t bytes) {
+    unsigned packets_per_op = estimate_segments_per_op(ops, bytes);
+    return (packets_per_op * ops) / duration;
+}
+
+/*
  * Send a signal to finish work and wait for all workers to terminate.
  */
 void engine_terminate(struct engine *eng, double epoch, non_atomic_traffic_stats initial_traffic_stats, struct array_of_doubles want_latency_percentiles) {
@@ -499,6 +513,16 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_traffic_stats
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
         8 * (epoch_traffic.bytes_rcvd / test_duration) / 1000000.0,
         8 * (epoch_traffic.bytes_sent / test_duration) / 1000000.0);
+    printf("Packet rate estimate: %.1f↓, %.1f↑ (%u↓, %u↑ TCP MSS/op)\n",
+        estimate_pps(test_duration,
+                epoch_traffic.num_reads, epoch_traffic.bytes_rcvd),
+        estimate_pps(test_duration,
+                epoch_traffic.num_writes, epoch_traffic.bytes_sent),
+        estimate_segments_per_op(epoch_traffic.num_reads,
+                                 epoch_traffic.bytes_rcvd),
+        estimate_segments_per_op(epoch_traffic.num_writes,
+                                 epoch_traffic.bytes_sent)
+    );
     latency_snapshot_print(want_latency_percentiles, latency);
 
     engine_free_latency_snapshot(latency);
@@ -1685,6 +1709,7 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
+                conn->traffic_ongoing.num_reads++;
                 conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
@@ -1985,6 +2010,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                                         - conn->latency.connection_initiated);
                     hdr_record_value(largs->firstbyte_histogram_local, latency);
                 }
+                conn->traffic_ongoing.num_reads++;
                 conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
@@ -2049,6 +2075,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             }
         } else {
             conn->write_offset += wrote;
+            conn->traffic_ongoing.num_writes++;
             conn->traffic_ongoing.bytes_sent += wrote;
             if(record_moved)
                 pacefier_moved(&conn->send_pace,
