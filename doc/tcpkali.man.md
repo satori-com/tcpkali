@@ -56,13 +56,13 @@ When connection gets closed, some other connection is used for dumping.
 ## NETWORK STACK SETTINGS
 
 --nagle=on|off
-:   Control Nagle algorithm (set `TCP_NODELAY` socket option).
+:   Control Nagle algorithm (set `TCP_NODELAY` socket option using **setsockopt**()).
 
 --rcvbuf *SizeBytes*
-:   Set TCP receive buffers (set `SO_RCVBUF` socket option).
+:   Set TCP receive buffers (set `SO_RCVBUF` socket option using **setsockopt**()).
 
 --sndbuf *SizeBytes*
-:   Set TCP send buffers (set `SO_SNDBUF` socket option).
+:   Set TCP send buffers (set `SO_SNDBUF` socket option using **setsockopt**()).
 
 --source-ip *IP*
 :   By default, tcpkali automatically detects and uses all interface aliases

@@ -77,17 +77,20 @@ in the system.
 .SS NETWORK STACK SETTINGS
 .TP
 .B \-\-nagle=on|off
-Control Nagle algorithm (set \f[C]TCP_NODELAY\f[] socket option).
+Control Nagle algorithm (set \f[C]TCP_NODELAY\f[] socket option using
+\f[B]setsockopt\f[]()).
 .RS
 .RE
 .TP
 .B \-\-rcvbuf \f[I]SizeBytes\f[]
-Set TCP receive buffers (set \f[C]SO_RCVBUF\f[] socket option).
+Set TCP receive buffers (set \f[C]SO_RCVBUF\f[] socket option using
+\f[B]setsockopt\f[]()).
 .RS
 .RE
 .TP
 .B \-\-sndbuf \f[I]SizeBytes\f[]
-Set TCP send buffers (set \f[C]SO_SNDBUF\f[] socket option).
+Set TCP send buffers (set \f[C]SO_SNDBUF\f[] socket option using
+\f[B]setsockopt\f[]()).
 .RS
 .RE
 .TP
