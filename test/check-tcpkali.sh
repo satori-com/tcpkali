@@ -72,7 +72,9 @@ check_output 15 "-v 324" ${TCPKALI} -r20 -mABC
 
 # Smoothness test with 2kMPS
 check_output 16 "^ABCABC" ${TCPKALI} -r2k -mABC
-check_output 17 "-v ^(ABC){1,3}$" ${TCPKALI} -r2k -mABC
+check_output 17 "-v ^ABC$" ${TCPKALI} -r2k -mABC
+check_output 18 "-v ^(ABC){5}" ${TCPKALI} -r2k -mABC
+
 
 # Smoothness test with 15kMPS
-check_output 18 "-v ^(ABC){1,3}$" ${TCPKALI} -r15k -mABC
+check_output 19 "-v ^(ABC){1,3}$" ${TCPKALI} -r15k -mABC
