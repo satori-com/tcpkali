@@ -66,6 +66,14 @@ check 11 "latency at percentiles.*50.0/100.0" ${TCPKALI} --latency-connect --lat
 check 12 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50/100
 check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
 
+# Smooth test with 20 messages per second (MPS)
 check_output 14 "^432$" ${TCPKALI} -r20 -m432
 check_output 15 "-v 324" ${TCPKALI} -r20 -m432
 
+# Smooth test with 2kMPS
+check_output 16 "^432432" ${TCPKALI} -r2000 -m432
+check_output 17 "-v ^432$" ${TCPKALI} -r2000 -m432
+check_output 18 "-v ^432432432432" ${TCPKALI} -r2000 -m432
+
+# Smooth test with 15kMPS
+check_output 19 "-v ^(432){1,3}$" ${TCPKALI} -r15k -m432
