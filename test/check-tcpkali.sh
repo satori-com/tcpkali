@@ -12,15 +12,22 @@ PORT=1230
 check() {
     local testno="$1"
     local togrep="$2"
+    local grep_args=""
     shift 2
+
+    if [ $(echo "$togrep" | cut -f1 -d' ') = "-v" ]; then
+        grep_args="-v"
+        togrep=$(echo "$togrep" | cut -f2- -d' ')
+    fi
+
     PORT=$(($PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    $@ ${rest_opts} | egrep "$togrep"
+    $@ ${rest_opts} | egrep $grep_args "$togrep"
     PORT=$(($PORT+1))
     local rest_opts="-T1s -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    $@ ${rest_opts} | egrep "$togrep"
+    $@ ${rest_opts} | egrep $grep_args "$togrep"
 }
 
 check 1 "." ${TCPKALI} --connections=20 --duration=1
@@ -39,3 +46,5 @@ check 10 "." ${TCPKALI} --ws --first-message ABC --message foo
 check 11 "latency at percentiles.*50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50,100
 check 12 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50/100
 check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
+
+check 14 "-v 432432" ${TCPKALI} -r20 -m432 --dump-one-out
