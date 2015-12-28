@@ -1633,15 +1633,17 @@ static void debug_dump_data(const char *prefix, int fd, const void *data, size_t
     );
 }
 
-static enum {
+static enum lb_return_value {
     LB_UNLIMITED,   /* Not limiting bandwidth, proceed. */
     LB_PROCEED,     /* Use pacefier_moved() afterwards. */
+    LB_LOCKSTEP,    /* Proceed but pause right after. */
     LB_GO_SLEEP,    /* Not allowed to move data.        */
 } limit_channel_bandwidth(TK_P_ struct connection *conn,
                           size_t *suggested_move_size,
                           int event) {
     struct pacefier *pace = NULL;
     bandwidth_limit_t limit = { 0, 0 };
+    enum lb_return_value rvalue = LB_UNLIMITED;
 
     if(event & TK_WRITE) {
         limit = conn->send_limit;
@@ -1661,10 +1663,24 @@ static enum {
     size_t smallest_block_to_move = limit.minimal_move_size;
     size_t allowed_to_move = pacefier_allow(pace, bw, tk_now(TK_A));
 
-    if(allowed_to_move < smallest_block_to_move) {
-        /*     allowed     smallest_blk
-           |------^-------------^-------> */
-        double delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
+    if(allowed_to_move < *suggested_move_size) {
+        double delay;
+
+        if(allowed_to_move < smallest_block_to_move) {
+            /*   allowed     smallest|suggested
+               |------^-----------^-------^-------> */
+            delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
+            *suggested_move_size = 0;
+            rvalue = LB_GO_SLEEP;
+        } else {
+            /*   smallest  allowed  suggested
+               |------^--------^-------^-------> */
+            size_t excess = (allowed_to_move % smallest_block_to_move);
+            delay = (double)(smallest_block_to_move - excess)/bw;
+            *suggested_move_size = allowed_to_move - excess;
+            rvalue = LB_LOCKSTEP;
+        }
+
         if(delay < 0.001) delay = 0.001;
 
         tk_timer_stop(TK_A, &conn->timer);
@@ -1675,19 +1691,11 @@ static enum {
         ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
         ev_timer_start(TK_A_ &conn->timer);
 #endif
-        *suggested_move_size = 0;
-        return LB_GO_SLEEP;
-    } else {
-        /*   smallest_blk  allowed
-           |------^-----------^----> */
-        if(*suggested_move_size > allowed_to_move) {
-            /*   smallest_blk  allowed   suggested
-               |------^-----------^----------^-------> */
-            *suggested_move_size = allowed_to_move
-                        - (allowed_to_move % smallest_block_to_move);
-        }
-        return LB_PROCEED;
+
+        return rvalue;
     }
+
+    return LB_PROCEED;
 }
 
 static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
@@ -1956,12 +1964,16 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         char buf[16384];
         int record_moved_data = 0;
         do {
+            int lockstep = 0;
             size_t read_size = sizeof(buf);
             if(largs->params.websocket_enable == 0
             || conn->ws_state == WSTATE_WS_ESTABLISHED) {
                 switch(limit_channel_bandwidth(TK_A_ conn, &read_size, TK_READ)) {
                 case LB_UNLIMITED:
                     break;
+                case LB_LOCKSTEP:
+                    lockstep = 0;
+                    /* Fall through */
                 case LB_PROCEED:
                     record_moved_data = 1;
                     break;
@@ -2027,6 +2039,10 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                         conn->recv_limit.bytes_per_second,
                         rd, tk_now(TK_A));
                 }
+                if(lockstep) {
+                    conn->conn_wish |= CW_READ_BLOCKED;
+                    update_io_interest(TK_A_ conn);
+                }
 
                 break;
             }
@@ -2037,6 +2053,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         const void *position;
         size_t available_header, available_body;
         int record_moved = 0;
+        int lockstep = 0;
 
         largest_contiguous_chunk(largs, conn,
                 &position, &available_header, &available_body);
@@ -2052,6 +2069,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         /* Adjust (available_body) to avoid sending too much stuff. */
         switch(limit_channel_bandwidth(TK_A_ conn, &available_body, TK_WRITE)) {
         case LB_UNLIMITED: record_moved = 0; break;
+        case LB_LOCKSTEP:  lockstep = 1; /* FALL THROUGH */
         case LB_PROCEED:   record_moved = 1; break;
         case LB_GO_SLEEP:
             if(available_header)
@@ -2092,6 +2110,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
                             && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Out", tk_fd(w), position, wrote);
+                }
+                if(lockstep) {
+                    conn->conn_wish |= CW_WRITE_BLOCKED;
+                    update_io_interest(TK_A_ conn);
+                    return;
                 }
             }
         }
