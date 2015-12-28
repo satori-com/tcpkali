@@ -75,6 +75,10 @@ check_output 16 "^ABCABC" ${TCPKALI} -r2k -mABC
 check_output 17 "-v ^ABC$" ${TCPKALI} -r2k -mABC
 check_output 18 "-v ^(ABC){5}" ${TCPKALI} -r2k -mABC
 
+if [ "${CONTINOUS_INTEGRATION=false}" = "true" ]; then
+    # Smoothness test with 15kMPS
+    check_output 19 "-v ^(ABC){1,2}$" ${TCPKALI} -r15k -mABC
+else
+    check_output 19 "-v ^(ABC){1,4}$" ${TCPKALI} -r15k -mABC
+fi
 
-# Smoothness test with 15kMPS
-check_output 19 "-v ^(ABC){1,3}$" ${TCPKALI} -r15k -mABC
