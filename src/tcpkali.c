@@ -376,9 +376,10 @@ int main(int argc, char **argv) {
             break;
             }
         case 'N':   /* --nagle {on|off} */
-            if(strcmp(optarg, "on"))    /* Enabling Nagle toggles off NODELAY */
+            /* Enabling Nagle toggles off NODELAY */
+            if(strcmp(optarg, "on") == 0)
                 engine_params.nagle_setting = NSET_NODELAY_OFF;
-            else if(strcmp(optarg, "off"))
+            else if(strcmp(optarg, "off") == 0)
                 engine_params.nagle_setting = NSET_NODELAY_ON;
             else {
                 fprintf(stderr, "Expecting --nagle \"on\" or \"off\"\n");
