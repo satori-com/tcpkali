@@ -111,6 +111,10 @@ dnl We use pandoc to generate documentation.
 AC_PATH_PROG([PANDOC], pandoc)
 AM_CONDITIONAL([HAVE_PANDOC], [test -n "$PANDOC"])
 
+dnl Python is used for tests.
+AM_PATH_PYTHON(,, [:])
+AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])
+
 AC_CONFIG_FILES([Makefile
                  test/Makefile
                  src/Makefile
