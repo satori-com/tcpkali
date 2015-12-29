@@ -74,7 +74,6 @@ check_output 15 "-v 324" ${TCPKALI} -r20 -mABC
 check_output 16 "^ABCABC" ${TCPKALI} -r2k -mABC
 check_output 17 "-v ^ABC$" ${TCPKALI} -r2k -mABC
 
-env
 if [ "${CONTINUOUS_INTEGRATION=false}" = "true" ]; then
     # Not too much write combining with 2k
     check_output 18 "-v ^(ABC){6}" ${TCPKALI} -r2k -mABC
