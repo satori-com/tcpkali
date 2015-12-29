@@ -1650,7 +1650,7 @@ static enum lb_return_value {
         pace = &conn->send_pace;
     } else if(event & TK_READ) {
         limit = conn->recv_limit;
-        pace = &conn->send_pace;
+        pace = &conn->recv_pace;
     } else {
         assert(event & (TK_WRITE | TK_READ));
     }
@@ -1666,19 +1666,43 @@ static enum lb_return_value {
     if(allowed_to_move < *suggested_move_size) {
         double delay;
 
-        if(allowed_to_move < smallest_block_to_move) {
-            /*   allowed     smallest|suggested
-               |------^-----------^-------^-------> */
-            delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
-            *suggested_move_size = 0;
-            rvalue = LB_GO_SLEEP;
+        if(event & TK_READ) {
+            if(allowed_to_move < smallest_block_to_move) {
+                /*   allowed     smallest|suggested
+                   |------^-----------^-------^-------> */
+                delay = pacefier_when_allowed(pace, bw, tk_now(TK_A), 1460);
+                *suggested_move_size = 0;
+                rvalue = LB_GO_SLEEP;
+            } else {
+                /*
+                 * If we're reading, there's no gain in reading many
+                 * tiny chunks: the packets on the wire will still
+                 * very likely be the same, as TCP stacks don't like
+                 * sending too small window updates to the sender.
+                 * So if the reading allowance is too small, make it
+                 * large enough still to batch reads.
+                 */
+                if(allowed_to_move > 1460)
+                    *suggested_move_size = allowed_to_move;
+                else
+                    *suggested_move_size = 1460;
+                return LB_PROCEED;
+            }
         } else {
-            /*   smallest  allowed  suggested
-               |------^--------^-------^-------> */
-            size_t excess = (allowed_to_move % smallest_block_to_move);
-            delay = (double)(smallest_block_to_move - excess)/bw;
-            *suggested_move_size = allowed_to_move - excess;
-            rvalue = LB_LOCKSTEP;
+            if(allowed_to_move < smallest_block_to_move) {
+                /*   allowed     smallest|suggested
+                   |------^-----------^-------^-------> */
+                delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
+                *suggested_move_size = 0;
+                rvalue = LB_GO_SLEEP;
+            } else {
+                /*   smallest  allowed  suggested
+                   |------^--------^-------^-------> */
+                size_t excess = (allowed_to_move % smallest_block_to_move);
+                delay = (double)(smallest_block_to_move - excess)/bw;
+                *suggested_move_size = allowed_to_move - excess;
+                rvalue = LB_LOCKSTEP;
+            }
         }
 
         if(delay < 0.001) delay = 0.001;
@@ -1964,7 +1988,6 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         char buf[16384];
         int record_moved_data = 0;
         do {
-            int lockstep = 0;
             size_t read_size = sizeof(buf);
             if(largs->params.websocket_enable == 0
             || conn->ws_state == WSTATE_WS_ESTABLISHED) {
@@ -1972,7 +1995,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 case LB_UNLIMITED:
                     break;
                 case LB_LOCKSTEP:
-                    lockstep = 0;
+                    /* Rate limiter logic does not return it in read mode */
+                    assert(!"Unreachable");
                     /* Fall through */
                 case LB_PROCEED:
                     record_moved_data = 1;
@@ -1980,17 +2004,18 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 case LB_GO_SLEEP:
                     conn->conn_wish |= CW_READ_BLOCKED;
                     update_io_interest(TK_A_ conn);
-                    break;
+                    goto process_WRITE;
                 }
             }
 
-            if(read_size == 0) break;
+            assert(read_size > 0);
             ssize_t rd = read(tk_fd(w), buf, read_size);
             switch(rd) {
             case -1:
                 switch(errno) {
+                case EINTR:
                 case EAGAIN:
-                    return;
+                    break;
                 default:
                     DEBUG(DBG_NORMAL, "Closing %s: %s\n",
                         format_sockaddr(remote, buf, sizeof(buf)),
@@ -1998,7 +2023,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
-                /* Fall through */
+                break;
             case 0:
                 DEBUG(DBG_DETAIL, "Connection half-closed by %s\n",
                     format_sockaddr(remote, buf, sizeof(buf)));
@@ -2039,16 +2064,12 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                         conn->recv_limit.bytes_per_second,
                         rd, tk_now(TK_A));
                 }
-                if(lockstep) {
-                    conn->conn_wish |= CW_READ_BLOCKED;
-                    update_io_interest(TK_A_ conn);
-                }
-
                 break;
             }
         } while(0);
     }
 
+  process_WRITE:
     if(revents & TK_WRITE) {
         const void *position;
         size_t available_header, available_body;
@@ -2079,13 +2100,19 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             return;
         }
 
-        ssize_t wrote = write(tk_fd(w), position,
-                              available_header + available_body);
+      do {    /* Write de-coalescing loop */
+        size_t available_write = available_header + available_body;
+
+        ssize_t wrote = write(tk_fd(w), position, available_write);
         if(wrote == -1) {
             char buf[INET6_ADDRSTRLEN+64];
             switch(errno) {
             case EINTR:
+                continue;
             case EAGAIN:
+                DEBUG(DBG_NORMAL, "write %d => %d, %s\n", available_write, wrote, strerror(errno));
+                /* Undo rate limiting if not all was sent. */
+                if(lockstep) tk_timer_stop(TK_A, &conn->timer);
                 break;
             case EPIPE:
             default:
@@ -2094,6 +2121,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             }
+            break;
         } else {
             conn->write_offset += wrote;
             conn->traffic_ongoing.num_writes++;
@@ -2102,8 +2130,14 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 pacefier_moved(&conn->send_pace,
                                conn->send_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
-            wrote -= available_header;
-            if(wrote > 0) {
+            if((size_t)wrote <= available_header) {
+                /* Undo rate limiting if not all was sent. */
+                if(lockstep) tk_timer_stop(TK_A, &conn->timer);
+                break;
+            } else {
+                wrote -= available_header;
+                available_header = 0;
+
                 /* Record latencies for the body only, not headers */
                 latency_record_outgoing_ts(TK_A_ conn, wrote);
                 if(largs->params.dump_setting & DS_DUMP_ALL_OUT
@@ -2111,13 +2145,22 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                             && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Out", tk_fd(w), position, wrote);
                 }
+                available_body -= wrote;
                 if(lockstep) {
-                    conn->conn_wish |= CW_WRITE_BLOCKED;
-                    update_io_interest(TK_A_ conn);
-                    return;
+                    if(available_body) {
+                        /* Undo rate limiting if not all was sent. */
+                        tk_timer_stop(TK_A, &conn->timer);
+                        /* Will circle back and might set up a new timer */
+                    } else {
+                        conn->conn_wish |= CW_WRITE_BLOCKED;
+                        update_io_interest(TK_A_ conn);
+                        break;  /* Should be superfluous. */
+                    }
                 }
             }
         }
+      } while(available_body);
+     
     }
 
 }

@@ -51,6 +51,20 @@ pacefier_allow(struct pacefier *p, double events_per_second, double now) {
 }
 
 /*
+ * Get the delay until the time we're allowed to move (need_events).
+ */
+static inline double
+pacefier_when_allowed(struct pacefier *p, double events_per_second, double now, size_t need_events) {
+    double elapsed = now - p->previous_ts;
+    double move_events = elapsed * events_per_second;
+    if(move_events >= need_events) {
+        return 0.0;
+    } else {
+        return (need_events - move_events)/events_per_second;
+    }
+}
+
+/*
  * Record the actually moved events.
  */
 static inline void
