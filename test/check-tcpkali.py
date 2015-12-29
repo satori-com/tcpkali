@@ -122,17 +122,21 @@ class Analyze(object):
         log("bw_up_mbps", self.bw_up_mbps)
         log("total_sent_bytes", self.total_sent_bytes)
         log("total_received_bytes", self.total_received_bytes)
+
+port = 1350
         
 for variant in [[], ["--websocket"]]:
 
     print "Tcpkali can do more than 100 Mbps if short-cirquited"
-    t = Tcpkali(variant + ["-l1273", "127.1:1273", "-m1", "-T1", "--listen-mode=active"])
+    port = port + 1
+    t = Tcpkali(variant + ["-l"+str(port), "127.1:"+str(port), "-m1", "-T1", "--listen-mode=active"])
     a = Analyze(t.results())
     assert a.bw_down_mbps > 100 and a.bw_up_mbps > 100
 
     print "Tcpkali can effectively limit upstream bandwidth from sender"
-    receiver = Tcpkali(variant + ["-l1273", "-T3"])
-    sender = Tcpkali(variant + ["127.1:1273", "-m1", "-T3", "--channel-bandwidth-upstream=100kbps"])
+    port = port + 1
+    receiver = Tcpkali(variant + ["-l"+str(port), "-T3"])
+    sender = Tcpkali(variant + ["127.1:"+str(port), "-m1", "-T3", "--channel-bandwidth-upstream=100kbps"])
     arcv = Analyze(receiver.results())
     asnd = Analyze(sender.results())
     assert arcv.bw_up_mbps < 0.01 and arcv.bw_down_mbps > 0.090 and arcv.bw_down_mbps < 0.110
@@ -140,9 +144,10 @@ for variant in [[], ["--websocket"]]:
 
     # This test is special because downstream rate limit is not immediately
     # visible on the sender. The feedback loop takes time to stabilize.
+    port = port + 1
     print "Tcpkali can effectively limit downstream bandwidth from receiver"
-    receiver = Tcpkali(variant + ["-l1273", "-T11", "--rcvbuf=5k", "--channel-bandwidth-downstream=100kbps"])
-    sender = Tcpkali(variant + ["127.1:1273", "-m1", "-T11", "--sndbuf=5k"])
+    receiver = Tcpkali(variant + ["-l"+str(port), "-T11", "--rcvbuf=5k", "--channel-bandwidth-downstream=100kbps"])
+    sender = Tcpkali(variant + ["127.1:"+str(port), "-m1", "-T11", "--sndbuf=5k"])
     arcv = Analyze(receiver.results())
     asnd = Analyze(sender.results())
     transfer = ((100*1024/8)*11)
