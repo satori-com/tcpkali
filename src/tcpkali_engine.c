@@ -2110,7 +2110,6 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             case EINTR:
                 continue;
             case EAGAIN:
-                DEBUG(DBG_NORMAL, "write %d => %d, %s\n", available_write, wrote, strerror(errno));
                 /* Undo rate limiting if not all was sent. */
                 if(lockstep) tk_timer_stop(TK_A, &conn->timer);
                 break;
