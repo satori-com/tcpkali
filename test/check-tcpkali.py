@@ -55,7 +55,7 @@ class Tcpkali(object):
             self.proc = None
             log("Stopped tcpkali pid %r" % pid);
 
-    def __del(self):
+    def __del__(self):
         if self.proc:
             self.proc.terminate()
             self._wait()
