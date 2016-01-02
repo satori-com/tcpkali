@@ -64,9 +64,11 @@ class Tcpkali(object):
 # Results analyzer
 class Analyze(object):
     def __init__(self, args):
+        self.out_lengths = {}
         self.out_minLength = None
         self.out_maxLength = None
         self.out_num = 0
+        self.in_lengths = {}
         self.in_minLength = None
         self.in_maxLength = None
         self.in_num = 0
@@ -82,6 +84,7 @@ class Analyze(object):
                 self.out_num = self.out_num + 1
                 outLen = int(result.group(1))
                 outContent = result.group(2)
+                self._record_occurrence(self.out_lengths, outLen)
                 if self.out_minLength == None or outLen < self.out_minLength:
                     self.out_minLength = outLen
                 if self.out_maxLength == None or outLen > self.out_maxLength:
@@ -94,6 +97,7 @@ class Analyze(object):
                 self.in_num = self.in_num + 1
                 inLen = int(result.group(1))
                 inContent = result.group(2)
+                self._record_occurrence(self.in_lengths, inLen)
                 if self.in_minLength == None or inLen < self.in_minLength:
                     self.in_minLength = inLen
                 if self.in_maxLength == None or inLen > self.in_maxLength:
@@ -116,10 +120,52 @@ class Analyze(object):
 
         self.debug()
 
+    def _record_occurrence(self, d, len):
+        if(len > 50 and len <= 100):
+            len = 10 * (len / 10)
+        elif(len > 100 and len <= 2000):
+            len = 100 * (len / 100)
+        elif(len > 2000):
+            len = 2000
+        d[len] = d.get(len, 0) + 1
+
+    def _total_occurrences(self, d):
+        return sum(d.values())
+
+    # Int -> Int[0..100]
+    def output_length_percentile_lte(self, n):
+        d = self.out_lengths
+        total = self._total_occurrences(d)
+        if total > 0:
+            occurs = sum([v for (k,v) in d.items() if k <= n])
+            return (100 * occurs / total)
+        else:
+            return 0
+
     def debug(self):
         [log("  '%s': %s" % kv) for kv in sorted(vars(self).items())]
 
 port = 1350
+
+print("Rate limiting smoothess with 2kRPS")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-r2k", "-mABC"], capture_io = True)
+a = Analyze(t.results())
+# Check for not too many long packets outliers (<5%).
+assert a.output_length_percentile_lte(4*len("ABC")) > 95;
+assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5]]) == 0
+
+
+print("Rate limiting smoothess with 15kRPS")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-r15k", "-mABC"], capture_io = True)
+a = Analyze(t.results())
+# Check for not too many short packets outliers (<10%).
+assert a.output_length_percentile_lte(2*len("ABC")) < 10;
+assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5]]) == 0
+
         
 # Perform generic bandwidth limiting in different directions,
 # while varying options
