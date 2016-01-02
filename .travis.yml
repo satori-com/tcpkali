@@ -3,4 +3,9 @@ sudo: false
 compiler:
   - gcc
   - clang
-script: autoreconf -iv && ./configure && make check && make -C test lint
+before_script:
+  - pip install --user pip8 pylint
+script:
+  - autoreconf -iv && ./configure
+  - make -C test lint
+  - make check
