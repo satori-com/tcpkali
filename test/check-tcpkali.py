@@ -213,7 +213,9 @@ t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
 a = Analyze(t.results())
 # Check for all writes being short (non-coalesced) ones.
 assert a.output_length_percentile_lte(len("ABC")) == 100
-assert a.input_length_percentile_lte(1*len("ABC")) < 10
+# Check that not all reads are de-coalesced. Statistically speaking,
+# on one core there must be at least some read()-coalescing.
+assert a.input_length_percentile_lte(1*len("ABC")) < 50
 
 
         
