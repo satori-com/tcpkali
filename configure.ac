@@ -114,6 +114,9 @@ AM_CONDITIONAL([HAVE_PANDOC], [test -n "$PANDOC"])
 dnl Python is used for tests.
 AM_PATH_PYTHON(,, [:])
 AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])
+dnl Python linters
+AC_PATH_PROG([PEP8], pep8, [:])
+AC_PATH_PROG([PYLINT], pylint, [:])
 
 AC_CONFIG_FILES([Makefile
                  test/Makefile

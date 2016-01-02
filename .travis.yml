@@ -3,4 +3,4 @@ sudo: false
 compiler:
   - gcc
   - clang
-script: autoreconf -iv && ./configure && make check
+script: autoreconf -iv && ./configure && make check && make -C test lint

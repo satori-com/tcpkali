@@ -9,3 +9,7 @@ endif
 
 TESTS_ENVIRONMENT= TCPKALI="$(top_builddir)/src/tcpkali"
 
+lint:
+	${PEP8} *.py
+	${PYLINT} -d superfluous-parens *.py
+	${PYLINT} --py3k *.py
