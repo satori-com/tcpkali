@@ -160,7 +160,24 @@ class Analyze(object):
 
 port = 1350
 
-print("Rate limiting cuts packets across message boundaries")
+print("Slow rate limiting cuts packets at message boundaries")
+port = port + 1
+t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
+             "-r20", "-mABC"], capture_io=True)
+a = Analyze(t.results())
+assert a.output_length_percentile_lte(len("ABC")) == 100
+
+
+print("Rate limiting at 2k does not create single-message writes")
+port = port + 1
+t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
+             "-r2k", "-mABC"], capture_io=True)
+a = Analyze(t.results())
+assert a.output_length_percentile_lte(len("ABC")) < 2
+assert sum([a.out_lengths.get(i, 0) for i in range(1, 10) if i % 3]) == 0
+
+
+print("Rate limiting cuts packets at message boundaries")
 port = port + 1
 t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
              "-r3k", "-mABC"], capture_io=True)
@@ -169,7 +186,7 @@ assert a.output_length_percentile_lte(4 * len("ABC")) > 90
 assert sum([a.out_lengths.get(i, 0) for i in range(1, 10) if i % 3]) == 0
 
 
-print("Write combining OFF still cuts packets across message boundaries")
+print("Write combining OFF still cuts packets at message boundaries")
 port = port + 1
 t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
              "-r3k", "-mABC", "--write-combine=off"], capture_io=True)

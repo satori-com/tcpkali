@@ -24,31 +24,6 @@ check() {
     "$@" ${rest_opts} | egrep "$togrep"
 }
 
-check_output() {
-    local testno="$1"
-    local togrep="$2"
-    local invert=false
-    shift 2
-
-    if [ "$(echo "$togrep" | cut -f1 -d' ')" = "-v" ]; then
-        invert=true
-        togrep=$(echo "$togrep" | cut -f2- -d' ')
-    fi
-
-    PORT=$((PORT+1))
-    local rest_opts="-T1s -l${PORT} 127.1:${PORT} --dump-one-out"
-    echo "Test ${testno}: $* ${rest_opts}" >&2
-    local n
-    n=$("$@" ${rest_opts} 2>&1 | sed -E '/^Out/!d; s/[^:]+: \[([^]]*)\]/\1/' | egrep "$togrep" | (grep -c . || :))
-    if [ "$n" -ne 0 ] && [ "$invert" = "true" ]; then
-        echo "ERROR: $togrep yields $n results"
-        return 1
-    fi
-    if [ "$n" -eq 0 ] && [ "$invert" = "false" ]; then
-        echo "ERROR: $togrep yields $n results"
-        return 1
-    fi
-}
 
 check 1 "." ${TCPKALI} --connections=20 --duration=1
 check 2 "." ${TCPKALI} --connections=10 --duration=1 -m Z
@@ -66,12 +41,4 @@ check 10 "." ${TCPKALI} --ws --first-message ABC --message foo
 check 11 "latency at percentiles.*50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50,100
 check 12 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50/100
 check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
-
-# Smoothness test with 20 messages per second (MPS)
-check_output 14 "^ABC$" ${TCPKALI} -r20 -mABC
-check_output 15 "-v ABCA" ${TCPKALI} -r20 -mABC
-
-# Smoothness test with 2kMPS
-check_output 16 "^ABCABC" ${TCPKALI} -r2k -mABC
-check_output 17 "-v ^ABC$" ${TCPKALI} -r2k -mABC
 
