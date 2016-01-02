@@ -6,6 +6,7 @@
     * Mean/max latencies for messages are not reported, for UI consistency.
       Use --latency-percentiles 50,100 to display.
     * Added --dump-{one,all}{,-in,-out} to dump all or one connections' i/o.
+    * Added --write-combine=off to emit high packet rates.
 
 0.7:    2015-Dec-11
     * Added a manual page.

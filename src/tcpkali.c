@@ -104,6 +104,7 @@ static struct option cli_long_options[] = {
     { "version", 0, 0, 'V' },
     { "verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v' },
     { "workers", 1, 0, 'w' },
+    { "write-combine", 1, 0, 'C' },
     { "websocket", 0, 0, 'W' },
     { "ws", 0, 0, 'W' },
     { 0, 0, 0, 0 }
@@ -198,7 +199,8 @@ int main(int argc, char **argv) {
         .verbosity_level    = DBG_ERROR,
         .connect_timeout  = 1.0,
         .channel_lifetime = INFINITY,
-        .nagle_setting = NSET_UNSET
+        .nagle_setting = NSET_UNSET,
+        .write_combine = WRCOMB_ON
     };
     int unescape_message_data = 0;
 
@@ -383,6 +385,17 @@ int main(int argc, char **argv) {
                 engine_params.nagle_setting = NSET_NODELAY_ON;
             else {
                 fprintf(stderr, "Expecting --nagle \"on\" or \"off\"\n");
+                exit(EX_USAGE);
+            }
+            break;
+        case 'C':   /* --write-combine {on|off} */
+            if(strcmp(optarg, "on") == 0) {
+                fprintf(stderr, "NOTE: --write-combine on is a default setting\n");
+                engine_params.write_combine = WRCOMB_ON;
+            } else if(strcmp(optarg, "off") == 0) {
+                engine_params.write_combine = WRCOMB_OFF;
+            } else {
+                fprintf(stderr, "Expecting --write-combine off\n");
                 exit(EX_USAGE);
             }
             break;
@@ -635,6 +648,26 @@ int main(int argc, char **argv) {
             fprintf(stderr, "--message-rate parameter makes no sense "
                             "without --message or --message-file\n");
             exit(EX_USAGE);
+        }
+    }
+
+    /*
+     * --write-combine=off makes little sense with Nagle on.
+     * Disable Nagle or complain.
+     */
+    if(engine_params.write_combine == WRCOMB_OFF) {
+        switch(engine_params.nagle_setting) {
+        case NSET_UNSET:
+            fprintf(stderr, "NOTE: --write-combine=off presumes --nagle=off.\n");
+            engine_params.nagle_setting = NSET_NODELAY_OFF;
+            break;
+        case NSET_NODELAY_OFF:  /* --nagle=on */
+            fprintf(stderr, "WARNING: --write-combine=off makes little sense "
+                            "with --nagle=on.\n");
+            break;
+        case NSET_NODELAY_ON:   /* --nagle=off */
+            /* This is the proper setting when --write-combine=off */
+            break;
         }
     }
 
@@ -1083,11 +1116,12 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --dump-one-in                Dump incoming data for a single connection\n"
     "  --dump-one-out               Dump outgoing data for a single connection\n"
     "  --dump-{all,all-in,all-out}  Dump i/o data for all connections\n"
-    "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "  --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)\n"
     "  --rcvbuf <SizeBytes>         Set TCP receive buffers (set SO_RCVBUF)\n"
     "  --sndbuf <SizeBytes>         Set TCP rend buffers (set SO_SNDBUF)\n"
     "  --source-ip <IP>             Use the specified IP address to connect\n"
+    "  --write-combine off          Disable merging adjacent writes\n"
+    "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"
     "  -c, --connections <N=%d>      Connections to keep open to the destinations\n"

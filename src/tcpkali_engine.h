@@ -62,6 +62,10 @@ struct engine_params {
         NSET_NODELAY_ON = 1,   /* Disable Nagle */
     } nagle_setting;
     enum {
+        WRCOMB_OFF  = 0,    /* Disable write coalescing */
+        WRCOMB_ON   = 1,    /* Enable write coalescing (default) */
+    } write_combine;
+    enum {
         LMODE_DEFAULT   = 0x00,   /* Do not send data, ignore received data */
         LMODE_ACTIVE    = 0x01,   /* Actively send messages */
         _LMODE_RCV_MASK = 0xf0,

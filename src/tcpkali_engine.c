@@ -2101,7 +2101,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         }
 
       do {    /* Write de-coalescing loop */
-        size_t available_write = available_header + available_body;
+        size_t available_write = available_header
+                + (largs->params.write_combine == WRCOMB_ON
+                    ? available_body
+                    : available_body < conn->send_limit.minimal_move_size
+                        ? available_body : conn->send_limit.minimal_move_size);
 
         ssize_t wrote = write(tk_fd(w), position, available_write);
         if(wrote == -1) {
@@ -2110,8 +2114,11 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
             case EINTR:
                 continue;
             case EAGAIN:
-                /* Undo rate limiting if not all was sent. */
-                if(lockstep) tk_timer_stop(TK_A, &conn->timer);
+                /* Undo rate limiting if not all data was sent. */
+                if(lockstep) {
+                    tk_timer_stop(TK_A, &conn->timer);
+                    lockstep = 0; /* Don't pause I/O later */
+                }
                 break;
             case EPIPE:
             default:
@@ -2129,11 +2136,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 pacefier_moved(&conn->send_pace,
                                conn->send_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
-            if((size_t)wrote <= available_header) {
-                /* Undo rate limiting if not all was sent. */
-                if(lockstep) tk_timer_stop(TK_A, &conn->timer);
-                break;
-            } else {
+            if((size_t)wrote > available_header) {
                 wrote -= available_header;
                 available_header = 0;
 
@@ -2145,22 +2148,22 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     debug_dump_data("Out", tk_fd(w), position, wrote);
                 }
                 available_body -= wrote;
-                if(lockstep) {
-                    if(available_body) {
-                        /* Undo rate limiting if not all was sent. */
-                        tk_timer_stop(TK_A, &conn->timer);
-                        /* Will circle back and might set up a new timer */
-                    } else {
-                        conn->conn_wish |= CW_WRITE_BLOCKED;
-                        update_io_interest(TK_A_ conn);
-                        break;  /* Should be superfluous. */
-                    }
-                }
             }
         }
       } while(available_body);
+
+      if(lockstep) {
+        if(available_body) {
+            /* Undo rate limiting if not all was sent. */
+            tk_timer_stop(TK_A, &conn->timer);
+            /* Will circle back and might set up a new timer */
+        } else {
+            conn->conn_wish |= CW_WRITE_BLOCKED;
+            update_io_interest(TK_A_ conn);
+        }
+      }
      
-    }
+    } /* (events & TK_WRITE) */
 
 }
 
