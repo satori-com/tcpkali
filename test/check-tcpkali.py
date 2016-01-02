@@ -189,29 +189,29 @@ a = Analyze(t.results())
 assert a.output_length_percentile_lte(2*len("ABC")) < 10
 
 
-print("Observe write combining at 10kRPS by default")
+print("Observe write combining at 20kRPS by default")
 port = port + 1
 t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
-             "-w1", # Multi-core affects (remobes) TCP level coalescing
+             "-w1", # Multi-core affects (removes) TCP level coalescing
                     # So we disable it here to obtain some for
                     # proper operation of input_length_percentile_lte().
-             "-r10k", "-mABC", "--dump-all"], capture_io = True)
+             "-r20k", "-mABC", "--dump-all"], capture_io = True)
 a = Analyze(t.results())
 # Check for not too many short packets outliers (<10%).
 assert a.output_length_percentile_lte(4*len("ABC")) < 10
-assert a.input_length_percentile_lte(4*len("ABC")) < 10
+assert a.input_length_percentile_lte(1*len("ABC")) < 10
 
 
-print("No write combining at 10kRPS with --write-combine=off")
+print("No write combining at 20kRPS with --write-combine=off")
 port = port + 1
 t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
-             "-w1", # Multi-core affects (remobes) TCP level coalescing
+             "-w1", # Multi-core affects (removes) TCP level coalescing
                     # So we disable it here to obtain some for
                     # proper operation of input_length_percentile_lte().
-             "-r10k", "-mABC", "--dump-all", "--write-combine=off"],
+             "-r20k", "-mABC", "--dump-all", "--write-combine=off"],
              capture_io = True)
 a = Analyze(t.results())
-# Check for not too many short packets outliers (<10%).
+# Check for all writes being short (non-coalesced) ones.
 assert a.output_length_percentile_lte(len("ABC")) == 100
 assert a.input_length_percentile_lte(1*len("ABC")) < 10
 
