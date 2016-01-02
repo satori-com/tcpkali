@@ -14,14 +14,14 @@ check() {
     local togrep="$2"
     shift 2
 
-    PORT=$(($PORT+1))
+    PORT=$((PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    $@ ${rest_opts} | egrep "$togrep"
-    PORT=$(($PORT+1))
+    "$@" ${rest_opts} | egrep "$togrep"
+    PORT=$((PORT+1))
     local rest_opts="-T1s -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    $@ ${rest_opts} | egrep "$togrep"
+    "$@" ${rest_opts} | egrep "$togrep"
 }
 
 check_output() {
@@ -30,20 +30,21 @@ check_output() {
     local invert=false
     shift 2
 
-    if [ $(echo "$togrep" | cut -f1 -d' ') = "-v" ]; then
+    if [ "$(echo "$togrep" | cut -f1 -d' ')" = "-v" ]; then
         invert=true
         togrep=$(echo "$togrep" | cut -f2- -d' ')
     fi
 
-    PORT=$(($PORT+1))
+    PORT=$((PORT+1))
     local rest_opts="-T1s -l${PORT} 127.1:${PORT} --dump-one-out"
     echo "Test ${testno}: $* ${rest_opts}" >&2
-    local n=$($@ ${rest_opts} 2>&1 | sed -E '/^Out/!d; s/[^:]+: \[([^]]*)\]/\1/' | egrep "$togrep" | grep -c .)
-    if [ "$n" -ne 0 -a "$invert" = "true" ]; then
+    local n
+    n=$("$@" ${rest_opts} 2>&1 | sed -E '/^Out/!d; s/[^:]+: \[([^]]*)\]/\1/' | egrep "$togrep" | (grep -c . || :))
+    if [ "$n" -ne 0 ] && [ "$invert" = "true" ]; then
         echo "ERROR: $togrep yields $n results"
         return 1
     fi
-    if [ "$n" -eq 0 -a "$invert" = "false" ]; then
+    if [ "$n" -eq 0 ] && [ "$invert" = "false" ]; then
         echo "ERROR: $togrep yields $n results"
         return 1
     fi
@@ -68,7 +69,7 @@ check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latenc
 
 # Smoothness test with 20 messages per second (MPS)
 check_output 14 "^ABC$" ${TCPKALI} -r20 -mABC
-check_output 15 "-v 324" ${TCPKALI} -r20 -mABC
+check_output 15 "-v ABCA" ${TCPKALI} -r20 -mABC
 
 # Smoothness test with 2kMPS
 check_output 16 "^ABCABC" ${TCPKALI} -r2k -mABC

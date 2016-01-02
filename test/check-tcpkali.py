@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=invalid-name,print-statement
+# pylint: disable=invalid-name,print-statement,superfluous-parens
 """
 Run several tcpkali processes in source-destination mode and figure out
 if they're behaving according to expectations

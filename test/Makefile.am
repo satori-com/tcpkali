@@ -9,7 +9,9 @@ endif
 
 TESTS_ENVIRONMENT= TCPKALI="$(top_builddir)/src/tcpkali"
 
+# Use `brew install shellcheck && pip install pep8 pylint`
 lint:
+	${SHELLCHECK} -e SC2086 *.sh
 	${PEP8} *.py
-	${PYLINT} -d superfluous-parens *.py
+	${PYLINT} *.py
 	${PYLINT} --py3k *.py
