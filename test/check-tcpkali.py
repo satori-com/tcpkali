@@ -10,7 +10,8 @@ import subprocess
 
 def log(*args):
     ts = datetime.datetime.now()
-    sys.stderr.write("[%s]: %s\n" % (ts, args))
+    sys.stderr.write("[%s]: %s\n" %
+        (ts, ' '.join(map(lambda x: str(x), list(args)))))
     sys.stderr.flush()
 
 # Wrapper around `tcpkali` process and its output.
@@ -98,42 +99,43 @@ class Analyze(object):
                 if self.in_maxLength == None or inLen > self.in_maxLength:
                     self.in_maxLength = inLen
 
-        bwRe = re.compile("^Aggregate bandwidth: ([\d.]+)[^\d]+, ([\d.]+)[^\d]+ Mbps")
+        bwRe = re.compile("^Aggregate bandwidth: "
+                          "([\d.]+)[^\d]+, ([\d.]+)[^\d]+ Mbps")
         bws = [bwRe.match(line) for line in outLines if bwRe.match(line)][0]
         self.bw_down_mbps = float(bws.group(1))
         self.bw_up_mbps = float(bws.group(2))
 
-        totalRe = re.compile("^Total data (sent|received):.*\(([\d.]+) bytes\)")
-        sent = [totalRe.match(line) for line in outLines if totalRe.match(line) and 'sent' in line][0]
+        totalRe = re.compile("^Total data (sent|received):.*"
+                             "\(([\d.]+) bytes\)")
+        sent = [totalRe.match(line) for line in outLines
+                if totalRe.match(line) and 'sent' in line][0]
         self.total_sent_bytes = int(sent.group(2))
-        rcvd = [totalRe.match(line) for line in outLines if totalRe.match(line) and 'received' in line][0]
+        rcvd = [totalRe.match(line) for line in outLines
+                if totalRe.match(line) and 'received' in line][0]
         self.total_received_bytes = int(rcvd.group(2))
 
         self.debug()
 
     def debug(self):
-        log("out_minLength", self.out_minLength)
-        log("out_maxLength", self.out_maxLength)
-        log("out_num", self.out_num)
-        log("in_minLength", self.in_minLength)
-        log("in_maxLength", self.in_maxLength)
-        log("in_num", self.in_num)
-        log("bw_down_mbps", self.bw_down_mbps)
-        log("bw_up_mbps", self.bw_up_mbps)
-        log("total_sent_bytes", self.total_sent_bytes)
-        log("total_received_bytes", self.total_received_bytes)
+        [log("  '%s': %s" % kv) for kv in sorted(vars(self).items())]
 
 port = 1350
         
-for variant in [[], ["--websocket"]]:
+# Perform generic bandwidth limiting in different directions,
+# while varying options
+for variant in [[], ["--websocket"], ["--write-combine=off"],
+               ["--websocket", "--write-combine=off"]]:
 
-    print "Tcpkali can do more than 100 Mbps if short-cirquited"
+    print("Can do more than 100 Mbps if short-cirquited"
+          ", opts=" + str(variant))
     port = port + 1
-    t = Tcpkali(variant + ["-l"+str(port), "127.1:"+str(port), "-m1", "-T1", "--listen-mode=active"])
+    t = Tcpkali(variant + ["-l"+str(port), "127.1:"+str(port), "-m1", "-T1",
+                           "--listen-mode=active"])
     a = Analyze(t.results())
     assert a.bw_down_mbps > 100 and a.bw_up_mbps > 100
 
-    print "Tcpkali can effectively limit upstream bandwidth from sender"
+    print("Can effectively limit upstream bandwidth from sender"
+          ", opts=" + str(variant))
     port = port + 1
     receiver = Tcpkali(variant + ["-l"+str(port), "-T3"])
     sender = Tcpkali(variant + ["127.1:"+str(port), "-m1", "-T3", "--channel-bandwidth-upstream=100kbps"])
@@ -145,7 +147,8 @@ for variant in [[], ["--websocket"]]:
     # This test is special because downstream rate limit is not immediately
     # visible on the sender. The feedback loop takes time to stabilize.
     port = port + 1
-    print "Tcpkali can effectively limit downstream bandwidth from receiver"
+    print("Can effectively limit downstream bandwidth from receiver"
+          ", opts=" + str(variant))
     receiver = Tcpkali(variant + ["-l"+str(port), "-T11", "--rcvbuf=5k", "--channel-bandwidth-downstream=100kbps"])
     sender = Tcpkali(variant + ["127.1:"+str(port), "-m1", "-T11", "--sndbuf=5k"])
     arcv = Analyze(receiver.results())
@@ -155,6 +158,5 @@ for variant in [[], ["--websocket"]]:
     trans_max = 1.1 * transfer
     assert arcv.total_sent_bytes < 1000 and arcv.total_received_bytes > trans_min and arcv.total_received_bytes < trans_max
     assert asnd.total_received_bytes < 1000 and asnd.total_sent_bytes > trans_min and asnd.total_sent_bytes < 2*trans_max
-
 
 print "FINISHED"
