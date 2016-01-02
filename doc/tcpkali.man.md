@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2015-12-17
+% 2016-01-01
 
 # NAME
 
@@ -8,7 +8,7 @@ tcpkali -- fast TCP and WebSocket load generator and sink.
 
 # SYNOPSIS
 
-tcpkali [*OPTIONS*] [*host:port* ...]
+tcpkali [*OPTIONS*] [**-l** *port*] [*host:port* ...]
 
 # DESCRIPTION
 

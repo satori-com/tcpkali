@@ -81,7 +81,7 @@ static struct option cli_long_options[] = {
     { "dump-all-out", 0, 0, CLI_DUMP + 'O' },
     { "first-message", 1, 0, '1' },
     { "first-message-file", 1, 0, 'F' },
-    { "help", 0, 0, 'h' },
+    { "help", 0, 0, 'H' },
     { "latency-connect", 0, 0,      CLI_LATENCY + 'c' },
     { "latency-first-byte", 0, 0,   CLI_LATENCY + 'f' },
     { "latency-marker", 1, 0,       CLI_LATENCY + 'm' },
@@ -159,7 +159,8 @@ typedef struct {
 /*
  * Bunch of utility functions defined at the end of this file.
  */
-static void usage(char *argv0, struct tcpkali_config *);
+static void usage_short(char *argv0);
+static void usage_long(char *argv0, struct tcpkali_config *);
 struct multiplier { char *prefix; double mult; };
 static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
 static int parse_array_of_doubles(const char * option, char *str, struct array_of_doubles *array);
@@ -226,7 +227,10 @@ int main(int argc, char **argv) {
             "\n");
             exit(0);
         case 'h':
-            usage(argv[0], &default_config);
+            usage_short(argv[0]);
+            exit(EX_USAGE);
+        case 'H':
+            usage_long(argv[0], &default_config);
             exit(EX_USAGE);
         case 'v':   /* -v */
             engine_params.verbosity_level++;
@@ -541,7 +545,7 @@ int main(int argc, char **argv) {
             break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
-            usage(argv[0], &default_config);
+            usage_long(argv[0], &default_config);
             exit(EX_USAGE);
         }
     }
@@ -673,7 +677,7 @@ int main(int argc, char **argv) {
 
     if(optind == argc && conf.listen_port == 0) {
         fprintf(stderr, "Expecting target <host:port> or --listen-port. See -h or --help.\n");
-        usage(argv[0], &default_config);
+        usage_short(argv[0]);
         exit(EX_USAGE);
     }
 
@@ -1104,12 +1108,13 @@ parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *a
  * Display the Usage screen.
  */
 static void
-usage(char *argv0, struct tcpkali_config *conf) {
-    fprintf(stderr, "Usage: %s [OPTIONS] <host:port> [<host:port>...]\n",
+usage_long(char *argv0, struct tcpkali_config *conf) {
+    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
         basename(argv0));
     fprintf(stderr,
     "Where OPTIONS are:\n"
-    "  -h, --help                   Print this help screen, then exit\n"
+    "  -h                           Print short help screen, then exit\n"
+    "  --help                       Print this help screen, then exit\n"
     "  --version                    Print version number, then exit\n"
     "  -v, --verbose <level=1>      Increase (-v) or set verbosity level [0..%d]\n"
     "  -d, --dump-one               Dump i/o data for a single connection\n"
@@ -1171,3 +1176,35 @@ usage(char *argv0, struct tcpkali_config *conf) {
     conf->statsd_namespace
     );
 }
+
+static void
+usage_short(char *argv0) {
+    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
+        basename(argv0));
+    fprintf(stderr,
+    "Where some OPTIONS are:\n"
+    "  -h                   Print this help screen, then exit\n"
+    "  --help               Print long help screen, then exit\n"
+    "  -d                   Dump i/o data for a single connection\n"
+    "\n"
+    "  -c <N>               Connections to keep open to the destinations\n"
+    "  -l <port>            Listen on the specified port\n"
+    "  --ws, --websocket    Use RFC6455 WebSocket transport\n"
+    "  -T <Time=10s>        Exit after the specified amount of time\n"
+    "\n"
+    "  -e                   Unescape backslash-escaping in a message string\n"
+    "  -m <string>          Message to repeatedly send to the remote\n"
+    "  -r <Rate>            Messages per second to send in a connection\n"
+    "\n"
+    "Variable units and recognized multipliers:\n"
+    "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
+    "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
+    "  <Rate> and <Time> can be fractional values, such as 0.25.\n"
+    "\n"
+    "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
+    basename(argv0)
+
+    );
+
+}
+

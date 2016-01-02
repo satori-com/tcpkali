@@ -41,6 +41,24 @@ Install the following packages first:
 # Usage
 
     Usage: tcpkali [OPTIONS] [-l <port>] [<host:port>...]
+    Where some OPTIONS are:
+      -h                   Print this help screen, then exit
+      --help               Print long help screen, then exit
+      -d                   Dump i/o data for a single connection
+
+      -c <N>               Connections to keep open to the destinations
+      -l <port>            Listen on the specified port
+      --ws, --websocket    Use RFC6455 WebSocket transport
+      -T <Time=10s>        Exit after the specified amount of time
+
+      -e                   Unescape backslash-escaping in a message string
+      -m <string>          Message to repeatedly send to the remote
+      -r <Rate>            Messages per second to send in a connection
+
+    Variable units and recognized multipliers:
+      <N>, <Rate>:  k (1000, as in "5k" is 5000), m (1000000)
+      <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
+      <Rate> and <Time> can be fractional values, such as 0.25.
 
 You can get the full list of options using `tcpkali --help`, from
 `man tcpkali`, and by consulting the
