@@ -166,12 +166,12 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
 
     if(rlp.rlim_cur < (rlim_t)(expected_sockets + 4 + workers)) {
         warning("Open files limit (`ulimit -n`) %ld "
-                "is too low for the expected load (-c %d).\n",
+                "is too low for the expected scale (-c %d).\n",
                 (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
     } else if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
         warning("System-wide open files limit %ld "
-                "is too low for the expected load (-c %d).\n"
+                "is too low for the expected scale (-c %d).\n"
                 "Consider adjusting fs.file-max or kern.maxfiles sysctl.\n",
                 (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
