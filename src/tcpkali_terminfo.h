@@ -55,6 +55,7 @@ int tcpkali_terminal_width();
  */
 enum tk_attribute {
     TKA_NORMAL,
+    TKA_WARNING,
     TKA_REDBOLD
 };
 const char *tk_attr(enum tk_attribute);

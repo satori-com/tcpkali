@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -54,6 +54,7 @@
 #include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
 #include "tcpkali_terminfo.h"
+#include "tcpkali_logging.h"
 
 /*
  * Describe the command line options.
@@ -553,8 +554,7 @@ int main(int argc, char **argv) {
     int print_stats = isatty(1);
     if(print_stats) {
         if(tcpkali_init_terminal() == -1) {
-            fprintf(stderr, "WARNING: Dumb terminal, "
-                            "expect unglorified output.\n");
+            warning("Dumb terminal, expect unglorified output.\n");
             print_stats = 0;
         }
     }
@@ -675,8 +675,8 @@ int main(int argc, char **argv) {
             engine_params.nagle_setting = NSET_NODELAY_OFF;
             break;
         case NSET_NODELAY_OFF:  /* --nagle=on */
-            fprintf(stderr, "WARNING: --write-combine=off makes little sense "
-                            "with --nagle=on.\n");
+            warning("--write-combine=off makes little sense "
+                    "with --nagle=on.\n");
             break;
         case NSET_NODELAY_ON:   /* --nagle=off */
             /* This is the proper setting when --write-combine=off */
@@ -704,7 +704,7 @@ int main(int argc, char **argv) {
                 conf.connect_rate);
             exit(EX_USAGE);
         } else {
-            fprintf(stderr, "WARNING: %d connections might not be opened "
+            warning("%d connections might not be opened "
                     "at a rate %g within test duration %g.\n"
                     "Decrease --connections=%d, or increase --duration=%g or --connect-rate=%g.\n",
                 conf.max_connections,

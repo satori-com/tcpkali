@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -58,6 +58,7 @@
 #include "tcpkali_pacefier.h"
 #include "tcpkali_websocket.h"
 #include "tcpkali_terminfo.h"
+#include "tcpkali_logging.h"
 #include "tcpkali_expr.h"
 #include "tcpkali_data.h"
 #include "tcpkali_traffic_stats.h"
@@ -271,7 +272,7 @@ static void control_cb_uv(tk_io *w, int UNUSED status, int revents) {
 
 #define DEBUG(level, fmt, args...) do {         \
         if((int)largs->params.verbosity_level >= level)  \
-            fprintf(stderr, "%s" fmt, tcpkali_clear_eol(), ##args);       \
+            debug_log(level, largs->params.verbosity_level, fmt, ##args); \
     } while(0)
 
 #define REPLICATE_MAX_SIZE  (64*1024)       /* Proven to be a sweet spot */
@@ -824,8 +825,7 @@ static void *single_engine_loop_thread(void *argp) {
      */
     if(!have_reuseport && on_main_thread
         && largs->params.listen_addresses.n_addrs) {
-        DEBUG(DBG_ALWAYS,
-            "WARNING: A system without SO_REUSEPORT detected."
+            warning("A system without SO_REUSEPORT detected."
             " Using only one core for serving connections.\n");
     }
 

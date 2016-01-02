@@ -26,6 +26,7 @@ tcpkali_SOURCES = \
                 tcpkali_expr_y.c tcpkali_expr_y.h         \
                                  tcpkali_expr_l.c         \
                 tcpkali_expr.c tcpkali_expr.h             \
+                tcpkali_logging.c tcpkali_logging.h       \
                 tcpkali_traffic_stats.h                   \
                 tcpkali_common.h tcpkali_rate.h           \
                 tcpkali.c tcpkali.h

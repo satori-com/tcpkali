@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -35,6 +35,7 @@
 #include <assert.h>
 
 #include "tcpkali_syslimits.h"
+#include "tcpkali_logging.h"
 
 /*
  * Sort limits in descending order.
@@ -164,15 +165,15 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     assert(ret == 0);
 
     if(rlp.rlim_cur < (rlim_t)(expected_sockets + 4 + workers)) {
-        fprintf(stderr, "WARNING: Open files limit (`ulimit -n`) %ld "
-                        "is too low for the expected load (-c %d).\n",
-            (long)rlp.rlim_cur, expected_sockets);
+        warning("Open files limit (`ulimit -n`) %ld "
+                "is too low for the expected load (-c %d).\n",
+                (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
     } else if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
-        fprintf(stderr, "WARNING: System-wide open files limit %ld "
-                        "is too low for the expected load (-c %d).\n"
-                        "Consider adjusting fs.file-max or kern.maxfiles sysctl.\n",
-            (long)rlp.rlim_cur, expected_sockets);
+        warning("System-wide open files limit %ld "
+                "is too low for the expected load (-c %d).\n"
+                "Consider adjusting fs.file-max or kern.maxfiles sysctl.\n",
+                (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
     }
 
@@ -187,10 +188,9 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         int lo, hi;
         if(fscanf(f, "%d %d", &lo, &hi) == 2) {
             if(hi - lo < expected_sockets) {
-                fprintf(stderr, "WARNING: Will not be able to open "
-                    "%d simultaneous connections "
-                    "since \"%s\" specifies too narrow range [%d..%d].\n",
-                    expected_sockets, portrange_filename, lo, hi);
+                warning("Will not be able to open %d simultaneous connections "
+                        "since \"%s\" specifies too narrow range [%d..%d].\n",
+                        expected_sockets, portrange_filename, lo, hi);
                 return_value = -1;
             }
         }
@@ -208,10 +208,10 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         int flag;
         if(fscanf(f, "%d", &flag) == 1) {
             if(flag != 1 && expected_sockets > 100) {
-                fprintf(stderr, "WARNING: Not reusing TIME_WAIT sockets, "
-                    "might not open %d simultaneous connections. "
-                    "Adjust \"%s\" value.\n",
-                    expected_sockets, time_wait_reuse_filename);
+                warning("Not reusing TIME_WAIT sockets, "
+                        "might not open %d simultaneous connections. "
+                        "Adjust \"%s\" value.\n",
+                        expected_sockets, time_wait_reuse_filename);
                 return_value = -1;
             }
         }
@@ -230,10 +230,10 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         int n;
         if(fscanf(f, "%d", &n) == 1) {
             if(expected_sockets > n) {
-                fprintf(stderr, "WARNING: IP filter might not allow "
-                    "opening %d simultaneous connections. "
-                    "Adjust \"%s\" value.\n",
-                    expected_sockets, nf_conntrack_filename);
+                warning("IP filter might not allow "
+                        "opening %d simultaneous connections. "
+                        "Adjust \"%s\" value.\n",
+                        expected_sockets, nf_conntrack_filename);
                 return_value = -1;
             }
         }
@@ -252,10 +252,10 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
         int n;
         if(fscanf(f, "%d", &n) == 1) {
             if(n < (expected_sockets/8)) {
-                fprintf(stderr, "WARNING: IP filter is not properly sized for "
-                    "tracking %d simultaneous connections. "
-                    "Adjust \"%s\" value to at least %d.\n",
-                    expected_sockets, nf_hash_filename, expected_sockets/8);
+                warning("IP filter is not properly sized for "
+                        "tracking %d simultaneous connections. "
+                        "Adjust \"%s\" value to at least %d.\n",
+                        expected_sockets, nf_hash_filename, expected_sockets/8);
                 return_value = -1;
             }
         }

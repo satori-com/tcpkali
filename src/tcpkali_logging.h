@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -24,14 +24,27 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_COMMON_H
-#define TCPKALI_COMMON_H
+#ifndef TCPKALI_LOGGING_H
+#define TCPKALI_LOGGING_H
 
-#include <config.h>
-#include <inttypes.h>
-#include <assert.h>
+#include "tcpkali_common.h"
 
-#define UNUSED  __attribute__((unused))
-#define PRINTFLIKE(n,m)  __attribute__((format(printf,n,m)))
+enum verbosity_level {
+        DBG_ALWAYS  = 0,
+        DBG_ERROR   = 0,
+        DBG_NORMAL  = 1,    /* Default verbosity level */
+        DBG_WARNING = 1,    /* Deliberately the same as "normal" */
+        DBG_DETAIL  = 2,    /* Increased verbosity */
+        DBG_DATA    = 3,    /* Dump incoming and outgoing data as well */
+        _DBG_MAX
+};
 
-#endif  /* TCPKALI_COMMON_H */
+/*
+ * Print the given string while unconditionally prepending
+ * a colorized "WARNING: " prefix.
+ */
+void warning(const char *str, ...) PRINTFLIKE(1,2);
+
+void debug_log(enum verbosity_level at_verbosity, enum verbosity_level current_verbosity, const char *str, ...) PRINTFLIKE(3,4);
+
+#endif  /* TCPKALI_LOGGING_H */

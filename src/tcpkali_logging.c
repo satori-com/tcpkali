@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -24,14 +24,38 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_COMMON_H
-#define TCPKALI_COMMON_H
 
-#include <config.h>
-#include <inttypes.h>
-#include <assert.h>
+#include <stdio.h>
+#include <stdarg.h>
 
-#define UNUSED  __attribute__((unused))
-#define PRINTFLIKE(n,m)  __attribute__((format(printf,n,m)))
+#include "tcpkali_logging.h"
+#include "tcpkali_terminfo.h"
 
-#endif  /* TCPKALI_COMMON_H */
+/*
+ * Print the given string while unconditionally prepending
+ * a colorized "WARNING: " prefix.
+ */
+void warning(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "%sWARNING%s: ",
+        tk_attr(TKA_WARNING),
+        tk_attr(TKA_NORMAL));
+    fprintf(stderr, "%s", tcpkali_clear_eol());
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+void
+debug_log(enum verbosity_level at_verbosity,
+          enum verbosity_level current_verbosity,
+          const char *fmt, ...) {
+    va_list ap;
+    if(at_verbosity > current_verbosity)
+        return;
+    va_start(ap, fmt);
+    fprintf(stderr, "%s", tcpkali_clear_eol());
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+

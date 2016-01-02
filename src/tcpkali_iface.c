@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -43,6 +43,7 @@
 #include <assert.h>
 
 #include "tcpkali_common.h"
+#include "tcpkali_logging.h"
 #include "tcpkali_iface.h"
 
 /*
@@ -439,9 +440,9 @@ int detect_source_ips(struct addresses *dsts, struct addresses *srcs) {
     int rc = getifaddrs(&interfaces);
     if(rc == -1) {
         /* Can't get interfaces... Won't try to use several source IPs. */
-        fprintf(stderr, "WARNING: Can't enumerate interfaces, "
-                        "won't use multiple source IPs: %s\n",
-                        strerror(errno));
+        warning("Can't enumerate interfaces, "
+                "won't use multiple source IPs: %s\n",
+                strerror(errno));
         return 0;
     }
 
@@ -466,12 +467,12 @@ int detect_source_ips(struct addresses *dsts, struct addresses *srcs) {
         if(common_ss_family == 0) {
             common_ss_family = ds->ss_family;
         } else if(common_ss_family != ds->ss_family) {
-            fprintf(stderr,
-                "WARNING: Could not detect local address when connecting to %s:"
+            warning(
+                "Could not detect local address when connecting to %s:"
                 " Multiple incompatible address families in destination.\n",
                 format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
-            fprintf(stderr,
-                "WARNING: Would not open more than 64k connections to %s\n",
+            warning(
+                "Would not open more than 64k connections to %s\n",
                 format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
             srcs->n_addrs = 0;
             freeifaddrs(interfaces);
@@ -491,11 +492,11 @@ int detect_source_ips(struct addresses *dsts, struct addresses *srcs) {
 
         const char *ifname = interface_by_addr(interfaces, (struct sockaddr *)&local_addr);
         if(ifname == NULL) {
-            fprintf(stderr,
-                "WARNING: Can't determine local interface to connect to %s\n",
+            warning(
+                "Can't determine local interface to connect to %s\n",
                 format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
-            fprintf(stderr,
-                "WARNING: Would not open more than 64k connections to %s\n",
+            warning(
+                "Would not open more than 64k connections to %s\n",
                 format_sockaddr(ds, tmpbuf, sizeof(tmpbuf)));
             srcs->n_addrs = 0;
             freeifaddrs(interfaces);
