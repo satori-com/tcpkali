@@ -44,15 +44,33 @@
 
 static int int_utf8 = 0;
 static int terminal_width = 80;
-static char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
+static const char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
+static char tka_redbold[16];
+static char tka_normal[16];
+
+const char *tk_attr(enum tk_attribute tka) {
+    switch(tka) {
+    case TKA_NORMAL:  return tka_normal;
+    case TKA_REDBOLD: return tka_redbold;
+    }
+    /*
+     * Not using the "default:" to prompt warnings
+     * if not all enum parameters were used in switch() statement.
+     */
+    return "";
+}
 
 const char *tcpkali_clear_eol() { return str_clear_eol; }
 int tcpkali_is_utf8() { return int_utf8; }
 
 #ifdef  HAVE_LIBNCURSES
 
+static char *cap(char *cap) {
+    return tgetstr(cap, 0) ? : "";
+}
+
 static void enable_cursor(void) {
-    printf("%s", tgetstr("ve", 0)); /* cursor_normal */
+    printf("%s", cap("ve"));   /* cursor_normal */
 }
 
 static sig_atomic_t terminal_width_changed = 0;
@@ -69,11 +87,15 @@ int tcpkali_terminal_width(void) {
     return terminal_width;
 }
 
-void
+int
 tcpkali_init_terminal(void) {
-    char *term = getenv("TERM");
-    if(!term) return;
-    tgetent(0, term);
+    int errret = 0;
+
+    if(setupterm(NULL, 1, &errret) == ERR) {
+        return -1;
+    } else {
+        setvbuf(stdout, 0, _IONBF, 0);
+    }
 
     signal(SIGWINCH, raise_terminal_width_changed);
     int n = tgetnum("co");
@@ -84,11 +106,22 @@ tcpkali_init_terminal(void) {
         int_utf8 = 1;
 
     /* Obtain the clear end of line string */
-    str_clear_eol = tgetstr("ce", 0) ? : "";
+    str_clear_eol = cap("ce");
 
     /* Disable cursor */
-    printf("%s", tgetstr("vi", 0));
+    printf("%s", cap("vi"));
     atexit(enable_cursor);
+
+    snprintf(tka_redbold, sizeof(tka_redbold),
+#if NCURSES_TPARM_VARARGS
+        "%s%s", tparm(cap("AF"), COLOR_RED)?:"",
+#else
+        "%s",
+#endif
+        cap("md"));
+    snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
+
+    return 0;
 }
 
 #else   /* !HAVE_LIBNCURSES */

@@ -550,6 +550,15 @@ int main(int argc, char **argv) {
         }
     }
 
+    int print_stats = isatty(1);
+    if(print_stats) {
+        if(tcpkali_init_terminal() == -1) {
+            fprintf(stderr, "WARNING: Dumb terminal, "
+                            "expect unglorified output.\n");
+            print_stats = 0;
+        }
+    }
+
     /*
      * Avoid spawning more threads than connections.
      */
@@ -731,12 +740,6 @@ int main(int argc, char **argv) {
      */
     int term_flag = 0;
     flagify_term_signals(&term_flag);
-
-    int print_stats = isatty(1);
-    if(print_stats) {
-        setvbuf(stdout, 0, _IONBF, 0);
-        tcpkali_init_terminal();
-    }
 
     /*
      * Traffic in/out moving average, smoothing period is 3 seconds.

@@ -27,7 +27,11 @@
 #ifndef TCPKALI_TERMINFO_H
 #define TCPKALI_TERMINFO_H
 
-void tcpkali_init_terminal(void);
+/*
+ * Initialize smart terminal.
+ * RETURN VALUES: -1 for error (dumb terminal), 0 for OK.
+ */
+int tcpkali_init_terminal(void);
 
 /*
  * Capability "clr_eol":
@@ -44,5 +48,15 @@ int tcpkali_is_utf8();
  * Width of the terminal output, in columns.
  */
 int tcpkali_terminal_width();
+
+/*
+ * Get an escape sequence for special terminal output
+ * attributes used by tcpkali.
+ */
+enum tk_attribute {
+    TKA_NORMAL,
+    TKA_REDBOLD
+};
+const char *tk_attr(enum tk_attribute);
 
 #endif  /* TCPKALI_TERMINFO_H */

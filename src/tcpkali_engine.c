@@ -1625,11 +1625,15 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  */
 static void debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
     char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
-    fprintf(stderr, "%s%s(%d, %ld): %s%s%s\n",
+    fprintf(stderr, "%s%s(%d, %ld): %s%s%s%s%s%s%s\n",
             tcpkali_clear_eol(), prefix, fd, (long)size,
+            tk_attr(TKA_REDBOLD),
             tcpkali_is_utf8() ? "➧" : "[",
+            tk_attr(TKA_NORMAL),
             printable_data(buffer, sizeof(buffer), data, size, 0),
-            tcpkali_is_utf8() ? "⬅︎" : "]"
+            tk_attr(TKA_REDBOLD),
+            tcpkali_is_utf8() ? "⬅︎" : "]",
+            tk_attr(TKA_NORMAL)
     );
 }
 
