@@ -49,6 +49,9 @@ When connection gets closed, some other connection is used for dumping.
 --dump-{all,all-in,all-out}
 : Dump input and/or output data on *all* connections.
 
+--write-combine=off
+:   Send messages individually instead of batching writes. Implies **--nagle=off**, if not overriden by the command line. Default is `on`.
+
 -w, --workers *N*
 :   Number of parallel threads to use. Default is to use as many as needed,
     up to the number of cores detected in the system.
@@ -56,7 +59,7 @@ When connection gets closed, some other connection is used for dumping.
 ## NETWORK STACK SETTINGS
 
 --nagle=on|off
-:   Control Nagle algorithm (set `TCP_NODELAY` socket option using **setsockopt**()).
+:   Control Nagle algorithm by setting `TCP_NODELAY` socket option using **setsockopt**(). Default is not to call **setsockopt**() at all, which leaves Nagle *enabled* on most systems.
 
 --rcvbuf *SizeBytes*
 :   Set TCP receive buffers (set `SO_RCVBUF` socket option using **setsockopt**()).
@@ -129,9 +132,9 @@ open more than 64k connections to destinations.
 
 -r, --message-rate *Rate*
 :   Messages per second to send in a connection. tcpkali attempts to preserve
-    message boundaries. This setting is mutually incompatible with
-    **--channel-bandwidth-upstream** option, because they control
-    the same thing.
+    message boundaries. This setting is mutually incompatible with the
+    **--channel-bandwidth-upstream** option, because they both control
+    the message sending rate.
 
 ### Traffic content expressions
 

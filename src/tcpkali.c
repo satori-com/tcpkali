@@ -1120,7 +1120,7 @@ usage(char *argv0, struct tcpkali_config *conf) {
     "  --rcvbuf <SizeBytes>         Set TCP receive buffers (set SO_RCVBUF)\n"
     "  --sndbuf <SizeBytes>         Set TCP rend buffers (set SO_SNDBUF)\n"
     "  --source-ip <IP>             Use the specified IP address to connect\n"
-    "  --write-combine off          Disable merging adjacent writes\n"
+    "  --write-combine off          Disable batching adjacent writes\n"
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"

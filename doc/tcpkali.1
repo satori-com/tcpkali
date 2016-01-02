@@ -68,6 +68,13 @@ Dump input and/or output data on \f[I]all\f[] connections.
 .RS
 .RE
 .TP
+.B \-\-write\-combine=off
+Send messages individually instead of batching writes.
+Implies \f[B]\-\-nagle=off\f[], if not overriden by the command line.
+Default is \f[C]on\f[].
+.RS
+.RE
+.TP
 .B \-w, \-\-workers \f[I]N\f[]
 Number of parallel threads to use.
 Default is to use as many as needed, up to the number of cores detected
@@ -77,8 +84,10 @@ in the system.
 .SS NETWORK STACK SETTINGS
 .TP
 .B \-\-nagle=on|off
-Control Nagle algorithm (set \f[C]TCP_NODELAY\f[] socket option using
-\f[B]setsockopt\f[]()).
+Control Nagle algorithm by setting \f[C]TCP_NODELAY\f[] socket option
+using \f[B]setsockopt\f[]().
+Default is not to call \f[B]setsockopt\f[]() at all, which leaves Nagle
+\f[I]enabled\f[] on most systems.
 .RS
 .RE
 .TP
@@ -200,9 +209,9 @@ Repeatedly send the message read from the file to each destination.
 .B \-r, \-\-message\-rate \f[I]Rate\f[]
 Messages per second to send in a connection.
 tcpkali attempts to preserve message boundaries.
-This setting is mutually incompatible with
-\f[B]\-\-channel\-bandwidth\-upstream\f[] option, because they control
-the same thing.
+This setting is mutually incompatible with the
+\f[B]\-\-channel\-bandwidth\-upstream\f[] option, because they both
+control the message sending rate.
 .RS
 .RE
 .SS Traffic content expressions
