@@ -5,6 +5,7 @@ compiler:
   - clang
 before_script:
   - pip install --user --upgrade pip
+  - ls -alR
   - ./.local/bin/pip install --user pip8 pylint
 script:
   - autoreconf -iv && ./configure
