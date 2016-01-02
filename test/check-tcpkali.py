@@ -132,9 +132,15 @@ class Analyze(object):
     def _total_occurrences(self, d):
         return sum(d.values())
 
-    # Int -> Int[0..100]
+    # Int -> Int(0..100)
+    def input_length_percentile_lte(self, n):
+        return self._length_percentile_lte(self.in_lengths, n)
+
+    # Int -> Int(0..100)
     def output_length_percentile_lte(self, n):
-        d = self.out_lengths
+        return self._length_percentile_lte(self.out_lengths, n)
+
+    def _length_percentile_lte(self, d, n):
         total = self._total_occurrences(d)
         if total > 0:
             occurs = sum([v for (k,v) in d.items() if k <= n])
@@ -147,14 +153,31 @@ class Analyze(object):
 
 port = 1350
 
+print("Rate limiting cuts packets across message boundaries")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-r3k", "-mABC"], capture_io = True)
+a = Analyze(t.results())
+assert a.output_length_percentile_lte(4*len("ABC")) > 90
+assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5, 7,8]]) == 0
+
+
+print("Write combining OFF still cuts packets across message boundaries")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-r3k", "-mABC", "--write-combine=off"], capture_io = True)
+a = Analyze(t.results())
+assert a.output_length_percentile_lte(4*len("ABC")) > 90
+assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5, 7,8]]) == 0
+
+
 print("Rate limiting smoothess with 2kRPS")
 port = port + 1
 t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
              "-r2k", "-mABC"], capture_io = True)
 a = Analyze(t.results())
 # Check for not too many long packets outliers (<5%).
-assert a.output_length_percentile_lte(4*len("ABC")) > 95;
-assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5]]) == 0
+assert a.output_length_percentile_lte(4*len("ABC")) > 95
 
 
 print("Rate limiting smoothess with 15kRPS")
@@ -163,8 +186,35 @@ t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
              "-r15k", "-mABC"], capture_io = True)
 a = Analyze(t.results())
 # Check for not too many short packets outliers (<10%).
-assert a.output_length_percentile_lte(2*len("ABC")) < 10;
-assert sum([a.out_lengths.get(i, 0) for i in [1,2, 4,5]]) == 0
+assert a.output_length_percentile_lte(2*len("ABC")) < 10
+
+
+print("Observe write combining at 10kRPS by default")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-w1", # Multi-core affects (remobes) TCP level coalescing
+                    # So we disable it here to obtain some for
+                    # proper operation of input_length_percentile_lte().
+             "-r10k", "-mABC", "--dump-all"], capture_io = True)
+a = Analyze(t.results())
+# Check for not too many short packets outliers (<10%).
+assert a.output_length_percentile_lte(4*len("ABC")) < 10
+assert a.input_length_percentile_lte(4*len("ABC")) < 10
+
+
+print("No write combining at 10kRPS with --write-combine=off")
+port = port + 1
+t = Tcpkali(["-l"+str(port), "127.1:"+str(port), "-T1",
+             "-w1", # Multi-core affects (remobes) TCP level coalescing
+                    # So we disable it here to obtain some for
+                    # proper operation of input_length_percentile_lte().
+             "-r10k", "-mABC", "--dump-all", "--write-combine=off"],
+             capture_io = True)
+a = Analyze(t.results())
+# Check for not too many short packets outliers (<10%).
+assert a.output_length_percentile_lte(len("ABC")) == 100
+assert a.input_length_percentile_lte(1*len("ABC")) < 10
+
 
         
 # Perform generic bandwidth limiting in different directions,
