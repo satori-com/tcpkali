@@ -32,6 +32,7 @@
 
 #include "tcpkali_traffic_stats.h"
 #include "tcpkali_transport.h"
+#include "tcpkali_logging.h"
 #include "tcpkali_atomic.h"
 #include "tcpkali_rate.h"
 #include "tcpkali_expr.h"
@@ -47,15 +48,7 @@ struct engine_params {
     size_t requested_workers;       /* Number of threads to start */
     rate_spec_t channel_send_rate;  /* --channel-upstream */
     rate_spec_t channel_recv_rate;  /* --channel-downstream */
-    enum {
-        DBG_ALWAYS  = 0,
-        DBG_ERROR   = 0,
-        DBG_NORMAL  = 1,    /* Default verbosity level */
-        DBG_WARNING = 1,    /* Deliberately the same as "normal" */
-        DBG_DETAIL  = 2,    /* Increased verbosity */
-        DBG_DATA    = 3,    /* Dump incoming and outgoing data as well */
-        _DBG_MAX
-    } verbosity_level;      /* Default verbosity level is 1 */
+    enum verbosity_level verbosity_level; /* Default verbosity level is 1 */
     enum {
         NSET_UNSET = -1,
         NSET_NODELAY_OFF = 0,  /* Enable Nagle */
