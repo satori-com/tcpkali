@@ -13,5 +13,5 @@ TESTS_ENVIRONMENT= TCPKALI="$(top_builddir)/src/tcpkali"
 lint:
 	${SHELLCHECK} -e SC2086 *.sh
 	${PEP8} *.py
-	${PYLINT} *.py
-	${PYLINT} --py3k *.py
+	${PYLINT} --reports=n --persistent=n *.py
+	${PYLINT} --reports=n --persistent=n --py3k *.py
