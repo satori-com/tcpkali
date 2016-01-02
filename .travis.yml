@@ -4,8 +4,8 @@ compiler:
   - gcc
   - clang
 before_script:
-  - pip install --upgrade pip
-  - pip install --user pip8 pylint
+  - pip install --user --upgrade pip
+  - ./.local/bin/pip install --user pip8 pylint
 script:
   - autoreconf -iv && ./configure
   - make -C test lint
