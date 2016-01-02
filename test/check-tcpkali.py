@@ -1,5 +1,11 @@
 #!/usr/bin/env python
+# pylint: disable=invalid-name,print-statement
+"""
+Run several tcpkali processes in source-destination mode and figure out
+if they're behaving according to expectations
+"""
 
+from __future__ import absolute_import
 import os
 import re
 import sys
@@ -10,14 +16,15 @@ import subprocess
 
 
 def log(*args):
-    ts = datetime.datetime.now()
+    """Print out the arguments in a log-like fashion."""
+    timestamp = datetime.datetime.now()
     sys.stderr.write("[%s]: %s\n" %
-                     (ts, ' '.join(map(lambda x: str(x), list(args)))))
+                     (timestamp, ' '.join([str(x) for x in list(args)])))
     sys.stderr.flush()
 
 
-# Wrapper around `tcpkali` process and its output.
 class Tcpkali(object):
+    """Wrapper around `tcpkali` process and its output."""
     def __init__(self, args, **kvargs):
         self.proc = None
 
@@ -37,23 +44,25 @@ class Tcpkali(object):
         if self.proc.returncode is not None:
             log("Could not start the tcpkali process: %r\n"
                 % self.proc.returncode)
-            raise
+            raise Exception("Cannot start the tcpkali process")
         log("Started tcpkali pid %r" % self.proc.pid)
 
     def results(self):
-        self._wait()
+        """Return results of tcpkali operation."""
+        self.wait()
         self.fout.seek(0)
         self.ferr.seek(0)
         out = self.fout.readlines()
         err = self.ferr.readlines()
         return (out, err)
 
-    def _wait(self):
+    def wait(self):
+        """Wait until tcpkali finished."""
         if self.proc:
             self.proc.wait()
             if self.proc.returncode is None:
                 log("Could not stop the tcpkali process\n")
-                raise
+                raise Exception("Can't stop tcpkali process")
             pid = self.proc.pid
             self.proc = None
             log("Stopped tcpkali pid %r" % pid)
@@ -61,59 +70,55 @@ class Tcpkali(object):
     def __del__(self):
         if self.proc:
             self.proc.terminate()
-            self._wait()
+            self.wait()
 
 
-# Results analyzer
 class Analyze(object):
+    """Tcpkali output analyzer."""
+    # pylint: disable=too-many-instance-attributes,too-many-locals
     def __init__(self, args):
         self.out_lengths = {}
-        self.out_minLength = None
-        self.out_maxLength = None
         self.out_num = 0
         self.in_lengths = {}
-        self.in_minLength = None
-        self.in_maxLength = None
         self.in_num = 0
 
         # Output and Error lines
         outLines = args[0]
         errLines = args[1]
 
-        outRe = re.compile("^Out\(\d+, (\d+)\): \[(.*)\]$")
+        def _record_occurrence(d, length):
+            if length > 50 and length <= 100:
+                length = 10 * (length // 10)
+            elif length > 100 and length <= 2000:
+                length = 100 * (length // 100)
+            elif length > 2000:
+                length = 2000
+            d[length] = d.get(length, 0) + 1
+
+        outRe = re.compile(r"^Out\(\d+, (\d+)\): \[(.*)\]$")
         for _, line in enumerate(errLines):
             result = outRe.match(line)
             if result:
                 self.out_num = self.out_num + 1
                 outLen = int(result.group(1))
-                outContent = result.group(2)
-                self._record_occurrence(self.out_lengths, outLen)
-                if self.out_minLength is None or outLen < self.out_minLength:
-                    self.out_minLength = outLen
-                if self.out_maxLength is None or outLen > self.out_maxLength:
-                    self.out_maxLength = outLen
+                _record_occurrence(self.out_lengths, outLen)
 
-        inRe = re.compile("^In\(\d+, (\d+)\): \[(.*)\]$")
+        inRe = re.compile(r"^In\(\d+, (\d+)\): \[(.*)\]$")
         for _, line in enumerate(errLines):
             result = inRe.match(line)
             if result:
                 self.in_num = self.in_num + 1
                 inLen = int(result.group(1))
-                inContent = result.group(2)
-                self._record_occurrence(self.in_lengths, inLen)
-                if self.in_minLength is None or inLen < self.in_minLength:
-                    self.in_minLength = inLen
-                if self.in_maxLength is None or inLen > self.in_maxLength:
-                    self.in_maxLength = inLen
+                _record_occurrence(self.in_lengths, inLen)
 
-        bwRe = re.compile("^Aggregate bandwidth: "
-                          "([\d.]+)[^\d]+, ([\d.]+)[^\d]+ Mbps")
+        bwRe = re.compile(r"^Aggregate bandwidth: "
+                          r"([\d.]+)[^\d]+, ([\d.]+)[^\d]+ Mbps")
         bws = [bwRe.match(line) for line in outLines if bwRe.match(line)][0]
         self.bw_down_mbps = float(bws.group(1))
         self.bw_up_mbps = float(bws.group(2))
 
-        totalRe = re.compile("^Total data (sent|received):.*"
-                             "\(([\d.]+) bytes\)")
+        totalRe = re.compile(r"^Total data (sent|received):.*"
+                             r"\(([\d.]+) bytes\)")
         sent = [totalRe.match(line) for line in outLines
                 if totalRe.match(line) and 'sent' in line][0]
         self.total_sent_bytes = int(sent.group(2))
@@ -123,36 +128,35 @@ class Analyze(object):
 
         self.debug()
 
-    def _record_occurrence(self, d, len):
-        if(len > 50 and len <= 100):
-            len = 10 * (len / 10)
-        elif(len > 100 and len <= 2000):
-            len = 100 * (len / 100)
-        elif(len > 2000):
-            len = 2000
-        d[len] = d.get(len, 0) + 1
-
-    def _total_occurrences(self, d):
-        return sum(d.values())
-
     # Int -> Int(0..100)
     def input_length_percentile_lte(self, n):
+        """
+        Determine percentile value of all occurrences of input lengths
+        less or equal to n.
+        """
         return self._length_percentile_lte(self.in_lengths, n)
 
     # Int -> Int(0..100)
     def output_length_percentile_lte(self, n):
+        """
+        Determine percentile value of all occurrences of output lengths
+        less or equal to n.
+        """
         return self._length_percentile_lte(self.out_lengths, n)
 
     def _length_percentile_lte(self, d, n):
-        total = self._total_occurrences(d)
+        # pylint: disable=no-self-use
+        total = sum(d.values())
         if total > 0:
             occurs = sum([v for (k, v) in d.items() if k <= n])
-            return (100 * occurs / total)
+            return 100 * occurs // total
         else:
             return 0
 
     def debug(self):
-        [log("  '%s': %s" % kv) for kv in sorted(vars(self).items())]
+        """Print the variables representing analyzed tcpkali output."""
+        for kv in sorted(vars(self).items()):
+            log("  '%s': %s" % kv)
 
 port = 1350
 
@@ -258,7 +262,7 @@ for variant in [[], ["--websocket"], ["--write-combine=off"],
                                 "--sndbuf=5k"])
     arcv = Analyze(receiver.results())
     asnd = Analyze(sender.results())
-    transfer = ((100 * 1024 / 8) * 11)
+    transfer = ((100 * 1024 // 8) * 11)
     trans_min = 0.9 * transfer
     trans_max = 1.1 * transfer
     assert(arcv.total_sent_bytes < 1000 and
