@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
@@ -36,6 +37,70 @@
 
 #include "tcpkali_syslimits.h"
 #include "tcpkali_logging.h"
+
+/*
+ * Get a system setting, be it sysctl or a file contents, and put it into
+ * the scanf variables.
+ * RETURNS -1 if the system setting of a proper format was not found,
+ *          0 otherwise.
+ */
+static int __attribute__((format(scanf, 2, 3)))
+system_setting(const char *setting_name, const char *setting_fmt, ...) {
+    int n_args = 0;
+    const char *p;
+
+    /* Count the number of arguments to be extracted */
+    for(p = setting_fmt; *p; p++)
+        n_args += (*p == '%');
+
+    /*
+     * A file based setting starts with a slash: "/proc/cpu";
+     * a sysctl(3) setting doesn't. Split by the slash first.
+     */
+    if(setting_name[0] == '/') {
+        const char *filename = setting_name;
+        FILE *f = fopen(filename, "r");
+        if(!f) return -1;
+
+        va_list ap;
+        va_start(ap, setting_fmt);
+        int scanned = vfscanf(f, setting_fmt, ap);
+        va_end(ap);
+
+        fclose(f);
+        return (scanned == n_args) ? 0 : -1;
+    } else if(setting_fmt[0] == '\0'
+        || (n_args == 1 && strcmp(setting_fmt, "%d") == 0)) {
+        union {
+            char buf[16];
+            int  integer;
+        } contents;
+        size_t contlen = sizeof(contents);
+        if(sysctlbyname(setting_name, &contents, &contlen, NULL, 0) == -1
+        || contlen == sizeof(contents))
+            return -1;
+
+        if(contlen != sizeof(contents.integer)) {
+            warning("%s sysctl does not seem to hold an integer.\n",
+                    setting_name);
+            return -1;
+        }
+
+        if(n_args) {
+            va_list ap;
+            va_start(ap, setting_fmt);
+            int *intp = va_arg(ap, int *);
+            *intp = contents.integer;
+            va_end(ap);
+        }
+
+        return 0;
+    } else {
+        assert(!"Unreachable");
+        return -1;
+    }
+}
+
 
 /*
  * Sort limits in descending order.
@@ -93,11 +158,12 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
     rlim_t limits[] = {
         max_open,
         prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : max_open,
-        expected_sockets * 2 + 100 + workers,
-        expected_sockets + 100 + workers,
-        expected_sockets + 4 + workers, /* n cores and other overhead */
+        expected_sockets * 2 + 100 + 2*workers,
+        expected_sockets + 100 + 2*workers,
+        expected_sockets + 4 + 2*workers, /* n cores and other overhead */
     };
     size_t limits_count = sizeof(limits)/sizeof(limits[0]);
+    int smallest_acceptable_fdmax = expected_sockets + 4 + 2*workers;
 
     qsort(limits, limits_count, sizeof(limits[0]), compare_rlimits);
 
@@ -137,7 +203,7 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
         fprintf(stderr, "Could not adjust open files limit from %ld to %ld\n",
             (long)prev_limit.rlim_cur, (long)limits[limits_count - 1]);
         return -1;
-    } else if(limits[i] < (rlim_t)(expected_sockets + 4 + workers)) {
+    } else if(limits[i] < (rlim_t)smallest_acceptable_fdmax) {
         fprintf(stderr, "Adjusted open files limit from %ld to %ld, but still too low for --connections=%d.\n",
             (long)prev_limit.rlim_cur, (long)limits[i], expected_sockets);
         return -1;
@@ -159,20 +225,43 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     /*
      * Check that this process can open enough file descriptors.
      */
+    int smallest_acceptable_fdmax = expected_sockets + 4 + 2*workers;
+
+    if(max_open_files() < (rlim_t)smallest_acceptable_fdmax) {
+        const char *maxfiles_sctls[] = {
+                        "kern.maxfiles",
+                        "kern.maxfilesperproc",
+                        "fs.file-max"
+                    };
+        size_t i;
+        for(i = 0; i < sizeof(maxfiles_sctls)/sizeof(maxfiles_sctls[0]); i++) {
+            const char *sysctl_name = maxfiles_sctls[i];
+            int value;
+            if(system_setting(sysctl_name, "%d", &value) != 0)
+                continue;
+            if(value < smallest_acceptable_fdmax) {
+                warning("System-wide open files limit %d "
+                        "is too low for the expected scale (-c %d).\n"
+                        "Adjust the '%s' sysctl.\n",
+                        value, expected_sockets, sysctl_name);
+                return_value = -1;
+            }
+        }
+        if(return_value != -1) {
+            warning("System-wide open files limit %d "
+                    "is too low for the expected scale (-c %d).\n",
+                    (int)max_open_files(), expected_sockets);
+            return_value = -1;
+        }
+    }
+
     struct rlimit rlp;
     int ret;
     ret = getrlimit(RLIMIT_NOFILE, &rlp);
     assert(ret == 0);
-
-    if(rlp.rlim_cur < (rlim_t)(expected_sockets + 4 + workers)) {
+    if(rlp.rlim_cur < (rlim_t)smallest_acceptable_fdmax) {
         warning("Open files limit (`ulimit -n`) %ld "
                 "is too low for the expected scale (-c %d).\n",
-                (long)rlp.rlim_cur, expected_sockets);
-        return_value = -1;
-    } else if(max_open_files() < (rlim_t)(expected_sockets + 4 + workers)) {
-        warning("System-wide open files limit %ld "
-                "is too low for the expected scale (-c %d).\n"
-                "Consider adjusting fs.file-max or kern.maxfiles sysctl.\n",
                 (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
     }
@@ -183,19 +272,33 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * expected_sockets to the destination.
      */
     const char *portrange_filename = "/proc/sys/net/ipv4/ip_local_port_range";
-    FILE *f = fopen(portrange_filename, "r");
-    if(f) {
-        int lo, hi;
-        if(fscanf(f, "%d %d", &lo, &hi) == 2) {
-            if(hi - lo < expected_sockets) {
-                warning("Will not be able to open %d simultaneous connections "
-                        "since \"%s\" specifies too narrow range [%d..%d].\n",
-                        expected_sockets, portrange_filename, lo, hi);
-                return_value = -1;
-            }
+    const char *portrange_sysctl_lo = "net.inet.ip.portrange.first";
+    const char *portrange_sysctl_hi = "net.inet.ip.portrange.last";
+    int range_lo, range_hi;
+    if(system_setting(portrange_filename, "%d %d", &range_lo, &range_hi) == 0) {
+        if(range_hi - range_lo < expected_sockets) {
+            warning("Will not be able to open %d simultaneous connections "
+                    "since \"%s\" specifies too narrow range [%d..%d].\n",
+                    expected_sockets, portrange_filename,
+                    range_lo, range_hi);
+            return_value = -1;
         }
-        fclose(f);
+    } else if(system_setting(portrange_sysctl_lo, "%d", &range_lo) == 0
+           && system_setting(portrange_sysctl_hi, "%d", &range_hi) == 0) {
+        /*
+         * Check the ephemeral port range on BSD-derived systems.
+         */
+        if(range_hi - range_lo < expected_sockets) {
+            warning("Will not be able to open %d simultaneous connections "
+                    "since \"%s\" and \"%s\" sysctls specify too narrow "
+                    "range [%d..%d].\n",
+                    expected_sockets,
+                    portrange_sysctl_lo, portrange_sysctl_hi,
+                    range_lo, range_hi);
+            return_value = -1;
+        }
     }
+
 
     /*
      * Check that we are able to reuse the sockets when opening a lot
@@ -203,19 +306,15 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * http://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html
      */
     const char *time_wait_reuse_filename = "/proc/sys/net/ipv4/tcp_tw_reuse";
-    f = fopen(time_wait_reuse_filename, "r");
-    if(f) {
-        int flag;
-        if(fscanf(f, "%d", &flag) == 1) {
-            if(flag != 1 && expected_sockets > 100) {
-                warning("Not reusing TIME_WAIT sockets, "
-                        "might not open %d simultaneous connections. "
-                        "Adjust \"%s\" value.\n",
-                        expected_sockets, time_wait_reuse_filename);
-                return_value = -1;
-            }
+    int tcp_tw_reuse;
+    if(system_setting(time_wait_reuse_filename, "%d", &tcp_tw_reuse) == 0) {
+        if(tcp_tw_reuse != 1 && expected_sockets > 100) {
+            warning("Not reusing TIME_WAIT sockets, "
+                    "might not open %d simultaneous connections. "
+                    "Adjust \"%s\" value.\n",
+                    expected_sockets, time_wait_reuse_filename);
+            return_value = -1;
         }
-        fclose(f);
     }
 
     /*
@@ -225,19 +324,15 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * See http://serverfault.com/questions/482480/
      */
     const char *nf_conntrack_filename = "/proc/sys/net/netfilter/nf_conntrack_max";
-    f = fopen(nf_conntrack_filename, "r");
-    if(f) {
-        int n;
-        if(fscanf(f, "%d", &n) == 1) {
-            if(expected_sockets > n) {
-                warning("IP filter might not allow "
-                        "opening %d simultaneous connections. "
-                        "Adjust \"%s\" value.\n",
-                        expected_sockets, nf_conntrack_filename);
-                return_value = -1;
-            }
+    int nf_conntrack_max;
+    if(system_setting(nf_conntrack_filename, "%d", &nf_conntrack_max) == 0) {
+        if(expected_sockets > nf_conntrack_max) {
+            warning("IP filter might not allow "
+                    "opening %d simultaneous connections. "
+                    "Adjust \"%s\" value.\n",
+                    expected_sockets, nf_conntrack_filename);
+            return_value = -1;
         }
-        fclose(f);
     }
 
     /*
@@ -247,19 +342,15 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * See http://serverfault.com/questions/482480/
      */
     const char *nf_hash_filename = "/sys/module/nf_conntrack/parameters/hashsize";
-    f = fopen(nf_hash_filename, "r");
-    if(f) {
-        int n;
-        if(fscanf(f, "%d", &n) == 1) {
-            if(n < (expected_sockets/8)) {
-                warning("IP filter is not properly sized for "
-                        "tracking %d simultaneous connections. "
-                        "Adjust \"%s\" value to at least %d.\n",
-                        expected_sockets, nf_hash_filename, expected_sockets/8);
-                return_value = -1;
-            }
+    int nf_hashsize;
+    if(system_setting(nf_hash_filename, "%d", &nf_hashsize) == 0) {
+        if(nf_hashsize < (expected_sockets/8)) {
+            warning("IP filter is not properly sized for "
+                    "tracking %d simultaneous connections. "
+                    "Adjust \"%s\" value to at least %d.\n",
+                    expected_sockets, nf_hash_filename, expected_sockets/8);
+            return_value = -1;
         }
-        fclose(f);
     }
 
     return return_value;
