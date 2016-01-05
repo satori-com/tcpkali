@@ -45,8 +45,8 @@
  * RETURNS -1 if the system setting of a proper format was not found,
  *          0 otherwise.
  */
-static int __attribute__((format(scanf, 2, 3)))
-system_setting(const char *setting_name, const char *setting_fmt, ...) {
+static int
+vsystem_setting(const char *setting_name, const char *setting_fmt, va_list ap) {
     int n_args = 0;
     const char *p;
 
@@ -63,27 +63,20 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
         FILE *f = fopen(filename, "r");
         if(!f) return -1;
 
-        va_list ap;
-        va_start(ap, setting_fmt);
         int scanned = vfscanf(f, setting_fmt, ap);
-        va_end(ap);
-
         fclose(f);
         return (scanned == n_args) ? 0 : -1;
     } else if(setting_fmt[0] == '\0'
         || (n_args == 1 && strcmp(setting_fmt, "%d") == 0)) {
+#ifdef  HAVE_SYSCTLBYNAMEd
         union {
             char buf[16];
             int  integer;
         } contents;
         size_t contlen = sizeof(contents);
-#ifdef  HAVE_SYSCTLBYNAME
         if(sysctlbyname(setting_name, &contents, &contlen, NULL, 0) == -1
         || contlen == sizeof(contents))
             return -1;
-#else
-        return -1;
-#endif
 
         if(contlen != sizeof(contents.integer)) {
             warning("%s sysctl does not seem to hold an integer.\n",
@@ -92,18 +85,40 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
         }
 
         if(n_args) {
-            va_list ap;
-            va_start(ap, setting_fmt);
             int *intp = va_arg(ap, int *);
             *intp = contents.integer;
-            va_end(ap);
         }
 
         return 0;
+#else   /* !HAVE_SYSCTLBYNAME */
+        /* Explicitly convert sysctl-style into file-style for Linux */
+        char filename[128] = "/proc/sys/";
+        char *p = filename + strlen(filename);
+#if !defined(__linux__)
+#warning "Converting sysctl-style parameters into file paths might not be compatible with non-Linux operating systems"
+#endif
+        for(; *setting_name && (size_t)(p-filename) < (sizeof(filename)-1); setting_name++, p++) {
+            switch(*setting_name) {
+            case '.': *p = '/'; break;
+            default:  *p = *setting_name;
+            }
+        }
+        *p = '\0';
+        return vsystem_setting(filename, setting_fmt, ap);
+#endif  /* HAVE_SYSCTLBYNAME */
     } else {
         assert(!"Unreachable");
         return -1;
     }
+}
+
+static int __attribute__((format(scanf, 2, 3)))
+system_setting(const char *setting_name, const char *setting_fmt, ...) {
+    va_list ap;
+    va_start(ap, setting_fmt);
+    int ret = vsystem_setting(setting_name, setting_fmt, ap);
+    va_end(ap);
+    return ret;
 }
 
 int check_setsockopt_effect(int so_option) {
