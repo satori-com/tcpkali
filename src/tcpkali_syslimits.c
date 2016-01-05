@@ -76,9 +76,13 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
             int  integer;
         } contents;
         size_t contlen = sizeof(contents);
+#ifdef  HAVE_SYSCTLBYNAME
         if(sysctlbyname(setting_name, &contents, &contlen, NULL, 0) == -1
         || contlen == sizeof(contents))
             return -1;
+#else
+        return -1;
+#endif
 
         if(contlen != sizeof(contents.integer)) {
             warning("%s sysctl does not seem to hold an integer.\n",

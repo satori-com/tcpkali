@@ -45,6 +45,7 @@ AC_CHECK_SIZEOF([size_t])
 
 AC_CHECK_HEADERS(sched.h uv.h)
 AC_CHECK_FUNCS(sched_getaffinity)
+AC_CHECK_FUNCS(sysctlbyname)
 
 AC_ARG_WITH([libuv],
     [AS_HELP_STRING([--with-libuv],
