@@ -126,6 +126,14 @@ class Analyze(object):
                 if totalRe.match(line) and 'received' in line][0]
         self.total_received_bytes = int(rcvd.group(2))
 
+        sockoptRe = re.compile(r"^WARNING: --(snd|rcv)buf option "
+                               r"makes no effect.")
+        self.sockopt_works = True
+        for _, line in enumerate(errLines):
+            result = sockoptRe.match(line)
+            if result:
+                self.sockopt_works = False
+
         self.debug()
 
     # Int -> Int(0..100)
@@ -282,11 +290,13 @@ for variant in [[], ["--websocket"], ["--write-combine=off"],
     transfer = ((100 * 1024 // 8) * 11)
     trans_min = 0.9 * transfer
     trans_max = 1.1 * transfer
-    assert(arcv.total_sent_bytes < 1000 and
-           arcv.total_received_bytes > trans_min and
-           arcv.total_received_bytes < trans_max)
-    assert(asnd.total_received_bytes < 1000 and
-           asnd.total_sent_bytes > trans_min and
-           asnd.total_sent_bytes < 2 * trans_max)
+    assert((arcv.total_sent_bytes < 1000 and
+            arcv.total_received_bytes > trans_min and
+            arcv.total_received_bytes < trans_max) or
+           not arcv.sockopt_works)
+    assert((asnd.total_received_bytes < 1000 and
+            asnd.total_sent_bytes > trans_min and
+            asnd.total_sent_bytes < 2 * trans_max) or
+           not asnd.sockopt_works)
 
 print("FINISHED")

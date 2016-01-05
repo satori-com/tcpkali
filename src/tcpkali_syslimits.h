@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  * 
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  * 
@@ -37,5 +37,15 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers);
  * observing sysctls, and the like.
  */
 int check_system_limits_sanity(int expected_sockets, int workers);
+
+/*
+ * Check whether setsockopt() with a given option will give any effect.
+ * RETURN VALUES:
+ *  -1: We don't know whether setsockopt is effectful.
+ *   0: The socket option is ineffectful.
+ *   1: The socket option is likely effectful.
+ * In case the socket option has no effect, a warning is printed.
+ */
+int check_setsockopt_effect(int so_option);
 
 #endif  /* TCPKALI_SYSLIMITS_H */

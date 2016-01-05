@@ -587,6 +587,21 @@ int main(int argc, char **argv) {
     }
 
     /*
+     * Check whether --rcvbuf and --sndbuf options mean something.
+     * Some sysctl variables may make these options ineffectful.
+     */
+    if(engine_params.sock_rcvbuf_size
+    && check_setsockopt_effect(SO_RCVBUF) == 0) {
+        /* The check_setsockopt_effect() function yelled already. */
+        warning("--rcvbuf option makes no effect.\n");
+    }
+    if(engine_params.sock_sndbuf_size
+    && check_setsockopt_effect(SO_SNDBUF) == 0) {
+        /* The check_setsockopt_effect() function yelled already. */
+        warning("--sndbuf option makes no effect.\n");
+    }
+
+    /*
      * Pick multiple destinations from the command line, resolve them.
      */
     if(argc - optind > 0) {

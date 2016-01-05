@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -103,6 +104,44 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
         assert(!"Unreachable");
         return -1;
     }
+}
+
+int check_setsockopt_effect(int so_option) {
+    const char *auto_sndbuf[] = { "net.inet.tcp.doautorcvbuf",   /* Mac OS X */
+                                  "net.inet.tcp.sendbuf_auto" }; /* BSD */
+    const char *auto_rcvbuf[] = { "net.inet.tcp.doautorcvbuf",   /* Mac OS X */
+                                  "net.inet.tcp.recvbuf_auto" }; /* BSD */
+    const char **auto_sysctls_to_check = 0;
+    const char *so_name;
+
+    switch(so_option) {
+    case SO_RCVBUF:
+        auto_sysctls_to_check = auto_rcvbuf;
+        so_name = "SO_RCVBUF";
+        break;
+    case SO_SNDBUF:
+        auto_sysctls_to_check = auto_sndbuf;
+        so_name = "SO_SNDBUF";
+        break;
+    default:
+        return -1;
+    }
+
+    if(auto_sysctls_to_check) {
+        size_t i;
+        for(i = 0; i < sizeof(auto_sysctls_to_check)/sizeof(auto_sysctls_to_check[0]); i++) {
+            int value;
+            const char *sysctl_name = auto_sysctls_to_check[i];
+            if(system_setting(sysctl_name, "%d", &value) == 0 && value == 1) {
+                warning("The sysctl '%s=%d' prevents %s socket option "
+                        "to make effect.\n", sysctl_name, value, so_name);
+                return 0;
+            }
+        }
+    }
+
+    /* Presume the socket option is effectful */
+    return 1;
 }
 
 
