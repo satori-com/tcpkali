@@ -68,7 +68,7 @@ vsystem_setting(const char *setting_name, const char *setting_fmt, va_list ap) {
         return (scanned == n_args) ? 0 : -1;
     } else if(setting_fmt[0] == '\0'
         || (n_args == 1 && strcmp(setting_fmt, "%d") == 0)) {
-#ifdef  HAVE_SYSCTLBYNAMEd
+#ifdef  HAVE_SYSCTLBYNAME
         union {
             char buf[16];
             int  integer;
