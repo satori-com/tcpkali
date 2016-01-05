@@ -7,6 +7,7 @@
 
 # Features
 
+ * Opens millions of connections from a single host by using available interface aliases.
  * Efficient multi-core operation (`--workers`); utilizes all available cores by default.
  * Allows opening massive number of connections (`--connections`)
  * Allows limiting an upstream and downstream of a single connection throughput (`--channel-bandwidth-downstream`, `--channel-bandwidth-upstream` or `--message-rate`)

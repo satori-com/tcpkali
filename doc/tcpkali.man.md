@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2016-01-01
+% 2016-01-04
 
 # NAME
 
@@ -62,10 +62,10 @@ When connection gets closed, some other connection is used for dumping.
 :   Control Nagle algorithm by setting `TCP_NODELAY` socket option using **setsockopt**(). Default is not to call **setsockopt**() at all, which leaves Nagle *enabled* on most systems.
 
 --rcvbuf *SizeBytes*
-:   Set TCP receive buffers (set `SO_RCVBUF` socket option using **setsockopt**()).
+:   Set TCP receive buffers (set `SO_RCVBUF` socket option using **setsockopt**()). This option has no effect on some systems with automatic receive buffer management. tcpkali will print a message if **--rcvbuf** has no effect.
 
 --sndbuf *SizeBytes*
-:   Set TCP send buffers (set `SO_SNDBUF` socket option using **setsockopt**()).
+:   Set TCP send buffers (set `SO_SNDBUF` socket option using **setsockopt**()). This option has no effect on some systems with automatic receive buffer management. tcpkali will print a message if **--sndvbuf** has no effect.
 
 --source-ip *IP*
 :   By default, tcpkali automatically detects and uses all interface aliases
@@ -113,9 +113,9 @@ open more than 64k connections to destinations.
 ## TRAFFIC CONTENT OPTIONS
 
 -e, --unescape-message-args
-:   Unescape the message data specified by the **-m**, **-f**
+:   Unescape the message data specified using the **-m**, **-f**
     and the rest of the traffic content options on the command line.
-    Transform \\xxx into a byte with corresponding octal value,
+    Transforms \\xxx sequences into bytes with the corresponding octal values,
     \\n into a newline character, etc.
 
 --first-message <string>
@@ -243,15 +243,15 @@ Table: tcpkali recognizes a number of suffixes for numeric values.
 ...for N connections, such as 50k:
 
     kern.maxfiles=10000+2*N         # BSD
-    kern.maxfilesperproc=100+N      # BSD
+    kern.maxfilesperproc=100+2*N    # BSD
     kern.ipc.maxsockets=10000+2*N   # BSD
     fs.file-max=10000+2*N           # Linux
     net.ipv4.tcp_max_orphans=N      # Linux
 
     # For load-generating clients.
     net.ipv4.ip_local_port_range="10000  65535"  # Linux.
-    net.inet.ip.portrange.hifirst=10000  # BSD/Mac.
-    net.inet.ip.portrange.hilast=65535   # (Enough for N < 55535)
+    net.inet.ip.portrange.first=10000  # BSD/Mac.
+    net.inet.ip.portrange.last=65535   # (Enough for N < 55535)
     net.ipv4.tcp_tw_reuse=1         # Linux
     net.inet.tcp.maxtcptw=2*N       # BSD
 
