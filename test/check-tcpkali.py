@@ -95,7 +95,7 @@ class Analyze(object):
                 length = 2000
             d[length] = d.get(length, 0) + 1
 
-        outRe = re.compile(r"^Out\(\d+, (\d+)\): \[(.*)\]$")
+        outRe = re.compile(r"^Snd\(\d+, (\d+)\): \[(.*)\]$")
         for _, line in enumerate(errLines):
             result = outRe.match(line)
             if result:
@@ -103,7 +103,7 @@ class Analyze(object):
                 outLen = int(result.group(1))
                 _record_occurrence(self.out_lengths, outLen)
 
-        inRe = re.compile(r"^In\(\d+, (\d+)\): \[(.*)\]$")
+        inRe = re.compile(r"^Rcv\(\d+, (\d+)\): \[(.*)\]$")
         for _, line in enumerate(errLines):
             result = inRe.match(line)
             if result:

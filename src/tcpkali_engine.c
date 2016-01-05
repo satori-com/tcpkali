@@ -1627,10 +1627,10 @@ static void debug_dump_data(const char *prefix, int fd, const void *data, size_t
     char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
     fprintf(stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n",
             tcpkali_clear_eol(), prefix, fd, (long)size,
-            tk_attr(TKA_REDBOLD),
+            tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL),
             printable_data(buffer, sizeof(buffer), data, size, 0),
-            tk_attr(TKA_REDBOLD),
+            tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL)
     );
 }
@@ -1751,7 +1751,7 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                             && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("In", tk_fd(w), buf, rd);
+                    debug_dump_data("Rcv", tk_fd(w), buf, rd);
                 }
 
                 /*
@@ -2057,7 +2057,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                     || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                             && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("In", tk_fd(w), buf, rd);
+                    debug_dump_data("Rcv", tk_fd(w), buf, rd);
                 }
                 latency_record_incoming_ts(TK_A_ conn, buf, rd);
 
@@ -2147,7 +2147,7 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 if(largs->params.dump_setting & DS_DUMP_ALL_OUT
                     || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
                             && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Out", tk_fd(w), position, wrote);
+                    debug_dump_data("Snd", tk_fd(w), position, wrote);
                 }
                 available_body -= wrote;
             }

@@ -45,7 +45,8 @@
 static int int_utf8 = 0;
 static int terminal_width = 80;
 static const char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
-static char tka_redbold[16];
+static char tka_sndbrace[16];
+static char tka_rcvbrace[16];
 static char tka_warn[16];
 static char tka_normal[16];
 
@@ -53,7 +54,8 @@ const char *tk_attr(enum tk_attribute tka) {
     switch(tka) {
     case TKA_NORMAL:    return tka_normal;
     case TKA_WARNING:   return tka_warn;
-    case TKA_REDBOLD:   return tka_redbold;
+    case TKA_SndBrace:  return tka_sndbrace;
+    case TKA_RcvBrace:  return tka_rcvbrace;
     }
     /*
      * Not using the "default:" to prompt warnings
@@ -114,20 +116,29 @@ tcpkali_init_terminal(void) {
     printf("%s", cap("vi"));
     atexit(enable_cursor);
 
+    const char *bold = cap("md");
+
     snprintf(tka_warn, sizeof(tka_warn),
 #if NCURSES_TPARM_VARARGS
-        "%s", tparm(cap("AF"), COLOR_RED)?:""
+        "%s", cap("AF")?tparm(cap("AF"), COLOR_RED)?:bold:bold);
 #else
-        "%s", cap("md")
+        "%s", bold);
 #endif
-    );
-    snprintf(tka_redbold, sizeof(tka_redbold),
+
+    snprintf(tka_sndbrace, sizeof(tka_sndbrace),
 #if NCURSES_TPARM_VARARGS
-        "%s%s", tparm(cap("AF"), COLOR_RED)?:"",
+        "%s", cap("AF")?tparm(cap("AF"), COLOR_RED)?:bold:bold);
 #else
-        "%s",
+        "%s", bold);
 #endif
-        cap("md"));
+
+    snprintf(tka_rcvbrace, sizeof(tka_rcvbrace),
+#if NCURSES_TPARM_VARARGS
+        "%s", cap("AF")?tparm(cap("AF"), COLOR_BLUE)?:bold:bold);
+#else
+        "%s", bold);
+#endif
+
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
 
     return 0;
