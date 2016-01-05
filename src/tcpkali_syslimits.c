@@ -122,10 +122,12 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
 }
 
 int check_setsockopt_effect(int so_option) {
-    const char *auto_sndbuf[] = { "net.inet.tcp.doautorcvbuf",   /* Mac OS X */
-                                  "net.inet.tcp.sendbuf_auto" }; /* BSD */
-    const char *auto_rcvbuf[] = { "net.inet.tcp.doautorcvbuf",   /* Mac OS X */
-                                  "net.inet.tcp.recvbuf_auto" }; /* BSD */
+    const char *auto_rcvbuf[] = { "net.inet.tcp.doautorcvbuf",  /* Mac OS X */
+                                  "net.inet.tcp.recvbuf_auto",  /* BSD */
+                                  NULL };
+    const char *auto_sndbuf[] = { "net.inet.tcp.doautorcvbuf",  /* Mac OS X */
+                                  "net.inet.tcp.sendbuf_auto",  /* BSD */
+                                  NULL };
     const char **auto_sysctls_to_check = 0;
     const char *so_name;
 
@@ -144,7 +146,7 @@ int check_setsockopt_effect(int so_option) {
 
     if(auto_sysctls_to_check) {
         size_t i;
-        for(i = 0; i < sizeof(auto_sysctls_to_check)/sizeof(auto_sysctls_to_check[0]); i++) {
+        for(i = 0; auto_sysctls_to_check[i]; i++) {
             int value;
             const char *sysctl_name = auto_sysctls_to_check[i];
             if(system_setting(sysctl_name, "%d", &value) == 0 && value == 1) {
