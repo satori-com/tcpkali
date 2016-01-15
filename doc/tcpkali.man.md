@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2016-01-04
+% 2016-01-15
 
 # NAME
 
