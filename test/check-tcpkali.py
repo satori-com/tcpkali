@@ -167,10 +167,42 @@ class Analyze(object):
             log("  '%s': %s" % kv)
 
 
+def check_segmentation(prefix, lines, contains):
+    """Check that the output consists of the neat repetition of (contents)"""
+    reg = re.compile(r"^" + prefix + r"\(\d+, \d+\): \[(.*)\]$")
+    allOutput = ""
+    for _, line in enumerate(lines):
+        result = reg.match(line)
+        if result:
+            allOutput += result.group(1)
+    assert(allOutput != "")
+    reg = re.compile(r"^((" + contains + ")+)(.*)$")
+    result = reg.match(allOutput)
+    if not result:
+        print("Expected repetition of \"%s\" is not found" % contains)
+        return False
+    elif len(result.group(3)) == 0:
+        return True
+    else:
+        print("Output is not consistent after byte %d (...\"%s\");"
+              " continuing with \"%s\"..." %
+              (len(result.group(1)), result.group(2),
+               result.group(3)[0:len(contains)+1]))
+        return False
+
+
 def main():
     """Run multiple tests with tcpkali and see if results are correct"""
     # pylint: disable=too-many-statements
     port = 1350
+
+    print("Correctness of data packetization")
+    port = port + 1
+    t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
+                 "-mFOOBARBAZ"], capture_io=True)
+    (_, errLines) = t.results()
+    assert check_segmentation("Snd", errLines, "FOOBARBAZ")
+    sys.exit(0)
 
     print("Slow rate limiting cuts packets at message boundaries")
     port = port + 1
