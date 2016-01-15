@@ -203,7 +203,6 @@ def main():
                  "-mFOOBARBAZ"], capture_io=True)
     (_, errLines) = t.results()
     assert check_segmentation("Snd", errLines, "FOOBARBAZ")
-    sys.exit(0)
 
     print("Slow rate limiting cuts packets at message boundaries")
     port = port + 1
