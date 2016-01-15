@@ -22,7 +22,7 @@
 
 # Install
 
-From packages:
+## From packages
 
 | OS       | Package manager                         | Command                |
 | -------- | --------------------------------------- | ---------------------- |
@@ -30,7 +30,7 @@ From packages:
 | Mac OS X | [MacPorts](https://www.macports.org/)   | `port install tcpkali` |
 | FreeBSD  | [pkgng](https://wiki.freebsd.org/pkgng) | `pkg install tcpkali`  |
 
-## Compiling from sources
+## From sources
 
 Install the following packages first:
 
