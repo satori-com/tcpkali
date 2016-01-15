@@ -41,7 +41,7 @@ Install the following packages first:
  * flex
  * gcc-c++
 
-*Build and install:*
+**Build and install:**
 
     test -f configure || autoreconf -iv
     ./configure
