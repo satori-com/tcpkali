@@ -17,7 +17,8 @@
 
 # Quick example: testing a web server
 
-    tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 --latency-marker "HTTP/1.1" google.com:80
+    tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 \
+            --latency-marker "HTTP/1.1" google.com:80
 
 # Setup
 
