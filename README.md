@@ -19,7 +19,19 @@
 
     tcpkali -em "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" -r 10 --latency-marker "HTTP/1.1" google.com:80
 
-# Pre-requisites
+# Setup
+
+From packages:
+
+| OS       | Package manager                         | Command                |
+| -------- | --------------------------------------- | ---------------------- |
+| Mac OS X | [Homebrew](http://brew.sh/)             | `brew install tcpkali` |
+| Mac OS X | [MacPorts](https://www.macports.org/)   | `port install tcpkali` |
+| FreeBSD  | [pkgng](https://wiki.freebsd.org/pkgng) | `pkg install tcpkali`  |
+
+# Compiling from sources
+
+## Pre-requisites
 
 Install the following packages first:
 
@@ -30,7 +42,7 @@ Install the following packages first:
  * flex
  * gcc-c++
 
-# Build & Install
+## Build and Install
 
     test -f configure || autoreconf -iv
     ./configure
