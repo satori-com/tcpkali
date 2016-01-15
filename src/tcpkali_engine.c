@@ -2138,18 +2138,19 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                 pacefier_moved(&conn->send_pace,
                                conn->send_limit.bytes_per_second,
                                wrote, tk_now(TK_A));
+            if(largs->params.dump_setting & DS_DUMP_ALL_OUT
+                || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
+                        && largs->dump_connect_fd == tk_fd(w))) {
+                debug_dump_data("Snd", tk_fd(w), position, wrote);
+            }
             if((size_t)wrote > available_header) {
+                position += wrote;
                 wrote -= available_header;
                 available_header = 0;
+                available_body -= wrote;
 
                 /* Record latencies for the body only, not headers */
                 latency_record_outgoing_ts(TK_A_ conn, wrote);
-                if(largs->params.dump_setting & DS_DUMP_ALL_OUT
-                    || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
-                            && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Snd", tk_fd(w), position, wrote);
-                }
-                available_body -= wrote;
             }
         }
       } while(available_body);
