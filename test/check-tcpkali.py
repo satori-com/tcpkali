@@ -179,7 +179,8 @@ def check_segmentation(prefix, lines, contains):
     reg = re.compile(r"^((" + contains + ")+)(.*)$")
     result = reg.match(allOutput)
     if not result:
-        print("Expected repetition of \"%s\" is not found" % contains)
+        print("Expected repetition of \"%s\" is not found in \"%s\"..." %
+              (contains, allOutput[0:len(contains)+1]))
         return False
     elif len(result.group(3)) == 0:
         return True
