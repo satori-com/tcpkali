@@ -40,6 +40,7 @@ Install the following packages first:
  * bison
  * flex
  * gcc-c++
+ * ncurses-devel or equivalent ncurses package, *optional*.
 
 **Build and install:**
 
