@@ -159,7 +159,7 @@ tcpkali_init_terminal(void) {
 
 #else /* !HAVE_LIBNCURSES */
 
-void
+int
 tcpkali_init_terminal(void) {
     return;
 }
