@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,4 +31,4 @@
 #include "tcpkali_dns.h"
 #include "tcpkali_engine.h"
 
-#endif  /* TCPKALI_H */
+#endif /* TCPKALI_H */

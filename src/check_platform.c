@@ -14,15 +14,18 @@ struct atomic_holder_2 {
     atomic_wide_t atomic __attribute__((aligned(sizeof(atomic_wide_t))));
 };
 
-int main() {
-
-
+int
+main() {
     /* Check that atomic is properly aligned for atomicity */
-    assert(((long)(&((struct atomic_holder_1 *)0)->atomic) & (sizeof(atomic_narrow_t)-1)) == 0);
-    assert(((long)(&((struct atomic_holder_2 *)0)->atomic) & (sizeof(atomic_narrow_t)-1)) == 0);
+    assert(((long)(&((struct atomic_holder_1 *)0)->atomic)
+            & (sizeof(atomic_narrow_t) - 1))
+           == 0);
+    assert(((long)(&((struct atomic_holder_2 *)0)->atomic)
+            & (sizeof(atomic_narrow_t) - 1))
+           == 0);
 
     assert((&((struct atomic_holder_1 *)0)->atomic)
-        == (&((struct atomic_holder_2 *)0)->atomic));
+           == (&((struct atomic_holder_2 *)0)->atomic));
 
     return 0;
 }

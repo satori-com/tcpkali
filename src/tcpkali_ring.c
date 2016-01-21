@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -32,13 +32,15 @@
 
 #include "tcpkali_ring.h"
 
-struct ring_buffer *ring_buffer_new(size_t unit_size) {
+struct ring_buffer *
+ring_buffer_new(size_t unit_size) {
     struct ring_buffer *rb = calloc(1, sizeof(*rb));
     ring_buffer_init(rb, unit_size);
     return rb;
 }
 
-void ring_buffer_init(struct ring_buffer *rb, size_t unit_size) {
+void
+ring_buffer_init(struct ring_buffer *rb, size_t unit_size) {
     rb->unit_size = unit_size;
     rb->size = rb->unit_size * 16;
     rb->ptr = malloc(rb->size);
@@ -46,7 +48,8 @@ void ring_buffer_init(struct ring_buffer *rb, size_t unit_size) {
     assert(rb->ptr);
 }
 
-void ring_buffer_grow(struct ring_buffer *rb) {
+void
+ring_buffer_grow(struct ring_buffer *rb) {
     assert(rb->unit_size);
     assert(rb->size);
 
@@ -77,18 +80,19 @@ void ring_buffer_grow(struct ring_buffer *rb) {
         rb->left = rb->ptr;
         rb->size = new_size;
     }
-
 }
 
 #ifdef TCPKALI_RING_UNIT_TEST
 
-static void dump(struct ring_buffer *rb) {
+static void
+dump(struct ring_buffer *rb) {
     int i = 0;
     void *p;
     assert(rb->unit_size == sizeof(int));
     printf("Dumping size %d units of size %d\n",
-           (int)(rb->size/rb->unit_size), (int)rb->unit_size);
-    for(p = rb->ptr; (size_t)(p - rb->ptr) < rb->size; p = (char *)p + rb->unit_size) {
+           (int)(rb->size / rb->unit_size), (int)rb->unit_size);
+    for(p = rb->ptr; (size_t)(p - rb->ptr) < rb->size;
+        p = (char *)p + rb->unit_size) {
         if(p == rb->left && p == rb->right)
             printf("[%03d] %d <- left & right\n", i, *(int *)p);
         else if(p == rb->left)
@@ -101,7 +105,8 @@ static void dump(struct ring_buffer *rb) {
     }
 }
 
-int main() {
+int
+main() {
     struct ring_buffer *rb = ring_buffer_new(sizeof(int));
     int iterations = 1000;
     int next_add = 1;
@@ -131,8 +136,7 @@ int main() {
         }
         while(to_remove--) {
             int n;
-            if(!ring_buffer_get(rb, &n))
-                break;
+            if(!ring_buffer_get(rb, &n)) break;
             if(n != next_remove) {
                 dump(rb);
             }
@@ -159,4 +163,4 @@ int main() {
     return 0;
 }
 
-#endif  /* TCPKALI_RING_UNIT_TEST */
+#endif /* TCPKALI_RING_UNIT_TEST */

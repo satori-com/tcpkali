@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -34,7 +34,8 @@
 #include "tcpkali_terminfo.h"
 
 static int *flagvar;
-static void signal_handler(int __attribute__((unused)) sig) {
+static void
+signal_handler(int __attribute__((unused)) sig) {
     fprintf(stderr, "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
     *flagvar = 1;
 }
@@ -62,4 +63,3 @@ flagify_term_signals(int *flag) {
     flagvar = flag;
     sigaction(SIGINT, &act, 0);
 }
-

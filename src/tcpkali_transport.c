@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -40,7 +40,8 @@
 /*
  * Helper function to sort headers first, messages last.
  */
-static int snippet_compare_cb(const void *ap, const void *bp) {
+static int
+snippet_compare_cb(const void *ap, const void *bp) {
     const struct message_collection_snippet *a = ap;
     const struct message_collection_snippet *b = bp;
     int ka = MSK_PURPOSE(a);
@@ -49,16 +50,15 @@ static int snippet_compare_cb(const void *ap, const void *bp) {
     if(ka < kb) return -1;
     if(ka > kb) return 1;
 
-    if(a->sort_index < b->sort_index)
-        return -1;
-    if(a->sort_index > b->sort_index)
-        return 1;
+    if(a->sort_index < b->sort_index) return -1;
+    if(a->sort_index > b->sort_index) return 1;
 
     return 0;
 }
 
 void
-message_collection_finalize(struct message_collection *mc, int as_websocket, const char *hostport, const char *path) {
+message_collection_finalize(struct message_collection *mc, int as_websocket,
+                            const char *hostport, const char *path) {
     const char ws_http_headers_fmt[] =
         "GET /%s HTTP/1.1\r\n"
         "Host: %s\r\n"
@@ -71,9 +71,8 @@ message_collection_finalize(struct message_collection *mc, int as_websocket, con
     assert(mc->state == MC_EMBRYONIC);
 
     if(as_websocket) {
-        ssize_t estimated_size = snprintf("", 0,
-                                          ws_http_headers_fmt,
-                                          path, hostport);
+        ssize_t estimated_size =
+            snprintf("", 0, ws_http_headers_fmt, path, hostport);
         assert(estimated_size >= (ssize_t)sizeof(ws_http_headers_fmt));
         char http_headers[estimated_size + 1];
         ssize_t h_size = snprintf(http_headers, estimated_size + 1,
@@ -81,8 +80,8 @@ message_collection_finalize(struct message_collection *mc, int as_websocket, con
         assert(h_size == estimated_size);
 
         const int DISABLE_UNESCAPE = 0;
-        message_collection_add(mc, MSK_PURPOSE_HTTP_HEADER,
-                               http_headers, h_size, DISABLE_UNESCAPE);
+        message_collection_add(mc, MSK_PURPOSE_HTTP_HEADER, http_headers,
+                               h_size, DISABLE_UNESCAPE);
 
         mc->state = MC_FINALIZED_WEBSOCKET;
     } else {
@@ -99,7 +98,8 @@ message_collection_finalize(struct message_collection *mc, int as_websocket, con
  * If the payload is less then target_size,
  * replicate it several times so the total buffer exceeds target_size.
  */
-void replicate_payload(struct transport_data_spec *data, size_t target_size) {
+void
+replicate_payload(struct transport_data_spec *data, size_t target_size) {
     size_t payload_size = data->total_size - data->once_size;
 
     assert(!(data->flags & TDS_FLAG_REPLICATED));
@@ -110,7 +110,7 @@ void replicate_payload(struct transport_data_spec *data, size_t target_size) {
         /* Data is large enough to avoid blowing up. */
     } else {
         /* The optimum target_size is size(L2)/k */
-        size_t n = ceil(((double)target_size)/payload_size);
+        size_t n = ceil(((double)target_size) / payload_size);
         size_t new_payload_size = n * payload_size;
         size_t once_offset = data->once_size;
         char *p = realloc(data->ptr, once_offset + new_payload_size + 1);
@@ -133,11 +133,8 @@ void replicate_payload(struct transport_data_spec *data, size_t target_size) {
 
 
 void
-message_collection_add(struct message_collection *mc,
-                            enum mc_snippet_kind kind,
-                            void *data, size_t size,
-                            int unescape) {
-
+message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
+                       void *data, size_t size, int unescape) {
     assert(mc->state == MC_EMBRYONIC);
 
     /* Verify that messages are properly kinded. */
@@ -156,12 +153,13 @@ message_collection_add(struct message_collection *mc,
     /* Reallocate snippets array, if needed. */
     if(mc->snippets_count >= mc->snippets_size) {
         mc->snippets_size = 2 * (mc->snippets_size ? mc->snippets_size : 8);
-        struct message_collection_snippet *ptr = realloc(mc->snippets,
-                        mc->snippets_size * sizeof(mc->snippets[0]));
+        struct message_collection_snippet *ptr =
+            realloc(mc->snippets, mc->snippets_size * sizeof(mc->snippets[0]));
         if(!ptr) {
             /* TODO: make snippets[] dynamic. */
-            fprintf(stderr, "Too many --message "
-                            "or --first-message arguments\n");
+            fprintf(stderr,
+                    "Too many --message "
+                    "or --first-message arguments\n");
             exit(1);
         }
         memset(&ptr[mc->snippets_count], 0,
@@ -219,32 +217,33 @@ message_collection_estimate_size(struct message_collection *mc,
         struct message_collection_snippet *snip = &mc->snippets[i];
 
         /* Match pattern */
-        if((snip->flags & kind_and) != kind_equal)
-            continue;
+        if((snip->flags & kind_and) != kind_equal) continue;
 
         if(snip->flags & MSK_EXPRESSION_FOUND) {
             total_size += snip->expr->estimate_size;
         } else {
             total_size += snip->size;
         }
-        total_size +=
-                (mc->state == MC_FINALIZED_WEBSOCKET
-                && (snip->flags & MSK_FRAMING_ALLOWED))
-                        ? WEBSOCKET_MAX_FRAME_HDR_SIZE : 0;
+        total_size += (mc->state == MC_FINALIZED_WEBSOCKET
+                       && (snip->flags & MSK_FRAMING_ALLOWED))
+                          ? WEBSOCKET_MAX_FRAME_HDR_SIZE
+                          : 0;
     }
     return total_size;
 }
 
 struct transport_data_spec *
-transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *mc, expr_callback_f optional_cb, void *expr_cb_key, enum transport_websocket_side tws_side) {
-
+transport_spec_from_message_collection(struct transport_data_spec *out_spec,
+                                       struct message_collection *mc,
+                                       expr_callback_f optional_cb,
+                                       void *expr_cb_key,
+                                       enum transport_websocket_side tws_side) {
     /*
      * If expressions found we can not create a transport data specification
      * from this collection directly. Need to go through expression evaluator.
      */
     if(mc->expressions_found) {
-        if(!optional_cb)
-            return NULL;
+        if(!optional_cb) return NULL;
     }
 
     size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
@@ -269,11 +268,11 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
         if(snip->flags & MSK_EXPRESSION_FOUND) {
             ssize_t reified_size;
             char *tptr = (char *)data_spec->ptr + data_spec->total_size;
-            assert(estimate_size >= data_spec->total_size
-                                    + snip->expr->estimate_size);
-            reified_size = eval_expression(&tptr,
-                            estimate_size - data_spec->total_size,
-                            snip->expr, optional_cb, expr_cb_key, 0);
+            assert(estimate_size
+                   >= data_spec->total_size + snip->expr->estimate_size);
+            reified_size =
+                eval_expression(&tptr, estimate_size - data_spec->total_size,
+                                snip->expr, optional_cb, expr_cb_key, 0);
             assert(reified_size >= 0);
             data = 0;
             size = reified_size;
@@ -290,21 +289,20 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
                 if(snip->flags & MSK_EXPRESSION_FOUND) {
                     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
                     /* Save the websocket frame elsewhere temporarily */
-                    ws_frame_size = websocket_frame_header(size,
-                                            tmpbuf, sizeof(tmpbuf),
-                                            ws_side);
+                    ws_frame_size = websocket_frame_header(
+                        size, tmpbuf, sizeof(tmpbuf), ws_side);
                     /* Move the data to the right to make space for framing */
                     memmove((char *)data_spec->ptr + data_spec->total_size
-                                                   + ws_frame_size,
+                                + ws_frame_size,
                             (char *)data_spec->ptr + data_spec->total_size,
                             size);
                     /* Prepend the websocket frame */
                     memcpy((char *)data_spec->ptr + data_spec->total_size,
                            tmpbuf, ws_frame_size);
                 } else {
-                    ws_frame_size = websocket_frame_header(size,
-                                (uint8_t *)data_spec->ptr+data_spec->total_size,
-                                estimate_size - data_spec->total_size, ws_side);
+                    ws_frame_size = websocket_frame_header(
+                        size, (uint8_t *)data_spec->ptr + data_spec->total_size,
+                        estimate_size - data_spec->total_size, ws_side);
                 }
             }
         }
@@ -313,19 +311,20 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec, str
          * We only add data if it has not already been added.
          */
         size_t framed_snippet_size = ws_frame_size + size;
-        if(data) {  /* Data is not there if expression is used. */
-            memcpy((char *)data_spec->ptr
-                   + data_spec->total_size + ws_frame_size, data, size);
+        if(data) { /* Data is not there if expression is used. */
+            memcpy(
+                (char *)data_spec->ptr + data_spec->total_size + ws_frame_size,
+                data, size);
         }
         data_spec->total_size += framed_snippet_size;
 
         switch(MSK_PURPOSE(snip)) {
         case MSK_PURPOSE_HTTP_HEADER:
             data_spec->ws_hdr_size += framed_snippet_size;
-            data_spec->once_size   += framed_snippet_size;
+            data_spec->once_size += framed_snippet_size;
             break;
         case MSK_PURPOSE_FIRST_MSG:
-            data_spec->once_size   += framed_snippet_size;
+            data_spec->once_size += framed_snippet_size;
             break;
         case MSK_PURPOSE_MESSAGE:
             data_spec->single_message_size += framed_snippet_size;

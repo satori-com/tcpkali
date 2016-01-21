@@ -112,6 +112,10 @@ dnl We use pandoc to generate documentation.
 AC_PATH_PROG([PANDOC], pandoc)
 AM_CONDITIONAL([HAVE_PANDOC], [test -n "$PANDOC"])
 
+dnl Use clang-format to standardize on a style.
+AC_PATH_PROG([CLANG_FORMAT], clang-format, [:])
+AM_CONDITIONAL([HAVE_CLANG_FORMAT], [test "${CLANG_FORMAT}" != ":"])
+
 dnl Python is used for tests.
 AM_PATH_PYTHON(,, [:])
 AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])

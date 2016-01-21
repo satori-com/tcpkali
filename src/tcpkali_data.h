@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -32,8 +32,9 @@
  * Format data by escaping special characters. The buffer size should be
  * preallocated to at least (3 + 4*data_size).
  */
-#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)  (3 + 4*(size))
-char *printable_data(char *buffer, size_t buf_size, const void *data, size_t data_size, int quote);
+#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size) (3 + 4 * (size))
+char *printable_data(char *buffer, size_t buf_size, const void *data,
+                     size_t data_size, int quote);
 
 /*
  * Convert backslash-escaping back into corresponding bytes.
@@ -54,4 +55,4 @@ void unescape_data(void *data, size_t *initial_data_size);
  */
 int read_in_file(const char *filename, char **data, size_t *size);
 
-#endif  /* TCPKALI_DATA_H */
+#endif /* TCPKALI_DATA_H */

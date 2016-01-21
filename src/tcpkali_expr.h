@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,18 +31,18 @@ typedef struct tk_expr {
     enum {
         EXPR_DATA,
         EXPR_CONCAT,
-        EXPR_MODULO,            /* '%' */
-        EXPR_CONNECTION_PTR,    /* 'connection.ptr' */
-        EXPR_CONNECTION_UID,    /* 'connection.uid' */
+        EXPR_MODULO,         /* '%' */
+        EXPR_CONNECTION_PTR, /* 'connection.ptr' */
+        EXPR_CONNECTION_UID, /* 'connection.uid' */
     } type;
     union {
         struct {
             const char *data;
-            size_t      size;
+            size_t size;
         } data;
         struct {
-            struct tk_expr *expr;           /* Expression */
-            long            modulo_value;   /* '... % 42' => 42 */
+            struct tk_expr *expr; /* Expression */
+            long modulo_value;    /* '... % 42' => 42 */
         } modulo;
         struct {
             struct tk_expr *expr[2];
@@ -56,7 +56,7 @@ typedef struct tk_expr {
  * interesting (dynamically computable) values and is basically
  * a constant string.
  */
-#define EXPR_IS_TRIVIAL(e)  ((e)->type == EXPR_DATA)
+#define EXPR_IS_TRIVIAL(e) ((e)->type == EXPR_DATA)
 
 /*
  * Return values:
@@ -64,12 +64,15 @@ typedef struct tk_expr {
  *  1: An expression was found, returned.
  * -1: Expression parsing failed.
  */
-int parse_expression(tk_expr_t **, const char *expr_buf, size_t size, int debug);
+int parse_expression(tk_expr_t **, const char *expr_buf, size_t size,
+                     int debug);
 
 void free_expression(tk_expr_t *expr);
 
 
-typedef ssize_t (expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key, long *output_value);
-ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f, void *key, long *output_value);
+typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
+                                 long *output_value);
+ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
+                        void *key, long *output_value);
 
-#endif  /* TCPKALI_EXPR_H */
+#endif /* TCPKALI_EXPR_H */

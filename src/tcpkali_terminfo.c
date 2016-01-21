@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -32,10 +32,10 @@
 
 #include "config.h"
 
-#ifdef  HAVE_CURSES_H
+#ifdef HAVE_CURSES_H
 #include <curses.h>
 #endif
-#ifdef  HAVE_TERM_H
+#ifdef HAVE_TERM_H
 #include <term.h>
 #endif
 
@@ -44,18 +44,23 @@
 
 static int int_utf8 = 0;
 static int terminal_width = 80;
-static const char *str_clear_eol = ""; // ANSI terminal code: "\033[K";
+static const char *str_clear_eol = "";  // ANSI terminal code: "\033[K";
 static char tka_sndbrace[16];
 static char tka_rcvbrace[16];
 static char tka_warn[16];
 static char tka_normal[16];
 
-const char *tk_attr(enum tk_attribute tka) {
+const char *
+tk_attr(enum tk_attribute tka) {
     switch(tka) {
-    case TKA_NORMAL:    return tka_normal;
-    case TKA_WARNING:   return tka_warn;
-    case TKA_SndBrace:  return tka_sndbrace;
-    case TKA_RcvBrace:  return tka_rcvbrace;
+    case TKA_NORMAL:
+        return tka_normal;
+    case TKA_WARNING:
+        return tka_warn;
+    case TKA_SndBrace:
+        return tka_sndbrace;
+    case TKA_RcvBrace:
+        return tka_rcvbrace;
     }
     /*
      * Not using the "default:" to prompt warnings
@@ -64,26 +69,36 @@ const char *tk_attr(enum tk_attribute tka) {
     return "";
 }
 
-const char *tcpkali_clear_eol() { return str_clear_eol; }
-int tcpkali_is_utf8() { return int_utf8; }
-
-#ifdef  HAVE_LIBNCURSES
-
-static char *cap(char *cap) {
-    return tgetstr(cap, 0) ? : "";
+const char *
+tcpkali_clear_eol() {
+    return str_clear_eol;
+}
+int
+tcpkali_is_utf8() {
+    return int_utf8;
 }
 
-static void enable_cursor(void) {
-    printf("%s", cap("ve"));   /* cursor_normal */
+#ifdef HAVE_LIBNCURSES
+
+static char *
+cap(char *cap) {
+    return tgetstr(cap, 0) ?: "";
+}
+
+static void
+enable_cursor(void) {
+    printf("%s", cap("ve")); /* cursor_normal */
 }
 
 static sig_atomic_t terminal_width_changed = 0;
 
-static void raise_terminal_width_changed(int _sig UNUSED) {
+static void
+raise_terminal_width_changed(int _sig UNUSED) {
     terminal_width_changed = 1;
 }
 
-int tcpkali_terminal_width(void) {
+int
+tcpkali_terminal_width(void) {
     if(terminal_width_changed) {
         terminal_width_changed = 0;
         tcpkali_init_terminal();
@@ -103,11 +118,9 @@ tcpkali_init_terminal(void) {
 
     signal(SIGWINCH, raise_terminal_width_changed);
     int n = tgetnum("co");
-    if(n > 0)
-        terminal_width = n;
+    if(n > 0) terminal_width = n;
 
-    if(strcasestr(getenv("LANG") ? : "", "utf-8"))
-        int_utf8 = 1;
+    if(strcasestr(getenv("LANG") ?: "", "utf-8")) int_utf8 = 1;
 
     /* Obtain the clear end of line string */
     str_clear_eol = cap("ce");
@@ -120,23 +133,23 @@ tcpkali_init_terminal(void) {
 
     snprintf(tka_warn, sizeof(tka_warn),
 #if NCURSES_TPARM_VARARGS
-        "%s", cap("AF")?tparm(cap("AF"), COLOR_RED)?:bold:bold);
+             "%s", cap("AF") ? tparm(cap("AF"), COLOR_RED) ?: bold : bold);
 #else
-        "%s", bold);
+             "%s", bold);
 #endif
 
     snprintf(tka_sndbrace, sizeof(tka_sndbrace),
 #if NCURSES_TPARM_VARARGS
-        "%s", cap("AF")?tparm(cap("AF"), COLOR_RED)?:bold:bold);
+             "%s", cap("AF") ? tparm(cap("AF"), COLOR_RED) ?: bold : bold);
 #else
-        "%s", bold);
+             "%s", bold);
 #endif
 
     snprintf(tka_rcvbrace, sizeof(tka_rcvbrace),
 #if NCURSES_TPARM_VARARGS
-        "%s", cap("AF")?tparm(cap("AF"), COLOR_BLUE)?:bold:bold);
+             "%s", cap("AF") ? tparm(cap("AF"), COLOR_BLUE) ?: bold : bold);
 #else
-        "%s", bold);
+             "%s", bold);
 #endif
 
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
@@ -144,9 +157,15 @@ tcpkali_init_terminal(void) {
     return 0;
 }
 
-#else   /* !HAVE_LIBNCURSES */
+#else /* !HAVE_LIBNCURSES */
 
-void tcpkali_init_terminal(void) { return; }
-int tcpkali_terminal_width(void) { return terminal_width; }
+void
+tcpkali_init_terminal(void) {
+    return;
+}
+int
+tcpkali_terminal_width(void) {
+    return terminal_width;
+}
 
-#endif  /* HAVE_LIBNCURSES */
+#endif /* HAVE_LIBNCURSES */

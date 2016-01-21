@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -48,4 +48,4 @@ int check_system_limits_sanity(int expected_sockets, int workers);
  */
 int check_setsockopt_effect(int so_option);
 
-#endif  /* TCPKALI_SYSLIMITS_H */
+#endif /* TCPKALI_SYSLIMITS_H */

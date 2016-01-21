@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -51,8 +51,7 @@ vsystem_setting(const char *setting_name, const char *setting_fmt, va_list ap) {
     const char *p;
 
     /* Count the number of arguments to be extracted */
-    for(p = setting_fmt; *p; p++)
-        n_args += (*p == '%');
+    for(p = setting_fmt; *p; p++) n_args += (*p == '%');
 
     /*
      * A file based setting starts with a slash: "/proc/cpu";
@@ -67,15 +66,15 @@ vsystem_setting(const char *setting_name, const char *setting_fmt, va_list ap) {
         fclose(f);
         return (scanned == n_args) ? 0 : -1;
     } else if(setting_fmt[0] == '\0'
-        || (n_args == 1 && strcmp(setting_fmt, "%d") == 0)) {
-#ifdef  HAVE_SYSCTLBYNAME
+              || (n_args == 1 && strcmp(setting_fmt, "%d") == 0)) {
+#ifdef HAVE_SYSCTLBYNAME
         union {
             char buf[16];
-            int  integer;
+            int integer;
         } contents;
         size_t contlen = sizeof(contents);
         if(sysctlbyname(setting_name, &contents, &contlen, NULL, 0) == -1
-        || contlen == sizeof(contents))
+           || contlen == sizeof(contents))
             return -1;
 
         if(contlen != sizeof(contents.integer)) {
@@ -90,22 +89,27 @@ vsystem_setting(const char *setting_name, const char *setting_fmt, va_list ap) {
         }
 
         return 0;
-#else   /* !HAVE_SYSCTLBYNAME */
+#else /* !HAVE_SYSCTLBYNAME */
         /* Explicitly convert sysctl-style into file-style for Linux */
         char filename[128] = "/proc/sys/";
         char *p = filename + strlen(filename);
 #if !defined(__linux__)
-#warning "Converting sysctl-style parameters into file paths might not be compatible with non-Linux operating systems"
+#warning \
+    "Converting sysctl-style parameters into file paths might not be compatible with non-Linux operating systems"
 #endif
-        for(; *setting_name && (size_t)(p-filename) < (sizeof(filename)-1); setting_name++, p++) {
+        for(; *setting_name && (size_t)(p - filename) < (sizeof(filename) - 1);
+            setting_name++, p++) {
             switch(*setting_name) {
-            case '.': *p = '/'; break;
-            default:  *p = *setting_name;
+            case '.':
+                *p = '/';
+                break;
+            default:
+                *p = *setting_name;
             }
         }
         *p = '\0';
         return vsystem_setting(filename, setting_fmt, ap);
-#endif  /* HAVE_SYSCTLBYNAME */
+#endif /* HAVE_SYSCTLBYNAME */
     } else {
         assert(!"Unreachable");
         return -1;
@@ -121,13 +125,14 @@ system_setting(const char *setting_name, const char *setting_fmt, ...) {
     return ret;
 }
 
-int check_setsockopt_effect(int so_option) {
-    const char *auto_rcvbuf[] = { "net.inet.tcp.doautorcvbuf",  /* Mac OS X */
-                                  "net.inet.tcp.recvbuf_auto",  /* BSD */
-                                  NULL };
-    const char *auto_sndbuf[] = { "net.inet.tcp.doautorcvbuf",  /* Mac OS X */
-                                  "net.inet.tcp.sendbuf_auto",  /* BSD */
-                                  NULL };
+int
+check_setsockopt_effect(int so_option) {
+    const char *auto_rcvbuf[] = {"net.inet.tcp.doautorcvbuf", /* Mac OS X */
+                                 "net.inet.tcp.recvbuf_auto", /* BSD */
+                                 NULL};
+    const char *auto_sndbuf[] = {"net.inet.tcp.doautorcvbuf", /* Mac OS X */
+                                 "net.inet.tcp.sendbuf_auto", /* BSD */
+                                 NULL};
     const char **auto_sysctls_to_check = 0;
     const char *so_name;
 
@@ -150,8 +155,10 @@ int check_setsockopt_effect(int so_option) {
             int value;
             const char *sysctl_name = auto_sysctls_to_check[i];
             if(system_setting(sysctl_name, "%d", &value) == 0 && value == 1) {
-                warning("The sysctl '%s=%d' prevents %s socket option "
-                        "to make effect.\n", sysctl_name, value, so_name);
+                warning(
+                    "The sysctl '%s=%d' prevents %s socket option "
+                    "to make effect.\n",
+                    sysctl_name, value, so_name);
                 return 0;
             }
         }
@@ -165,7 +172,8 @@ int check_setsockopt_effect(int so_option) {
 /*
  * Sort limits in descending order.
  */
-static int compare_rlimits(const void *ap, const void *bp) {
+static int
+compare_rlimits(const void *ap, const void *bp) {
     rlim_t a = *(rlim_t *)ap;
     rlim_t b = *(rlim_t *)bp;
     if(a < b)
@@ -178,9 +186,10 @@ static int compare_rlimits(const void *ap, const void *bp) {
 /*
  * Determine the global limit on open files.
  */
-static rlim_t max_open_files() {
+static rlim_t
+max_open_files() {
     long value = sysconf(_SC_OPEN_MAX);
-#ifdef  OPEN_MAX
+#ifdef OPEN_MAX
     if(value != -1) {
         return value > OPEN_MAX ? value : OPEN_MAX;
     } else {
@@ -200,7 +209,8 @@ static rlim_t max_open_files() {
 /*
  * Adjust number of open files.
  */
-int adjust_system_limits_for_highload(int expected_sockets, int workers) {
+int
+adjust_system_limits_for_highload(int expected_sockets, int workers) {
     rlim_t max_open = max_open_files();
     struct rlimit prev_limit;
     int ret;
@@ -218,12 +228,12 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
     rlim_t limits[] = {
         max_open,
         prev_limit.rlim_max != RLIM_INFINITY ? prev_limit.rlim_max : max_open,
-        expected_sockets * 2 + 100 + 2*workers,
-        expected_sockets + 100 + 2*workers,
-        expected_sockets + 4 + 2*workers, /* n cores and other overhead */
+        expected_sockets * 2 + 100 + 2 * workers,
+        expected_sockets + 100 + 2 * workers,
+        expected_sockets + 4 + 2 * workers, /* n cores and other overhead */
     };
-    size_t limits_count = sizeof(limits)/sizeof(limits[0]);
-    int smallest_acceptable_fdmax = expected_sockets + 4 + 2*workers;
+    size_t limits_count = sizeof(limits) / sizeof(limits[0]);
+    int smallest_acceptable_fdmax = expected_sockets + 4 + 2 * workers;
 
     qsort(limits, limits_count, sizeof(limits[0]), compare_rlimits);
 
@@ -240,7 +250,8 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
                 continue;
             } else {
                 fprintf(stderr, "setrlimit(RLIMIT_NOFILE, {%ld, %ld}): %s\n",
-                    (long)rlp.rlim_cur, (long)rlp.rlim_max, strerror(errno));
+                        (long)rlp.rlim_cur, (long)rlp.rlim_max,
+                        strerror(errno));
                 return -1;
             }
         } else {
@@ -256,20 +267,22 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
          * ignore failures to adjust rlimits.
          */
         if(expected_sockets == 0
-        || (expected_sockets > 0
-                && limits[limits_count-1] <= prev_limit.rlim_cur)) {
+           || (expected_sockets > 0
+               && limits[limits_count - 1] <= prev_limit.rlim_cur)) {
             return 0;
         }
         fprintf(stderr, "Could not adjust open files limit from %ld to %ld\n",
-            (long)prev_limit.rlim_cur, (long)limits[limits_count - 1]);
+                (long)prev_limit.rlim_cur, (long)limits[limits_count - 1]);
         return -1;
     } else if(limits[i] < (rlim_t)smallest_acceptable_fdmax) {
-        fprintf(stderr, "Adjusted open files limit from %ld to %ld, but still too low for --connections=%d.\n",
-            (long)prev_limit.rlim_cur, (long)limits[i], expected_sockets);
+        fprintf(stderr,
+                "Adjusted open files limit from %ld to %ld, but still too low "
+                "for --connections=%d.\n",
+                (long)prev_limit.rlim_cur, (long)limits[i], expected_sockets);
         return -1;
     } else if(expected_sockets == 0) {
         fprintf(stderr, "Adjusted open files limit from %ld to %ld.\n",
-            (long)prev_limit.rlim_cur, (long)limits[i]);
+                (long)prev_limit.rlim_cur, (long)limits[i]);
         return 0;
     } else {
         return 0;
@@ -279,38 +292,38 @@ int adjust_system_limits_for_highload(int expected_sockets, int workers) {
 /*
  * Check that the limits are sane and print out if not.
  */
-int check_system_limits_sanity(int expected_sockets, int workers) {
+int
+check_system_limits_sanity(int expected_sockets, int workers) {
     int return_value = 0;
 
     /*
      * Check that this process can open enough file descriptors.
      */
-    int smallest_acceptable_fdmax = expected_sockets + 4 + 2*workers;
+    int smallest_acceptable_fdmax = expected_sockets + 4 + 2 * workers;
 
     if(max_open_files() < (rlim_t)smallest_acceptable_fdmax) {
-        const char *maxfiles_sctls[] = {
-                        "kern.maxfiles",
-                        "kern.maxfilesperproc",
-                        "fs.file-max"
-                    };
+        const char *maxfiles_sctls[] = {"kern.maxfiles", "kern.maxfilesperproc",
+                                        "fs.file-max"};
         size_t i;
-        for(i = 0; i < sizeof(maxfiles_sctls)/sizeof(maxfiles_sctls[0]); i++) {
+        for(i = 0; i < sizeof(maxfiles_sctls) / sizeof(maxfiles_sctls[0]);
+            i++) {
             const char *sysctl_name = maxfiles_sctls[i];
             int value;
-            if(system_setting(sysctl_name, "%d", &value) != 0)
-                continue;
+            if(system_setting(sysctl_name, "%d", &value) != 0) continue;
             if(value < smallest_acceptable_fdmax) {
-                warning("System-wide open files limit %d "
-                        "is too low for the expected scale (-c %d).\n"
-                        "Adjust the '%s' sysctl.\n",
-                        value, expected_sockets, sysctl_name);
+                warning(
+                    "System-wide open files limit %d "
+                    "is too low for the expected scale (-c %d).\n"
+                    "Adjust the '%s' sysctl.\n",
+                    value, expected_sockets, sysctl_name);
                 return_value = -1;
             }
         }
         if(return_value != -1) {
-            warning("System-wide open files limit %d "
-                    "is too low for the expected scale (-c %d).\n",
-                    (int)max_open_files(), expected_sockets);
+            warning(
+                "System-wide open files limit %d "
+                "is too low for the expected scale (-c %d).\n",
+                (int)max_open_files(), expected_sockets);
             return_value = -1;
         }
     }
@@ -320,9 +333,10 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     ret = getrlimit(RLIMIT_NOFILE, &rlp);
     assert(ret == 0);
     if(rlp.rlim_cur < (rlim_t)smallest_acceptable_fdmax) {
-        warning("Open files limit (`ulimit -n`) %ld "
-                "is too low for the expected scale (-c %d).\n",
-                (long)rlp.rlim_cur, expected_sockets);
+        warning(
+            "Open files limit (`ulimit -n`) %ld "
+            "is too low for the expected scale (-c %d).\n",
+            (long)rlp.rlim_cur, expected_sockets);
         return_value = -1;
     }
 
@@ -337,24 +351,24 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     int range_lo, range_hi;
     if(system_setting(portrange_filename, "%d %d", &range_lo, &range_hi) == 0) {
         if(range_hi - range_lo < expected_sockets) {
-            warning("Will not be able to open %d simultaneous connections "
-                    "since \"%s\" specifies too narrow range [%d..%d].\n",
-                    expected_sockets, portrange_filename,
-                    range_lo, range_hi);
+            warning(
+                "Will not be able to open %d simultaneous connections "
+                "since \"%s\" specifies too narrow range [%d..%d].\n",
+                expected_sockets, portrange_filename, range_lo, range_hi);
             return_value = -1;
         }
     } else if(system_setting(portrange_sysctl_lo, "%d", &range_lo) == 0
-           && system_setting(portrange_sysctl_hi, "%d", &range_hi) == 0) {
+              && system_setting(portrange_sysctl_hi, "%d", &range_hi) == 0) {
         /*
          * Check the ephemeral port range on BSD-derived systems.
          */
         if(range_hi - range_lo < expected_sockets) {
-            warning("Will not be able to open %d simultaneous connections "
-                    "since \"%s\" and \"%s\" sysctls specify too narrow "
-                    "range [%d..%d].\n",
-                    expected_sockets,
-                    portrange_sysctl_lo, portrange_sysctl_hi,
-                    range_lo, range_hi);
+            warning(
+                "Will not be able to open %d simultaneous connections "
+                "since \"%s\" and \"%s\" sysctls specify too narrow "
+                "range [%d..%d].\n",
+                expected_sockets, portrange_sysctl_lo, portrange_sysctl_hi,
+                range_lo, range_hi);
             return_value = -1;
         }
     }
@@ -369,10 +383,11 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
     int tcp_tw_reuse;
     if(system_setting(time_wait_reuse_filename, "%d", &tcp_tw_reuse) == 0) {
         if(tcp_tw_reuse != 1 && expected_sockets > 100) {
-            warning("Not reusing TIME_WAIT sockets, "
-                    "might not open %d simultaneous connections. "
-                    "Adjust \"%s\" value.\n",
-                    expected_sockets, time_wait_reuse_filename);
+            warning(
+                "Not reusing TIME_WAIT sockets, "
+                "might not open %d simultaneous connections. "
+                "Adjust \"%s\" value.\n",
+                expected_sockets, time_wait_reuse_filename);
             return_value = -1;
         }
     }
@@ -383,14 +398,16 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * such as nf_conntrack_max/4.
      * See http://serverfault.com/questions/482480/
      */
-    const char *nf_conntrack_filename = "/proc/sys/net/netfilter/nf_conntrack_max";
+    const char *nf_conntrack_filename =
+        "/proc/sys/net/netfilter/nf_conntrack_max";
     int nf_conntrack_max;
     if(system_setting(nf_conntrack_filename, "%d", &nf_conntrack_max) == 0) {
         if(expected_sockets > nf_conntrack_max) {
-            warning("IP filter might not allow "
-                    "opening %d simultaneous connections. "
-                    "Adjust \"%s\" value.\n",
-                    expected_sockets, nf_conntrack_filename);
+            warning(
+                "IP filter might not allow "
+                "opening %d simultaneous connections. "
+                "Adjust \"%s\" value.\n",
+                expected_sockets, nf_conntrack_filename);
             return_value = -1;
         }
     }
@@ -401,18 +418,19 @@ int check_system_limits_sanity(int expected_sockets, int workers) {
      * CPU will be wasted.
      * See http://serverfault.com/questions/482480/
      */
-    const char *nf_hash_filename = "/sys/module/nf_conntrack/parameters/hashsize";
+    const char *nf_hash_filename =
+        "/sys/module/nf_conntrack/parameters/hashsize";
     int nf_hashsize;
     if(system_setting(nf_hash_filename, "%d", &nf_hashsize) == 0) {
-        if(nf_hashsize < (expected_sockets/8)) {
-            warning("IP filter is not properly sized for "
-                    "tracking %d simultaneous connections. "
-                    "Adjust \"%s\" value to at least %d.\n",
-                    expected_sockets, nf_hash_filename, expected_sockets/8);
+        if(nf_hashsize < (expected_sockets / 8)) {
+            warning(
+                "IP filter is not properly sized for "
+                "tracking %d simultaneous connections. "
+                "Adjust \"%s\" value to at least %d.\n",
+                expected_sockets, nf_hash_filename, expected_sockets / 8);
             return_value = -1;
         }
     }
 
     return return_value;
 }
-

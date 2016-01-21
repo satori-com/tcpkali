@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -48,11 +48,12 @@
  * the number of host:port pairs specified due to aliasing (several
  * hostnames resolving to the same IP address) or multiple-IP response.
  */
-struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
+struct addresses
+resolve_remote_addresses(char **hostports, int nhostports) {
     /*
      * Allocate a bunch of address structures.
      */
-    struct addresses addresses = { 0, 0 };
+    struct addresses addresses = {0, 0};
 
     for(int n = 0; n < nhostports; n++) {
         char *hostport = strdup(hostports[n]);
@@ -77,8 +78,8 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
         struct addrinfo *res = 0;
         int error = getaddrinfo(host, service_string, &hints, &res);
         if(error) {
-            errx(EX_NOHOST, "Resolving %s:%s: %s",
-                host, service_string, gai_strerror(error));
+            errx(EX_NOHOST, "Resolving %s:%s: %s", host, service_string,
+                 gai_strerror(error));
         }
 
         /* Move all of the addresses into the separate storage */
@@ -92,4 +93,3 @@ struct addresses resolve_remote_addresses(char **hostports, int nhostports) {
 
     return addresses;
 }
-

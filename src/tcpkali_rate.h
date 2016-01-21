@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -41,24 +41,24 @@ typedef struct rate_spec {
     } value_base;
 } rate_spec_t;
 
-#define RATE_BPS(rate)  \
-    ((rate_spec_t){ .value_base = RS_BYTES_PER_SECOND, .value = rate })
+#define RATE_BPS(rate) \
+    ((rate_spec_t){.value_base = RS_BYTES_PER_SECOND, .value = rate})
 
-#define RATE_MPS(rate)  \
-    ((rate_spec_t){ .value_base = RS_MESSAGES_PER_SECOND, .value = rate })
+#define RATE_MPS(rate) \
+    ((rate_spec_t){.value_base = RS_MESSAGES_PER_SECOND, .value = rate})
 
 /*
  * Bandwidth limit description structure,
  * figured out from the rate specification once we know the message size.
  */
 typedef struct bandwidth_limit {
-    double   bytes_per_second;  /* floating point OK */
-    /*
-     * --channel-bandwidth intentionally disregards the message
-     * boundary, unlike --message-rate, which attempts to preserve it.
-     * Thus minimal_move_size is 1 for --channel-bandwidth and is equal to
-     * message size if not.
-     */
+    double bytes_per_second; /* floating point OK */
+                             /*
+                              * --channel-bandwidth intentionally disregards the message
+                              * boundary, unlike --message-rate, which attempts to preserve it.
+                              * Thus minimal_move_size is 1 for --channel-bandwidth and is equal to
+                              * message size if not.
+                              */
     uint32_t minimal_move_size;
 } bandwidth_limit_t;
 
@@ -68,8 +68,8 @@ typedef struct bandwidth_limit {
 static inline UNUSED bandwidth_limit_t
 compute_bandwidth_limit(rate_spec_t rspec) {
     bandwidth_limit_t lim = {
-        .bytes_per_second  = -1.0, /* Simulate "not set" -> no limit. */
-        .minimal_move_size = 1460  /* ~MTU */
+        .bytes_per_second = -1.0, /* Simulate "not set" -> no limit. */
+        .minimal_move_size = 1460 /* ~MTU */
     };
 
     if(rspec.value_base == RS_BYTES_PER_SECOND) {
@@ -81,11 +81,13 @@ compute_bandwidth_limit(rate_spec_t rspec) {
 }
 
 /*
- * Compute the bandwidth limit based on the rate specification and the message size.
+ * Compute the bandwidth limit based on the rate specification and the message
+ * size.
  */
 static inline UNUSED bandwidth_limit_t
-compute_bandwidth_limit_by_message_size(rate_spec_t rspec, size_t message_size) {
-    bandwidth_limit_t lim = { 0, 0 };
+compute_bandwidth_limit_by_message_size(rate_spec_t rspec,
+                                        size_t message_size) {
+    bandwidth_limit_t lim = {0, 0};
 
     /*
      * The message_size varies according to the \{expressions} which might
@@ -94,7 +96,7 @@ compute_bandwidth_limit_by_message_size(rate_spec_t rspec, size_t message_size) 
      */
     switch(rspec.value_base) {
     case RS_UNLIMITED:
-        lim.bytes_per_second  = -1.0; /* Simulate "not set" -> no limit. */
+        lim.bytes_per_second = -1.0;  /* Simulate "not set" -> no limit. */
         lim.minimal_move_size = 1460; /* ~MTU */
         break;
     case RS_BYTES_PER_SECOND:
@@ -110,4 +112,4 @@ compute_bandwidth_limit_by_message_size(rate_spec_t rspec, size_t message_size) 
     return lim;
 }
 
-#endif  /* TCPKALI_RATE_H */
+#endif /* TCPKALI_RATE_H */

@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -30,24 +30,26 @@
 #include <sys/types.h>
 #include <assert.h>
 
-#include    "tcpkali_transport.h"
-#include    "tcpkali_terminfo.h"
-#include    "tcpkali_data.h"
-#include    "tcpkali_expr.h"
+#include "tcpkali_transport.h"
+#include "tcpkali_terminfo.h"
+#include "tcpkali_data.h"
+#include "tcpkali_expr.h"
 
 int yyparse(void **param);
 void *yy_scan_bytes(const char *, int len);
 void *yy_delete_buffer(void *);
 void *yyrestart(FILE *);
 
-#define DEBUG(fmt, args...)  do {                                   \
+#define DEBUG(fmt, args...)                                         \
+    do {                                                            \
         if(debug) {                                                 \
             fprintf(stderr, "%s" fmt, tcpkali_clear_eol(), ##args); \
         }                                                           \
     } while(0)
 
 
-void free_expression(tk_expr_t *expr) {
+void
+free_expression(tk_expr_t *expr) {
     if(expr) {
         switch(expr->type) {
         case EXPR_DATA:
@@ -69,7 +71,6 @@ void free_expression(tk_expr_t *expr) {
 
 int
 parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
-
     void *ybuf;
     ybuf = yy_scan_bytes(buf, size);
     if(!ybuf) {
@@ -80,7 +81,7 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
     if(expr_p) *expr_p = 0;
 
     tk_expr_t *expr = 0;
-    
+
     int ret = yyparse((void *)&expr);
 
     yy_delete_buffer(ybuf);
@@ -91,24 +92,30 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
             /* Trivial expression found, should exactly match input. */
             assert(expr->u.data.size == size);
             assert(memcmp(expr->u.data.data, buf, size) == 0);
-            if(expr_p) *expr_p = expr;
-            else free_expression(expr);
-            return 0;   /* No expression found */
+            if(expr_p)
+                *expr_p = expr;
+            else
+                free_expression(expr);
+            return 0; /* No expression found */
         } else {
-            if(expr_p) *expr_p = expr;
-            else free_expression(expr);
+            if(expr_p)
+                *expr_p = expr;
+            else
+                free_expression(expr);
             return 1;
         }
     } else {
         char tmp[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
         DEBUG("Failed to parse \"%s\"\n",
-            printable_data(tmp, sizeof(tmp), buf, size, 1));
+              printable_data(tmp, sizeof(tmp), buf, size, 1));
         free_expression(expr);
         return -1;
     }
 }
 
-ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb, void *key, long *value) {
+ssize_t
+eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
+                void *key, long *value) {
     char *buf;
 
     if(!*buf_p) {
@@ -121,8 +128,7 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callbac
 
     switch(expr->type) {
     case EXPR_DATA:
-        if(size < expr->u.data.size)
-            return -1;
+        if(size < expr->u.data.size) return -1;
         memcpy(buf, expr->u.data.data, expr->u.data.size);
         return expr->u.data.size;
     case EXPR_MODULO: {
@@ -130,30 +136,28 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callbac
         (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v);
         v %= expr->u.modulo.modulo_value;
         ssize_t s = snprintf(buf, size, "%ld", v);
-        if(s < 0 || s > (ssize_t)size)
-            return -1;
+        if(s < 0 || s > (ssize_t)size) return -1;
         if(value) *value = v;
         return s;
-        }
-        break;
+    } break;
     case EXPR_CONCAT: {
         assert((expr->u.concat.expr[0]->estimate_size
-               + expr->u.concat.expr[1]->estimate_size) <= size);
-        ssize_t size1 = eval_expression(&buf, size,
-                                        expr->u.concat.expr[0], cb, key, value);
+                + expr->u.concat.expr[1]->estimate_size)
+               <= size);
+        ssize_t size1 =
+            eval_expression(&buf, size, expr->u.concat.expr[0], cb, key, value);
         if(size1 < 0) return -1;
         char *buf2 = buf + size1;
         ssize_t size2 = eval_expression(&buf2, size - size1,
                                         expr->u.concat.expr[1], cb, key, value);
         if(size1 < 0) return -1;
         return size1 + size2;
-        }
+    }
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID: {
         return cb(buf, size, expr, key, value);
-        }
+    }
     }
 
     return -1;
 }
-

@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -59,90 +59,84 @@
 /*
  * Describe the command line options.
  */
-#define CLI_VERBOSE_OFFSET  (1<<8)
-#define CLI_STATSD_OFFSET   (1<<9)
-#define CLI_CHAN_OFFSET     (1<<10)
-#define CLI_CONN_OFFSET     (1<<11)
-#define CLI_SOCKET_OPT      (1<<12)
-#define CLI_LATENCY         (1<<13)
-#define CLI_DUMP            (1<<14)
+#define CLI_VERBOSE_OFFSET (1 << 8)
+#define CLI_STATSD_OFFSET (1 << 9)
+#define CLI_CHAN_OFFSET (1 << 10)
+#define CLI_CONN_OFFSET (1 << 11)
+#define CLI_SOCKET_OPT (1 << 12)
+#define CLI_LATENCY (1 << 13)
+#define CLI_DUMP (1 << 14)
 static struct option cli_long_options[] = {
-    { "channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't' },
-    { "channel-bandwidth-upstream", 1, 0, 'U' },
-    { "channel-bandwidth-downstream", 1, 0, 'D' },
-    { "connections", 1, 0, 'c' },
-    { "connect-rate", 1, 0, 'R' },
-    { "connect-timeout", 1, 0,  CLI_CONN_OFFSET + 't' },
-    { "duration", 1, 0, 'T' },
-    { "dump-one", 0, 0, CLI_DUMP + '1' },
-    { "dump-one-in", 0, 0, CLI_DUMP + 'i' },
-    { "dump-one-out", 0, 0, CLI_DUMP + 'o' },
-    { "dump-all", 0, 0, CLI_DUMP + 'a' },
-    { "dump-all-in", 0, 0, CLI_DUMP + 'I' },
-    { "dump-all-out", 0, 0, CLI_DUMP + 'O' },
-    { "first-message", 1, 0, '1' },
-    { "first-message-file", 1, 0, 'F' },
-    { "help", 0, 0, 'H' },
-    { "latency-connect", 0, 0,      CLI_LATENCY + 'c' },
-    { "latency-first-byte", 0, 0,   CLI_LATENCY + 'f' },
-    { "latency-marker", 1, 0,       CLI_LATENCY + 'm' },
-    { "latency-marker-skip", 1, 0,  CLI_LATENCY + 's' },
-    { "latency-percentiles", 1, 0,  CLI_LATENCY + 'p'},
-    { "listen-port", 1, 0, 'l' },
-    { "listen-mode", 1, 0, 'M' },
-    { "message", 1, 0, 'm' },
-    { "message-file", 1, 0, 'f' },
-    { "message-rate", 1, 0, 'r' },
-    { "nagle", 1, 0, 'N' },
-    { "rcvbuf", 1, 0,           CLI_SOCKET_OPT + 'R' },
-    { "sndbuf", 1, 0,           CLI_SOCKET_OPT + 'S' },
-    { "source-ip", 1, 0, 'I' },
-    { "statsd", 0, 0,           CLI_STATSD_OFFSET + 'e' },
-    { "statsd-host", 1, 0,      CLI_STATSD_OFFSET + 'h' },
-    { "statsd-port", 1, 0,      CLI_STATSD_OFFSET + 'p' },
-    { "statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n' },
-    { "unescape-message-args", 0, 0, 'e' },
-    { "version", 0, 0, 'V' },
-    { "verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v' },
-    { "workers", 1, 0, 'w' },
-    { "write-combine", 1, 0, 'C' },
-    { "websocket", 0, 0, 'W' },
-    { "ws", 0, 0, 'W' },
-    { 0, 0, 0, 0 }
-};
+    {"channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't'},
+    {"channel-bandwidth-upstream", 1, 0, 'U'},
+    {"channel-bandwidth-downstream", 1, 0, 'D'},
+    {"connections", 1, 0, 'c'},
+    {"connect-rate", 1, 0, 'R'},
+    {"connect-timeout", 1, 0, CLI_CONN_OFFSET + 't'},
+    {"duration", 1, 0, 'T'},
+    {"dump-one", 0, 0, CLI_DUMP + '1'},
+    {"dump-one-in", 0, 0, CLI_DUMP + 'i'},
+    {"dump-one-out", 0, 0, CLI_DUMP + 'o'},
+    {"dump-all", 0, 0, CLI_DUMP + 'a'},
+    {"dump-all-in", 0, 0, CLI_DUMP + 'I'},
+    {"dump-all-out", 0, 0, CLI_DUMP + 'O'},
+    {"first-message", 1, 0, '1'},
+    {"first-message-file", 1, 0, 'F'},
+    {"help", 0, 0, 'H'},
+    {"latency-connect", 0, 0, CLI_LATENCY + 'c'},
+    {"latency-first-byte", 0, 0, CLI_LATENCY + 'f'},
+    {"latency-marker", 1, 0, CLI_LATENCY + 'm'},
+    {"latency-marker-skip", 1, 0, CLI_LATENCY + 's'},
+    {"latency-percentiles", 1, 0, CLI_LATENCY + 'p'},
+    {"listen-port", 1, 0, 'l'},
+    {"listen-mode", 1, 0, 'M'},
+    {"message", 1, 0, 'm'},
+    {"message-file", 1, 0, 'f'},
+    {"message-rate", 1, 0, 'r'},
+    {"nagle", 1, 0, 'N'},
+    {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
+    {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
+    {"source-ip", 1, 0, 'I'},
+    {"statsd", 0, 0, CLI_STATSD_OFFSET + 'e'},
+    {"statsd-host", 1, 0, CLI_STATSD_OFFSET + 'h'},
+    {"statsd-port", 1, 0, CLI_STATSD_OFFSET + 'p'},
+    {"statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n'},
+    {"unescape-message-args", 0, 0, 'e'},
+    {"version", 0, 0, 'V'},
+    {"verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v'},
+    {"workers", 1, 0, 'w'},
+    {"write-combine", 1, 0, 'C'},
+    {"websocket", 0, 0, 'W'},
+    {"ws", 0, 0, 'W'},
+    {0, 0, 0, 0}};
 
 static struct tcpkali_config {
     int max_connections;
-    double connect_rate;     /* New connects per second. */
-    double test_duration;    /* Seconds for the full test. */
-    int   statsd_enable;
+    double connect_rate;  /* New connects per second. */
+    double test_duration; /* Seconds for the full test. */
+    int statsd_enable;
     char *statsd_host;
-    int   statsd_port;
+    int statsd_port;
     char *statsd_namespace;
-    int   listen_port;      /* Port on which to listen. */
-    char  *first_hostport;      /* A single (first) host:port specification */
-    char  *first_path;          /* A /path specification from the first host */
-} default_config = {
-        .max_connections = 1,
-        .connect_rate = 100.0,
-        .test_duration = 10.0,
-        .statsd_enable = 0,
-        .statsd_host = "127.0.0.1",
-        .statsd_port = 8125,
-        .statsd_namespace = "tcpkali"
-    };
+    int listen_port;      /* Port on which to listen. */
+    char *first_hostport; /* A single (first) host:port specification */
+    char *first_path;     /* A /path specification from the first host */
+} default_config = {.max_connections = 1,
+                    .connect_rate = 100.0,
+                    .test_duration = 10.0,
+                    .statsd_enable = 0,
+                    .statsd_host = "127.0.0.1",
+                    .statsd_port = 8125,
+                    .statsd_namespace = "tcpkali"};
 
 struct stats_checkpoint {
-    double epoch_start;   /* Start of current checkpoint epoch */
-    double last_update;   /* Last we updated the checkpoint structure */
+    double epoch_start; /* Start of current checkpoint epoch */
+    double last_update; /* Last we updated the checkpoint structure */
     non_atomic_traffic_stats initial_traffic_stats; /* Ramp-up phase traffic */
     non_atomic_traffic_stats last_traffic_stats;
 };
 
-enum work_phase {
-    PHASE_ESTABLISHING_CONNECTIONS,
-    PHASE_STEADY_STATE
-};
+enum work_phase { PHASE_ESTABLISHING_CONNECTIONS, PHASE_STEADY_STATE };
 
 /*
  * What we are sending to statsd?
@@ -162,13 +156,22 @@ typedef struct {
  */
 static void usage_short(char *argv0);
 static void usage_long(char *argv0, struct tcpkali_config *);
-struct multiplier { char *prefix; double mult; };
-static double parse_with_multipliers(const char *, char *str, struct multiplier *, int n);
-static int parse_array_of_doubles(const char * option, char *str, struct array_of_doubles *array);
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
+struct multiplier {
+    char *prefix;
+    double mult;
+};
+static double parse_with_multipliers(const char *, char *str,
+                                     struct multiplier *, int n);
+static int parse_array_of_doubles(const char *option, char *str,
+                                  struct array_of_doubles *array);
+static int open_connections_until_maxed_out(
+    struct engine *eng, double connect_rate, int max_connections,
+    double epoch_end, struct stats_checkpoint *, mavg traffic_mavgs[2],
+    Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats);
 static void print_connections_line(int conns, int max_conns, int conns_counter);
 static void report_to_statsd(Statsd *statsd, statsd_feedback *opt);
 
+/* clang-format off */
 static struct multiplier km_multiplier[] = { { "k", 1000 }, { "m", 1000000 } };
 static struct multiplier kb_multiplier[] = { { "k", 1024 }, { "m", 1024*1024 } };
 static struct multiplier s_multiplier[] = {
@@ -191,41 +194,40 @@ static struct multiplier bw_multiplier[] = {
     { "mBps", 1000000 }, { "MBps", 1000000 },
     { "gBps", 1000000000 }, { "GBps", 1000000000 }
 };
+/* clang-format on */
 
 /*
  * Parse command line options and kick off the engine.
  */
-int main(int argc, char **argv) {
+int
+main(int argc, char **argv) {
     struct tcpkali_config conf = default_config;
-    struct engine_params engine_params = {
-        .verbosity_level    = DBG_ERROR,
-        .connect_timeout  = 1.0,
-        .channel_lifetime = INFINITY,
-        .nagle_setting = NSET_UNSET,
-        .write_combine = WRCOMB_ON
-    };
+    struct engine_params engine_params = {.verbosity_level = DBG_ERROR,
+                                          .connect_timeout = 1.0,
+                                          .channel_lifetime = INFINITY,
+                                          .nagle_setting = NSET_UNSET,
+                                          .write_combine = WRCOMB_ON};
     int unescape_message_data = 0;
 
     struct array_of_doubles latency_percentiles = {
-        .size = 0,
-        .doubles = NULL,
+        .size = 0, .doubles = NULL,
     };
 
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "dhc:em:f:r:l:vw:T:", cli_long_options, NULL);
-        if(c == -1)
-            break;
+        c = getopt_long(argc, argv, "dhc:em:f:r:l:vw:T:", cli_long_options,
+                        NULL);
+        if(c == -1) break;
         switch(c) {
         case 'V':
             printf(PACKAGE_NAME " version " VERSION
-#ifdef  USE_LIBUV
-            " (libuv)"
+#ifdef USE_LIBUV
+                                " (libuv)"
 #else
-            " (libev)"
+                                " (libev)"
 #endif
-            "\n");
+                                "\n");
             exit(0);
         case 'h':
             usage_short(argv[0]);
@@ -233,66 +235,67 @@ int main(int argc, char **argv) {
         case 'H':
             usage_long(argv[0], &default_config);
             exit(EX_USAGE);
-        case 'v':   /* -v */
+        case 'v': /* -v */
             engine_params.verbosity_level++;
             if(engine_params.verbosity_level >= _DBG_MAX) {
-                engine_params.verbosity_level = (_DBG_MAX-1);
+                engine_params.verbosity_level = (_DBG_MAX - 1);
             }
             if(engine_params.verbosity_level >= DBG_DATA)
                 engine_params.dump_setting = DS_DUMP_ALL;
             break;
-        case CLI_VERBOSE_OFFSET + 'v':  /* --verbose <level> */
+        case CLI_VERBOSE_OFFSET + 'v': /* --verbose <level> */
             engine_params.verbosity_level = atoi(optarg);
             if((int)engine_params.verbosity_level < 0
                || engine_params.verbosity_level >= _DBG_MAX) {
-                fprintf(stderr, "Expecting --verbose=[0..%d]\n", _DBG_MAX-1);
+                fprintf(stderr, "Expecting --verbose=[0..%d]\n", _DBG_MAX - 1);
                 exit(EX_USAGE);
             }
             if(engine_params.verbosity_level >= DBG_DATA)
                 engine_params.dump_setting = DS_DUMP_ALL;
             break;
-        case 'd':   /* -d */
-            /* FALL THROUGH */
-        case CLI_DUMP + '1':    /* --dump-one */
+        case 'd': /* -d */
+        /* FALL THROUGH */
+        case CLI_DUMP + '1': /* --dump-one */
             engine_params.dump_setting |= DS_DUMP_ONE;
             break;
-        case CLI_DUMP + 'i':    /* --dump-one-in */
+        case CLI_DUMP + 'i': /* --dump-one-in */
             engine_params.dump_setting |= DS_DUMP_ONE_IN;
             break;
-        case CLI_DUMP + 'o':    /* --dump-one-out */
+        case CLI_DUMP + 'o': /* --dump-one-out */
             engine_params.dump_setting |= DS_DUMP_ONE_OUT;
             break;
-        case CLI_DUMP + 'a':    /* --dump-all */
+        case CLI_DUMP + 'a': /* --dump-all */
             engine_params.dump_setting |= DS_DUMP_ALL;
             break;
-        case CLI_DUMP + 'I':    /* --dump-all-in */
+        case CLI_DUMP + 'I': /* --dump-all-in */
             engine_params.dump_setting |= DS_DUMP_ALL_IN;
             break;
-        case CLI_DUMP + 'O':    /* --dump-all-out */
+        case CLI_DUMP + 'O': /* --dump-all-out */
             engine_params.dump_setting |= DS_DUMP_ALL_OUT;
             break;
         case 'c':
-            conf.max_connections = parse_with_multipliers(option, optarg,
-                            km_multiplier,
-                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            conf.max_connections = parse_with_multipliers(
+                option, optarg, km_multiplier,
+                sizeof(km_multiplier) / sizeof(km_multiplier[0]));
             if(conf.max_connections < 0) {
                 fprintf(stderr, "Expecting --connections > 0\n");
                 exit(EX_USAGE);
             }
             break;
         case 'R':
-            conf.connect_rate = parse_with_multipliers(option, optarg,
-                            km_multiplier,
-                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            conf.connect_rate = parse_with_multipliers(
+                option, optarg, km_multiplier,
+                sizeof(km_multiplier) / sizeof(km_multiplier[0]));
             if(conf.connect_rate <= 0) {
-                fprintf(stderr, "Expected positive --connect-rate=%s\n", optarg);
+                fprintf(stderr, "Expected positive --connect-rate=%s\n",
+                        optarg);
                 exit(EX_USAGE);
             }
             break;
         case 'T':
-            conf.test_duration = parse_with_multipliers(option, optarg,
-                            s_multiplier,
-                            sizeof(s_multiplier)/sizeof(s_multiplier[0]));
+            conf.test_duration = parse_with_multipliers(
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
             if(conf.test_duration <= 0) {
                 fprintf(stderr, "Expected positive --duration=%s\n", optarg);
                 exit(EX_USAGE);
@@ -301,39 +304,33 @@ int main(int argc, char **argv) {
         case 'e':
             unescape_message_data = 1;
             break;
-        case 'm':   /* --message */
+        case 'm': /* --message */
             message_collection_add(&engine_params.message_collection,
-                                   MSK_PURPOSE_MESSAGE,
-                                   optarg, strlen(optarg),
+                                   MSK_PURPOSE_MESSAGE, optarg, strlen(optarg),
                                    unescape_message_data);
             break;
-        case '1':   /* --first-message */
+        case '1': /* --first-message */
             message_collection_add(&engine_params.message_collection,
-                                   MSK_PURPOSE_FIRST_MSG,
-                                   optarg, strlen(optarg),
-                                   unescape_message_data);
+                                   MSK_PURPOSE_FIRST_MSG, optarg,
+                                   strlen(optarg), unescape_message_data);
             break;
         case 'f': { /* --message-file */
-            char  *data;
-            size_t  size;
-            if(read_in_file(optarg, &data, &size) != 0)
-                exit(EX_DATAERR);
+            char *data;
+            size_t size;
+            if(read_in_file(optarg, &data, &size) != 0) exit(EX_DATAERR);
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_MESSAGE, data, size,
                                    unescape_message_data);
             free(data);
-            }
-            break;
+        } break;
         case 'F': { /* --first-message-file */
-            char  *data;
-            size_t  size;
-            if(read_in_file(optarg, &data, &size) != 0)
-                exit(EX_DATAERR);
+            char *data;
+            size_t size;
+            if(read_in_file(optarg, &data, &size) != 0) exit(EX_DATAERR);
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_FIRST_MSG, data, size,
                                    unescape_message_data);
-            }
-            break;
+        } break;
         case 'w': {
             int n = atoi(optarg);
             if(n <= 0) {
@@ -341,48 +338,50 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             if(n > number_of_cpus()) {
-                fprintf(stderr, "Value --workers=%d is unreasonably large,"
-                    " only %ld CPU%s detected\n",
-                    n, number_of_cpus(), number_of_cpus()==1?"":"s");
+                fprintf(stderr,
+                        "Value --workers=%d is unreasonably large,"
+                        " only %ld CPU%s detected\n",
+                        n, number_of_cpus(), number_of_cpus() == 1 ? "" : "s");
                 exit(EX_USAGE);
             }
             engine_params.requested_workers = n;
             break;
-            }
+        }
         case 'U': { /* --channel-bandwidth-upstream <Bw> */
-            double Bps = parse_with_multipliers(option, optarg,
-                        bw_multiplier,
-                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
+            double Bps = parse_with_multipliers(
+                option, optarg, bw_multiplier,
+                sizeof(bw_multiplier) / sizeof(bw_multiplier[0]));
             if(Bps <= 0) {
                 fprintf(stderr, "Expecting --channel-bandwidth-upstream > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_send_rate = RATE_BPS(Bps);
             break;
-            }
+        }
         case 'D': { /* --channel-bandwidth-downstream <Bw> */
-            double Bps = parse_with_multipliers(option, optarg,
-                        bw_multiplier,
-                        sizeof(bw_multiplier)/sizeof(bw_multiplier[0]));
+            double Bps = parse_with_multipliers(
+                option, optarg, bw_multiplier,
+                sizeof(bw_multiplier) / sizeof(bw_multiplier[0]));
             if(Bps < 0) {
-                fprintf(stderr, "Expecting --channel-bandwidth-downstream > 0\n");
+                fprintf(stderr,
+                        "Expecting --channel-bandwidth-downstream > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_recv_rate = RATE_BPS(Bps);
             break;
-            }
+        }
         case 'r': { /* --message-rate <Rate> */
-            double rate = parse_with_multipliers(option, optarg,
-                        km_multiplier,
-                        sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            double rate = parse_with_multipliers(
+                option, optarg, km_multiplier,
+                sizeof(km_multiplier) / sizeof(km_multiplier[0]));
             if(rate <= 0) {
                 fprintf(stderr, "Expecting --message-rate > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.channel_send_rate = RATE_MPS(rate);
             break;
-            }
-        case 'N':   /* --nagle {on|off} */
+        }
+        case 'N': /* --nagle {on|off} */
             /* Enabling Nagle toggles off NODELAY */
             if(strcmp(optarg, "on") == 0)
                 engine_params.nagle_setting = NSET_NODELAY_OFF;
@@ -393,9 +392,10 @@ int main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 'C':   /* --write-combine {on|off} */
+        case 'C': /* --write-combine {on|off} */
             if(strcmp(optarg, "on") == 0) {
-                fprintf(stderr, "NOTE: --write-combine on is a default setting\n");
+                fprintf(stderr,
+                        "NOTE: --write-combine on is a default setting\n");
                 engine_params.write_combine = WRCOMB_ON;
             } else if(strcmp(optarg, "off") == 0) {
                 engine_params.write_combine = WRCOMB_OFF;
@@ -405,41 +405,39 @@ int main(int argc, char **argv) {
             }
             break;
         case CLI_SOCKET_OPT + 'R': { /* --rcvbuf */
-            long size = parse_with_multipliers(option, optarg,
-                        kb_multiplier,
-                        sizeof(kb_multiplier)/sizeof(kb_multiplier[0]));
+            long size = parse_with_multipliers(
+                option, optarg, kb_multiplier,
+                sizeof(kb_multiplier) / sizeof(kb_multiplier[0]));
             if(size <= 0) {
                 fprintf(stderr, "Expecting --rcvbuf > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.sock_rcvbuf_size = size;
-            }
-            break;
+        } break;
         case CLI_SOCKET_OPT + 'S': { /* --sndbuf */
-            long size = parse_with_multipliers(option, optarg,
-                        kb_multiplier,
-                        sizeof(kb_multiplier)/sizeof(kb_multiplier[0]));
+            long size = parse_with_multipliers(
+                option, optarg, kb_multiplier,
+                sizeof(kb_multiplier) / sizeof(kb_multiplier[0]));
             if(size <= 0) {
                 fprintf(stderr, "Expecting --sndbuf > 0\n");
                 exit(EX_USAGE);
             }
             engine_params.sock_sndbuf_size = size;
-            }
-            break;
+        } break;
         case CLI_STATSD_OFFSET + 'e':
             conf.statsd_enable = 1;
             break;
-        case CLI_STATSD_OFFSET+'h':
+        case CLI_STATSD_OFFSET + 'h':
             conf.statsd_host = strdup(optarg);
             break;
-        case CLI_STATSD_OFFSET+'n':
+        case CLI_STATSD_OFFSET + 'n':
             conf.statsd_namespace = strdup(optarg);
             break;
-        case CLI_STATSD_OFFSET+'p':
+        case CLI_STATSD_OFFSET + 'p':
             conf.statsd_port = atoi(optarg);
             if(conf.statsd_port <= 0 || conf.statsd_port >= 65535) {
                 fprintf(stderr, "--statsd-port=%d is not in [1..65535]\n",
-                    conf.statsd_port);
+                        conf.statsd_port);
                 exit(EX_USAGE);
             }
             break;
@@ -447,45 +445,45 @@ int main(int argc, char **argv) {
             conf.listen_port = atoi(optarg);
             if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
                 fprintf(stderr, "--listen-port=%d is not in [1..65535]\n",
-                    conf.listen_port);
+                        conf.listen_port);
                 exit(EX_USAGE);
             }
             break;
-        case 'M':   /* --listen-mode={silent|active} */
+        case 'M': /* --listen-mode={silent|active} */
             if(strcmp(optarg, "silent") == 0) {
                 engine_params.listen_mode = LMODE_DEFAULT;
-            } if(strcmp(optarg, "active") == 0) {
+            }
+            if(strcmp(optarg, "active") == 0) {
                 engine_params.listen_mode &= ~_LMODE_SND_MASK;
                 engine_params.listen_mode |= LMODE_ACTIVE;
             } else {
-                fprintf(stderr, "--listen-mode=%s is not one of {silent|active}\n",
-                    optarg);
+                fprintf(stderr,
+                        "--listen-mode=%s is not one of {silent|active}\n",
+                        optarg);
                 exit(EX_USAGE);
             }
             break;
         case CLI_CONN_OFFSET + 't':
             engine_params.connect_timeout = parse_with_multipliers(
-                            option, optarg,
-                            s_multiplier,
-                            sizeof(s_multiplier)/sizeof(s_multiplier[0]));
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
             if(engine_params.connect_timeout <= 0.0) {
                 fprintf(stderr, "Expected positive --connect-timeout=%s\n",
-                    optarg);
+                        optarg);
                 exit(EX_USAGE);
             }
             break;
         case CLI_CHAN_OFFSET + 't':
             engine_params.channel_lifetime = parse_with_multipliers(
-                            option, optarg,
-                            s_multiplier,
-                            sizeof(s_multiplier)/sizeof(s_multiplier[0]));
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
             if(engine_params.channel_lifetime < 0.0) {
                 fprintf(stderr, "Expected non-negative --channel-lifetime=%s\n",
-                    optarg);
+                        optarg);
                 exit(EX_USAGE);
             }
             break;
-        case 'W':   /* --websocket: Enable WebSocket framing */
+        case 'W': /* --websocket: Enable WebSocket framing */
             engine_params.websocket_enable = 1;
             break;
         case CLI_LATENCY + 'c': /* --latency-connect */
@@ -496,54 +494,53 @@ int main(int argc, char **argv) {
             break;
         case CLI_LATENCY + 'm': { /* --latency-marker */
             engine_params.latency_setting |= LMEASURE_MARKER;
-            char *data  = strdup(optarg);
+            char *data = strdup(optarg);
             size_t size = strlen(optarg);
-            if(unescape_message_data)
-                unescape_data(data, &size);
+            if(unescape_message_data) unescape_data(data, &size);
             if(size == 0) {
-                fprintf(stderr, "--latency-marker: Non-empty marker expected\n");
+                fprintf(stderr,
+                        "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
             }
             if(parse_expression(&engine_params.latency_marker, data, size, 0)
-                    == -1) {
-                fprintf(stderr, "--latency-marker: Failed to parse expression\n");
+               == -1) {
+                fprintf(stderr,
+                        "--latency-marker: Failed to parse expression\n");
                 exit(EX_USAGE);
             }
-            }
-            break;
+        } break;
         case CLI_LATENCY + 's': { /* --latency-marker-skip */
-            engine_params.latency_marker_skip =
-                            parse_with_multipliers(option, optarg,
-                            km_multiplier,
-                            sizeof(km_multiplier)/sizeof(km_multiplier[0]));
+            engine_params.latency_marker_skip = parse_with_multipliers(
+                option, optarg, km_multiplier,
+                sizeof(km_multiplier) / sizeof(km_multiplier[0]));
             if(engine_params.latency_marker_skip < 0) {
-                fprintf(stderr, "--latency-marker-skip: "
-                            "Failed to parse or out of range expression\n");
+                fprintf(stderr,
+                        "--latency-marker-skip: "
+                        "Failed to parse or out of range expression\n");
                 exit(EX_USAGE);
             }
-            }
-            break;
+        } break;
         case CLI_LATENCY + 'p': { /* --latency-percentiles */
             if(parse_array_of_doubles(option, optarg, &latency_percentiles))
                 exit(EX_USAGE);
             for(size_t i = 0; i < latency_percentiles.size; i++) {
                 double number = latency_percentiles.doubles[i];
                 if(number < 0.0 || number > 100.0) {
-                    fprintf(stderr, "--latency-percentiles: "
-                            "Percentile number should be within [0..100] range\n");
+                    fprintf(
+                        stderr,
+                        "--latency-percentiles: "
+                        "Percentile number should be within [0..100] range\n");
                     exit(EX_USAGE);
                 }
             }
-            }
-            break;
+        } break;
         case 'I': { /* --source-ip */
-                if(add_source_ip(&engine_params.source_addresses, optarg) < 0) {
-                    fprintf(stderr, "--source-ip=%s: local IP address expected\n",
-                                    optarg);
-                    exit(EX_USAGE);
-                }
+            if(add_source_ip(&engine_params.source_addresses, optarg) < 0) {
+                fprintf(stderr, "--source-ip=%s: local IP address expected\n",
+                        optarg);
+                exit(EX_USAGE);
             }
-            break;
+        } break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -563,8 +560,7 @@ int main(int argc, char **argv) {
      * Avoid spawning more threads than connections.
      */
     if(engine_params.requested_workers == 0
-        && conf.max_connections < number_of_cpus()
-        && conf.listen_port == 0) {
+       && conf.max_connections < number_of_cpus() && conf.listen_port == 0) {
         engine_params.requested_workers = conf.max_connections;
     }
     if(!engine_params.requested_workers)
@@ -574,7 +570,8 @@ int main(int argc, char **argv) {
      * Check that the system environment is prepared to handle high load.
      */
     if(adjust_system_limits_for_highload(conf.max_connections,
-            engine_params.requested_workers) == -1) {
+                                         engine_params.requested_workers)
+       == -1) {
         /* Print the full set of problems with system limits. */
         check_system_limits_sanity(conf.max_connections,
                                    engine_params.requested_workers);
@@ -591,12 +588,12 @@ int main(int argc, char **argv) {
      * Some sysctl variables may make these options ineffectful.
      */
     if(engine_params.sock_rcvbuf_size
-    && check_setsockopt_effect(SO_RCVBUF) == 0) {
+       && check_setsockopt_effect(SO_RCVBUF) == 0) {
         /* The check_setsockopt_effect() function yelled already. */
         warning("--rcvbuf option makes no effect.\n");
     }
     if(engine_params.sock_sndbuf_size
-    && check_setsockopt_effect(SO_SNDBUF) == 0) {
+       && check_setsockopt_effect(SO_SNDBUF) == 0) {
         /* The check_setsockopt_effect() function yelled already. */
         warning("--sndbuf option makes no effect.\n");
     }
@@ -605,14 +602,14 @@ int main(int argc, char **argv) {
      * Pick multiple destinations from the command line, resolve them.
      */
     if(argc - optind > 0) {
-        engine_params.remote_addresses
-            = resolve_remote_addresses(&argv[optind], argc - optind);
+        engine_params.remote_addresses =
+            resolve_remote_addresses(&argv[optind], argc - optind);
         if(engine_params.remote_addresses.n_addrs == 0) {
-            errx(EX_NOHOST, "DNS did not return usable addresses for given host(s)");
+            errx(EX_NOHOST,
+                 "DNS did not return usable addresses for given host(s)");
         } else {
-            fprint_addresses(stderr, "Destination: ",
-                                   "\nDestination: ", "\n",
-                                   engine_params.remote_addresses);
+            fprint_addresses(stderr, "Destination: ", "\nDestination: ", "\n",
+                             engine_params.remote_addresses);
         }
         /* Figure out the host and port for HTTP "Host:" header. */
         conf.first_hostport = strdup(argv[optind]);
@@ -626,13 +623,13 @@ int main(int argc, char **argv) {
         /* Figure out source IPs */
         if(engine_params.source_addresses.n_addrs == 0) {
             if(detect_source_ips(&engine_params.remote_addresses,
-                                 &engine_params.source_addresses) < 0) {
+                                 &engine_params.source_addresses)
+               < 0) {
                 exit(EX_SOFTWARE);
             }
         } else {
-            fprint_addresses(stderr, "Source IP: ",
-                                     "\nSource IP: ", "\n",
-                                     engine_params.source_addresses);
+            fprint_addresses(stderr, "Source IP: ", "\nSource IP: ", "\n",
+                             engine_params.source_addresses);
         }
     } else {
         conf.max_connections = 0;
@@ -648,12 +645,12 @@ int main(int argc, char **argv) {
      */
     message_collection_finalize(&engine_params.message_collection,
                                 engine_params.websocket_enable,
-                                conf.first_hostport,
-                                conf.first_path);
+                                conf.first_hostport, conf.first_path);
 
-    int no_message_to_send = (0 == message_collection_estimate_size(
-                &engine_params.message_collection,
-                MSK_PURPOSE_MESSAGE, MSK_PURPOSE_MESSAGE));
+    int no_message_to_send =
+        (0 == message_collection_estimate_size(
+                  &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
+                  MSK_PURPOSE_MESSAGE));
 
     /*
      * Check that we will actually send messages
@@ -661,7 +658,8 @@ int main(int argc, char **argv) {
      */
     if(engine_params.latency_marker) {
         if(no_message_to_send || (argc - optind == 0)) {
-            fprintf(stderr, "--latency-marker is given, but no messages "
+            fprintf(stderr,
+                    "--latency-marker is given, but no messages "
                     "are supposed to be sent. Specify --message?\n");
             exit(EX_USAGE);
         }
@@ -673,8 +671,9 @@ int main(int argc, char **argv) {
     if(engine_params.channel_send_rate.value_base == RS_MESSAGES_PER_SECOND
        && no_message_to_send) {
         if(engine_params.channel_send_rate.value_base) {
-            fprintf(stderr, "--message-rate parameter makes no sense "
-                            "without --message or --message-file\n");
+            fprintf(stderr,
+                    "--message-rate parameter makes no sense "
+                    "without --message or --message-file\n");
             exit(EX_USAGE);
         }
     }
@@ -686,21 +685,25 @@ int main(int argc, char **argv) {
     if(engine_params.write_combine == WRCOMB_OFF) {
         switch(engine_params.nagle_setting) {
         case NSET_UNSET:
-            fprintf(stderr, "NOTE: --write-combine=off presumes --nagle=off.\n");
+            fprintf(stderr,
+                    "NOTE: --write-combine=off presumes --nagle=off.\n");
             engine_params.nagle_setting = NSET_NODELAY_OFF;
             break;
-        case NSET_NODELAY_OFF:  /* --nagle=on */
-            warning("--write-combine=off makes little sense "
-                    "with --nagle=on.\n");
+        case NSET_NODELAY_OFF: /* --nagle=on */
+            warning(
+                "--write-combine=off makes little sense "
+                "with --nagle=on.\n");
             break;
-        case NSET_NODELAY_ON:   /* --nagle=off */
+        case NSET_NODELAY_ON: /* --nagle=off */
             /* This is the proper setting when --write-combine=off */
             break;
         }
     }
 
     if(optind == argc && conf.listen_port == 0) {
-        fprintf(stderr, "Expecting target <host:port> or --listen-port. See -h or --help.\n");
+        fprintf(stderr,
+                "Expecting target <host:port> or --listen-port. See -h or "
+                "--help.\n");
         usage_short(argv[0]);
         exit(EX_USAGE);
     }
@@ -708,24 +711,25 @@ int main(int argc, char **argv) {
     /*
      * Check if the number of connections can be opened in time.
      */
-    if(conf.max_connections/conf.connect_rate > conf.test_duration / 10) {
-        if(conf.max_connections/conf.connect_rate > conf.test_duration) {
-            fprintf(stderr, "%d connections can not be opened "
+    if(conf.max_connections / conf.connect_rate > conf.test_duration / 10) {
+        if(conf.max_connections / conf.connect_rate > conf.test_duration) {
+            fprintf(stderr,
+                    "%d connections can not be opened "
                     "at a rate %g within test duration %g.\n"
-                    "Decrease --connections=%d, or increase --duration=%g or --connect-rate=%g.\n",
-                conf.max_connections,
-                conf.connect_rate,
-                conf.test_duration, conf.max_connections, conf.test_duration,
-                conf.connect_rate);
+                    "Decrease --connections=%d, or increase --duration=%g or "
+                    "--connect-rate=%g.\n",
+                    conf.max_connections, conf.connect_rate, conf.test_duration,
+                    conf.max_connections, conf.test_duration,
+                    conf.connect_rate);
             exit(EX_USAGE);
         } else {
-            warning("%d connections might not be opened "
-                    "at a rate %g within test duration %g.\n"
-                    "Decrease --connections=%d, or increase --duration=%g or --connect-rate=%g.\n",
-                conf.max_connections,
-                conf.connect_rate,
-                conf.test_duration, conf.max_connections, conf.test_duration,
-                conf.connect_rate);
+            warning(
+                "%d connections might not be opened "
+                "at a rate %g within test duration %g.\n"
+                "Decrease --connections=%d, or increase --duration=%g or "
+                "--connect-rate=%g.\n",
+                conf.max_connections, conf.connect_rate, conf.test_duration,
+                conf.max_connections, conf.test_duration, conf.connect_rate);
         }
     }
 
@@ -734,9 +738,8 @@ int main(int argc, char **argv) {
      */
     Statsd *statsd;
     if(conf.statsd_enable) {
-        statsd_new(&statsd, conf.statsd_host,
-                            conf.statsd_port,
-                            conf.statsd_namespace, NULL);
+        statsd_new(&statsd, conf.statsd_host, conf.statsd_port,
+                   conf.statsd_namespace, NULL);
         /* Clear up traffic numbers, for better graphing. */
         report_to_statsd(statsd, 0);
     } else {
@@ -762,7 +765,7 @@ int main(int argc, char **argv) {
     mavg traffic_mavgs[2];
     mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
     mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
-    struct stats_checkpoint checkpoint = { 0, 0, {0,0,0,0}, {0,0,0,0} };
+    struct stats_checkpoint checkpoint = {0, 0, {0, 0, 0, 0}, {0, 0, 0, 0}};
 
     /*
      * Ramp up to the specified number of connections by opening them at a
@@ -770,22 +773,21 @@ int main(int argc, char **argv) {
      */
     if(conf.max_connections) {
         double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
-        if(open_connections_until_maxed_out(eng, conf.connect_rate,
-                                            conf.max_connections, epoch_end,
-                                            &checkpoint, traffic_mavgs, statsd,
-                                            &term_flag,
-                                            PHASE_ESTABLISHING_CONNECTIONS,
-                                            print_stats) == 0) {
+        if(open_connections_until_maxed_out(
+               eng, conf.connect_rate, conf.max_connections, epoch_end,
+               &checkpoint, traffic_mavgs, statsd, &term_flag,
+               PHASE_ESTABLISHING_CONNECTIONS, print_stats)
+           == 0) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
-                conf.max_connections);
+                    conf.max_connections);
         } else {
             fprintf(stderr, "%s", tcpkali_clear_eol());
-            fprintf(stderr, "Could not create %d connection%s"
-                            " in allotted time (%gs)\n",
-                            conf.max_connections,
-                            conf.max_connections==1?"":"s",
-                            conf.test_duration);
+            fprintf(stderr,
+                    "Could not create %d connection%s"
+                    " in allotted time (%gs)\n",
+                    conf.max_connections, conf.max_connections == 1 ? "" : "s",
+                    conf.test_duration);
             /* Level down graphs/charts. */
             report_to_statsd(statsd, 0);
             exit(1);
@@ -803,19 +805,17 @@ int main(int argc, char **argv) {
 
     /* Reset the test duration after ramp-up. */
     for(double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;;) {
-        if(open_connections_until_maxed_out(eng, conf.connect_rate,
-                                            conf.max_connections, epoch_end,
-                                            &checkpoint, traffic_mavgs,
-                                            statsd, &term_flag,
-                                            PHASE_STEADY_STATE,
-                                            print_stats) == -1)
+        if(open_connections_until_maxed_out(
+               eng, conf.connect_rate, conf.max_connections, epoch_end,
+               &checkpoint, traffic_mavgs, statsd, &term_flag,
+               PHASE_STEADY_STATE, print_stats)
+           == -1)
             break;
     }
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
-                     checkpoint.initial_traffic_stats,
-                     latency_percentiles);
+                     checkpoint.initial_traffic_stats, latency_percentiles);
 
     free(latency_percentiles.doubles);
 
@@ -825,44 +825,54 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-static const char *time_progress(double start, double now, double stop) {
-    const char *clocks[] = {
-        "🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
-        "🕕  ", "🕖  ", "🕗  ", "🕘  ", "🕙  ", "🕚  "
-    };
+static const char *
+time_progress(double start, double now, double stop) {
+    const char *clocks[] = {"🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
+                            "🕕  ", "🕖  ", "🕗  ", "🕘  ", "🕙  ", "🕚  "};
     if(!tcpkali_is_utf8()) return "";
-    double span = (stop - start) / (sizeof(clocks)/sizeof(clocks[0]));
+    double span = (stop - start) / (sizeof(clocks) / sizeof(clocks[0]));
     int pos = (now - start) / span;
-    if(pos < 0) pos = 0;
-    else if(pos > 11) pos = 11;
+    if(pos < 0)
+        pos = 0;
+    else if(pos > 11)
+        pos = 11;
     return clocks[pos];
 }
 
-static void format_latencies(char *buf, size_t size, struct latency_snapshot *latency) {
-    if(latency->connect_histogram
-      || latency->firstbyte_histogram
-      || latency->marker_histogram) {
+static void
+format_latencies(char *buf, size_t size, struct latency_snapshot *latency) {
+    if(latency->connect_histogram || latency->firstbyte_histogram
+       || latency->marker_histogram) {
         char *p = buf;
         p += snprintf(p, size, " (");
         if(latency->connect_histogram)
-            p += snprintf(p, size-(p-buf),
-                    "c=%.1f ", hdr_value_at_percentile(
-                    latency->connect_histogram, 95.0) / 10.0);
+            p += snprintf(
+                p, size - (p - buf), "c=%.1f ",
+                hdr_value_at_percentile(latency->connect_histogram, 95.0)
+                    / 10.0);
         if(latency->firstbyte_histogram)
-            p += snprintf(p, size-(p-buf),
-                    "fb=%.1f ", hdr_value_at_percentile(
-                    latency->firstbyte_histogram, 95.0) / 10.0);
+            p += snprintf(
+                p, size - (p - buf), "fb=%.1f ",
+                hdr_value_at_percentile(latency->firstbyte_histogram, 95.0)
+                    / 10.0);
         if(latency->marker_histogram)
-            p += snprintf(p, size-(p-buf),
-                    "m=%.1f ", hdr_value_at_percentile(
-                    latency->marker_histogram, 95.0) / 10.0);
-        snprintf(p, size-(p-buf), "ms⁹⁵ᵖ)");
+            p += snprintf(
+                p, size - (p - buf), "m=%.1f ",
+                hdr_value_at_percentile(latency->marker_histogram, 95.0)
+                    / 10.0);
+        snprintf(p, size - (p - buf), "ms⁹⁵ᵖ)");
     } else {
         buf[0] = '\0';
     }
 }
 
-static int open_connections_until_maxed_out(struct engine *eng, double connect_rate, int max_connections, double epoch_end, struct stats_checkpoint *checkpoint, mavg traffic_mavgs[2], Statsd *statsd, int *term_flag, enum work_phase phase, int print_stats) {
+static int
+open_connections_until_maxed_out(struct engine *eng, double connect_rate,
+                                 int max_connections, double epoch_end,
+                                 struct stats_checkpoint *checkpoint,
+                                 mavg traffic_mavgs[2], Statsd *statsd,
+                                 int *term_flag, enum work_phase phase,
+                                 int print_stats) {
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
 
@@ -872,9 +882,8 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
      * operations per batch.
      * Therefore, we round the timeout_us upwards to the nearest millisecond.
      */
-    long timeout_us = 1000 * ceil(1000.0/connect_rate);
-    if(timeout_us > 250000)
-        timeout_us = 250000;
+    long timeout_us = 1000 * ceil(1000.0 / connect_rate);
+    if(timeout_us > 250000) timeout_us = 250000;
 
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, now);
@@ -882,24 +891,25 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
 
     while(now < epoch_end && !*term_flag
-            /* ...until we have all connections established or
-             * we're in a steady state. */
-            && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
+          /* ...until we have all connections established or
+           * we're in a steady state. */
+          && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
         usleep(timeout_us);
         tk_now_update(TK_DEFAULT);
         now = tk_now(TK_DEFAULT);
         int update_stats = (now - checkpoint->last_update) >= 0.25;
 
         size_t connecting, conns_in, conns_out, conns_counter;
-        engine_get_connection_stats(eng, &connecting,
-                              &conns_in, &conns_out, &conns_counter);
+        engine_get_connection_stats(eng, &connecting, &conns_in, &conns_out,
+                                    &conns_counter);
         conn_deficit = max_connections - (connecting + conns_out);
 
         size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
         size_t to_start = allowed;
         if(conn_deficit <= 0) {
             to_start = 0;
-        } if(to_start > (size_t)conn_deficit) {
+        }
+        if(to_start > (size_t)conn_deficit) {
             to_start = conn_deficit;
         }
         engine_initiate_new_connections(eng, to_start);
@@ -931,15 +941,13 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
         engine_prepare_latency_snapshot(eng);
         struct latency_snapshot *latency = engine_collect_latency_snapshot(eng);
         report_to_statsd(statsd,
-            &(statsd_feedback){
-                .opened = to_start,
-                .conns_in = conns_in,
-                .conns_out = conns_out,
-                .bps_in = bps_in,
-                .bps_out = bps_out,
-                .traffic_delta = traffic_delta,
-                .latency = latency
-            });
+                         &(statsd_feedback){.opened = to_start,
+                                            .conns_in = conns_in,
+                                            .conns_out = conns_out,
+                                            .bps_in = bps_in,
+                                            .bps_out = bps_out,
+                                            .traffic_delta = traffic_delta,
+                                            .latency = latency});
 
         if(print_stats) {
             if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
@@ -950,14 +958,12 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
                 format_latencies(latency_buf, sizeof(latency_buf), latency);
 
                 fprintf(stderr,
-                    "%sTraffic %.3f↓, %.3f↑ Mbps "
-                    "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
-                    time_progress(checkpoint->epoch_start, now, epoch_end),
-                    bps_in/1000000.0, bps_out/1000000.0,
-                    (long)conns_in, (long)conns_out,
-                    (long)connecting, (long)conns_counter,
-                    latency_buf, tcpkali_clear_eol()
-                );
+                        "%sTraffic %.3f↓, %.3f↑ Mbps "
+                        "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
+                        time_progress(checkpoint->epoch_start, now, epoch_end),
+                        bps_in / 1000000.0, bps_out / 1000000.0, (long)conns_in,
+                        (long)conns_out, (long)connecting, (long)conns_counter,
+                        latency_buf, tcpkali_clear_eol());
             }
         }
 
@@ -967,22 +973,23 @@ static int open_connections_until_maxed_out(struct engine *eng, double connect_r
     return (now >= epoch_end || *term_flag) ? -1 : 0;
 }
 
-static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
+static void
+report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     static statsd_feedback empty_feedback;
 
-    if(!statsd)
-        return;
+    if(!statsd) return;
     if(!sf) sf = &empty_feedback;
 
     statsd_resetBatch(statsd);
 
-#define SBATCH(t, str, value) do {                              \
-        int ret = statsd_addToBatch(statsd, t, str, value, 1);  \
-        if(ret == STATSD_BATCH_FULL) {                          \
-            statsd_sendBatch(statsd);                           \
-            ret = statsd_addToBatch(statsd, t, str, value, 1);  \
-        }                                                       \
-        assert(ret == STATSD_SUCCESS);                          \
+#define SBATCH(t, str, value)                                  \
+    do {                                                       \
+        int ret = statsd_addToBatch(statsd, t, str, value, 1); \
+        if(ret == STATSD_BATCH_FULL) {                         \
+            statsd_sendBatch(statsd);                          \
+            ret = statsd_addToBatch(statsd, t, str, value, 1); \
+        }                                                      \
+        assert(ret == STATSD_SUCCESS);                         \
     } while(0)
 
     SBATCH(STATSD_COUNT, "connections.opened", sf->opened);
@@ -992,15 +999,14 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     SBATCH(STATSD_GAUGE, "traffic.bitrate", sf->bps_in + sf->bps_out);
     SBATCH(STATSD_GAUGE, "traffic.bitrate.in", sf->bps_in);
     SBATCH(STATSD_GAUGE, "traffic.bitrate.out", sf->bps_out);
-    SBATCH(STATSD_COUNT, "traffic.data", sf->traffic_delta.bytes_rcvd
-                                       + sf->traffic_delta.bytes_sent);
+    SBATCH(STATSD_COUNT, "traffic.data",
+           sf->traffic_delta.bytes_rcvd + sf->traffic_delta.bytes_sent);
     SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->traffic_delta.bytes_rcvd);
     SBATCH(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
     SBATCH(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
     SBATCH(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
 
     if(sf->latency->marker_histogram || sf == &empty_feedback) {
-
         struct {
             unsigned p50;
             unsigned p95;
@@ -1016,8 +1022,8 @@ static void report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
             lat.p95 = hdr_value_at_percentile(hist, 95.0) / 10.0;
             lat.p99 = hdr_value_at_percentile(hist, 99.0) / 10.0;
             lat.p99_5 = hdr_value_at_percentile(hist, 99.5) / 10.0;
-            lat.mean = hdr_mean(hist)/10.0;
-            lat.max = hdr_max(hist)/10.0;
+            lat.mean = hdr_mean(hist) / 10.0;
+            lat.max = hdr_max(hist) / 10.0;
             assert(lat.p95 < 1000000);
             assert(lat.mean < 1000000);
             assert(lat.max < 1000000);
@@ -1041,12 +1047,11 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     int terminal_width = tcpkali_terminal_width();
 
     char info[terminal_width + 1];
-    ssize_t info_width = snprintf(info, sizeof(info),
-                    "| %d of %d (%d)", conns, max_conns, conns_counter);
+    ssize_t info_width = snprintf(info, sizeof(info), "| %d of %d (%d)", conns,
+                                  max_conns, conns_counter);
 
     int ribbon_width = terminal_width - info_width - 1;
-    if(ribbon_width > 0.6 * terminal_width)
-        ribbon_width = 0.6 * terminal_width;
+    if(ribbon_width > 0.6 * terminal_width) ribbon_width = 0.6 * terminal_width;
     if(ribbon_width > 50) ribbon_width = 50;
 
     if(info_width > terminal_width || ribbon_width < 5) {
@@ -1059,16 +1064,20 @@ print_connections_line(int conns, int max_conns, int conns_counter) {
     ribbon[0] = '|';
     int at = 1 + ((ribbon_width - 2) * conns) / max_conns;
     for(int i = 1; i < ribbon_width; i++) {
-        if (i < at)      ribbon[i] = '=';
-        else if(i  > at) ribbon[i] = '-';
-        else if(i == at) ribbon[i] = '>';
+        if(i < at)
+            ribbon[i] = '=';
+        else if(i > at)
+            ribbon[i] = '-';
+        else if(i == at)
+            ribbon[i] = '>';
     }
     ribbon[ribbon_width] = 0;
     fprintf(stderr, "%s%s%s\r", ribbon, info, tcpkali_clear_eol());
 }
 
 static double
-parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int n) {
+parse_with_multipliers(const char *option, char *str, struct multiplier *ms,
+                       int n) {
     char *endptr;
     double value = strtod(str, &endptr);
     if(endptr == str) {
@@ -1093,11 +1102,12 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms, int
 }
 
 static int
-parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *array) {
+parse_array_of_doubles(const char *option, char *str,
+                       struct array_of_doubles *array) {
     double *doubles = array->doubles;
     size_t size = array->size;
 
-    for (char *pos = str; *pos; pos++) {
+    for(char *pos = str; *pos; pos++) {
         char *endpos;
         double got = strtod(pos, &endpos);
         if(pos == endpos) {
@@ -1105,16 +1115,17 @@ parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *a
             return -1;
         }
         if(*endpos != 0 && *endpos != ',' && *endpos != '/') {
-            fprintf(stderr, "%s: Failed to parse: "
-                    "invalid separator, use ',' or '/'\n", option);
+            fprintf(stderr,
+                    "%s: Failed to parse: "
+                    "invalid separator, use ',' or '/'\n",
+                    option);
             return -1;
         }
         doubles = realloc(doubles, ++size * sizeof(double));
-        doubles[size-1] = got;
+        doubles[size - 1] = got;
 
         pos = endpos;
-        if(*pos == 0)
-            break;
+        if(*pos == 0) break;
     }
 
     array->doubles = doubles;
@@ -1128,7 +1139,8 @@ parse_array_of_doubles(const char *option, char *str, struct array_of_doubles *a
 static void
 usage_long(char *argv0, struct tcpkali_config *conf) {
     fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
-        basename(argv0));
+            basename(argv0));
+    /* clang-format off */
     fprintf(stderr,
     "Where OPTIONS are:\n"
     "  -h                           Print short help screen, then exit\n"
@@ -1183,23 +1195,21 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
     "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
     "  <Rate> and <Time> can be fractional values, such as 0.25.\n",
+        /* clang-format on */
 
-
-    (_DBG_MAX - 1),
-    number_of_cpus(), number_of_cpus() < 10 ? " " : "",
-    conf->max_connections,
-    conf->connect_rate,
-    conf->statsd_enable ? "enabled" : "disabled",
-    conf->statsd_port,
-    conf->statsd_namespace
-    );
+        (_DBG_MAX - 1), number_of_cpus(), number_of_cpus() < 10 ? " " : "",
+        conf->max_connections, conf->connect_rate,
+        conf->statsd_enable ? "enabled" : "disabled", conf->statsd_port,
+        conf->statsd_namespace);
 }
 
 static void
 usage_short(char *argv0) {
     fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
-        basename(argv0));
-    fprintf(stderr,
+            basename(argv0));
+    fprintf(
+        stderr,
+        /* clang-format off */
     "Where some OPTIONS are:\n"
     "  -h                   Print this help screen, then exit\n"
     "  --help               Print long help screen, then exit\n"
@@ -1220,9 +1230,6 @@ usage_short(char *argv0) {
     "  <Rate> and <Time> can be fractional values, such as 0.25.\n"
     "\n"
     "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
-    basename(argv0)
-
-    );
-
+    basename(argv0));
+    /* clang-format on */
 }
-

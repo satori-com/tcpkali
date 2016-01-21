@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,7 +31,7 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#define UNUSED  __attribute__((unused))
-#define PRINTFLIKE(n,m)  __attribute__((format(printf,n,m)))
+#define UNUSED __attribute__((unused))
+#define PRINTFLIKE(n, m) __attribute__((format(printf, n, m)))
 
-#endif  /* TCPKALI_COMMON_H */
+#endif /* TCPKALI_COMMON_H */

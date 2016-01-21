@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -38,7 +38,9 @@
 /*
  * Write out a frame header to prefix a payload of given size.
  */
-size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size, enum websocket_side side) {
+size_t
+websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size,
+                       enum websocket_side side) {
     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
     uint8_t *orig_buf_ptr;
 
@@ -55,18 +57,15 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size, en
     struct ws_frame {
         enum {
             OP_CONTINUATION = 0x0,
-            OP_TEXT_FRAME   = 0x1,
+            OP_TEXT_FRAME = 0x1,
             OP_BINARY_FRAME = 0x2,
-            OP_CLOSE        = 0x8,
-            OP_PING         = 0x9,
-            OP_PONG         = 0xA
-        } opcode:4;
-        unsigned int rsvs:3;
-        unsigned int fin:1;
-    } first_byte = {
-        .opcode = OP_TEXT_FRAME,
-        .fin = 1
-    };
+            OP_CLOSE = 0x8,
+            OP_PING = 0x9,
+            OP_PONG = 0xA
+        } opcode : 4;
+        unsigned int rsvs : 3;
+        unsigned int fin : 1;
+    } first_byte = {.opcode = OP_TEXT_FRAME, .fin = 1};
 
     *buf++ = *(uint8_t *)&first_byte;
 
@@ -121,7 +120,7 @@ size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size, en
 http_detect_websocket_rval
 http_detect_websocket(int fd, const char *buf, size_t size) {
     const char *keyhdr = "sec-websocket-key:";
-    size_t keyhdr_size = sizeof("sec-websocket-key:")-1;
+    size_t keyhdr_size = sizeof("sec-websocket-key:") - 1;
 
     /*
      * Ignore the GET/Version completely, search right for Sec-WebSocket-Key.
@@ -145,12 +144,13 @@ http_detect_websocket(int fd, const char *buf, size_t size) {
                     return HDW_TRUNCATED_INPUT;
                 }
                 /* ltrim */
-                for(; keyvalue < kvend && *keyvalue == ' '; keyvalue++);
+                for(; keyvalue < kvend && *keyvalue == ' '; keyvalue++)
+                    ;
                 /* rtrim */
-                for(; kvend > keyvalue
-                    && (kvend[-1] == ' '
-                        || kvend[-1] == '\r'
-                        || kvend[-1] == ' '); kvend--);
+                for(; kvend > keyvalue && (kvend[-1] == ' ' || kvend[-1] == '\r'
+                                           || kvend[-1] == ' ');
+                    kvend--)
+                    ;
                 int kvsize = kvend - keyvalue;
                 if(kvsize < 1 || kvsize > 26 /* 26 is in RFC6455 */)
                     return HDW_UNEXPECTED_ERROR;
@@ -160,22 +160,22 @@ http_detect_websocket(int fd, const char *buf, size_t size) {
                 char base64_output[32];
                 char out_buf[200];
                 size_t new_key_size;
-#define MAGIC   "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+#define MAGIC "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
                 memcpy(new_key, keyvalue, kvsize);
-                strcpy(new_key+kvsize, MAGIC);
-                new_key_size = kvsize + sizeof(MAGIC)-1;
+                strcpy(new_key + kvsize, MAGIC);
+                new_key_size = kvsize + sizeof(MAGIC) - 1;
 
                 SHA1((void *)new_key, new_key_size, (unsigned char *)sha1_buf);
                 size_t base64_output_size = sizeof(base64_output);
-                ssize_t response_size = snprintf(out_buf, sizeof(out_buf),
+                ssize_t response_size = snprintf(
+                    out_buf, sizeof(out_buf),
                     "HTTP/1.1 101 Switching Protocols\r\n"
                     "Upgrade: websocket\r\n"
                     "Connection: Upgrade\r\n"
                     "Sec-WebSocket-Accept: %s\r\n"
                     "\r\n",
                     libcows_base64_encode(sha1_buf, sizeof(sha1_buf),
-                        base64_output, &base64_output_size)
-                );
+                                          base64_output, &base64_output_size));
                 assert(response_size < (ssize_t)sizeof(out_buf));
 
                 /* Write out WebSocket response */

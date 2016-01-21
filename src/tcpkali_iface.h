@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -38,10 +38,13 @@ struct addresses {
 };
 
 /* Note: sizeof(struct sockaddr_in6) > sizeof(struct sockaddr *)! */
-static inline socklen_t UNUSED sockaddr_len(struct sockaddr_storage *ss) {
+static inline socklen_t UNUSED
+sockaddr_len(struct sockaddr_storage *ss) {
     switch(ss->ss_family) {
-    case AF_INET: return sizeof(struct sockaddr_in);
-    case AF_INET6: return sizeof(struct sockaddr_in6);
+    case AF_INET:
+        return sizeof(struct sockaddr_in);
+    case AF_INET6:
+        return sizeof(struct sockaddr_in6);
     }
     assert(!"Not IPv4 and not IPv6");
     return 0;
@@ -50,7 +53,8 @@ static inline socklen_t UNUSED sockaddr_len(struct sockaddr_storage *ss) {
 /*
  * Print the IP addresses into the specified stdio channel.
  */
-void fprint_addresses(FILE *, char *prefix, char *separator, char *suffix, struct addresses);
+void fprint_addresses(FILE *, char *prefix, char *separator, char *suffix,
+                      struct addresses);
 
 void address_add(struct addresses *, struct sockaddr *sa);
 
@@ -76,4 +80,4 @@ int add_source_ip(struct addresses *addresses, const char *str);
  */
 int detect_source_ips(struct addresses *dsts, struct addresses *srcs);
 
-#endif  /* TCPKALI_IFACE_H */
+#endif /* TCPKALI_IFACE_H */

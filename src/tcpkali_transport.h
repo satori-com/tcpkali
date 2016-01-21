@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -38,20 +38,20 @@ struct transport_data_spec;
  */
 struct message_collection {
     struct message_collection_snippet {
-        char           *data;
-        size_t          size;
+        char *data;
+        size_t size;
         struct tk_expr *expr;
         enum mc_snippet_kind {
             /* Whether to add WebSocket framing, if needed */
-            MSK_PURPOSE_HTTP_HEADER     = 0x01, /* HTTP connection upgrade */
-            MSK_PURPOSE_FIRST_MSG       = 0x02, /* --first-message, *-file */
-            MSK_PURPOSE_MESSAGE         = 0x04, /* --message, *-file */
-            MSK_FRAMING_ALLOWED         = 0x10, /* msg=framing, hdr=!framing */
-            MSK_EXPRESSION_FOUND        = 0x20  /* Expression */
-#define MSK_PURPOSE(snippet)    ((snippet)->flags & 0x0f)
+            MSK_PURPOSE_HTTP_HEADER = 0x01, /* HTTP connection upgrade */
+            MSK_PURPOSE_FIRST_MSG = 0x02,   /* --first-message, *-file */
+            MSK_PURPOSE_MESSAGE = 0x04,     /* --message, *-file */
+            MSK_FRAMING_ALLOWED = 0x10,     /* msg=framing, hdr=!framing */
+            MSK_EXPRESSION_FOUND = 0x20     /* Expression */
+#define MSK_PURPOSE(snippet) ((snippet)->flags & 0x0f)
         } flags;
         int sort_index;
-    } *snippets;
+    } * snippets;
     /*
      * Number of --first-message, --message, etc
      * options reflected in snippets.
@@ -79,10 +79,8 @@ struct message_collection {
  * Add a new data snippet into the message collection.
  * The function copies data.
  */
-void message_collection_add(struct message_collection *mc,
-                            enum mc_snippet_kind,
-                            void *data, size_t size,
-                            int unescape);
+void message_collection_add(struct message_collection *mc, enum mc_snippet_kind,
+                            void *data, size_t size, int unescape);
 
 /*
  * Finalize the collection, preventing new data to be added,
@@ -108,13 +106,13 @@ size_t message_collection_estimate_size(struct message_collection *mc,
  * the headers and start of the payload.
  */
 struct transport_data_spec {
-    void  *ptr;
-    size_t ws_hdr_size;     /* HTTP header for WebSocket upgrade. */
-    size_t once_size;       /* Part of data to send just once. */
+    void *ptr;
+    size_t ws_hdr_size; /* HTTP header for WebSocket upgrade. */
+    size_t once_size;   /* Part of data to send just once. */
     size_t total_size;
     size_t single_message_size;
     enum transport_data_flags {
-        TDS_FLAG_NONE       = 0x00,
+        TDS_FLAG_NONE = 0x00,
         TDS_FLAG_PTR_SHARED = 0x01, /* Disallow freeing .ptr field */
         TDS_FLAG_REPLICATED = 0x02, /* total_size >= once_ + single_message_ */
     } flags;
@@ -128,13 +126,17 @@ enum transport_websocket_side {
     TWS_SIDE_CLIENT,
     TWS_SIDE_SERVER,
 };
-struct transport_data_spec *transport_spec_from_message_collection(struct transport_data_spec *out_spec, struct message_collection *, expr_callback_f optional_cb, void *expr_cb_key, enum transport_websocket_side);
+struct transport_data_spec *transport_spec_from_message_collection(
+    struct transport_data_spec *out_spec, struct message_collection *,
+    expr_callback_f optional_cb, void *expr_cb_key,
+    enum transport_websocket_side);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate
  * the payload data several times to send more data in a single call.
  * The function replaces the given (data) contents.
  */
-void replicate_payload(struct transport_data_spec *data, size_t target_payload_size);
+void replicate_payload(struct transport_data_spec *data,
+                       size_t target_payload_size);
 
-#endif  /* TCPKALI_TRANSPORT_H */
+#endif /* TCPKALI_TRANSPORT_H */

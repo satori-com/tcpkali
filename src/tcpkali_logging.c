@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2016  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -35,12 +35,11 @@
  * Print the given string while unconditionally prepending
  * a colorized "WARNING: " prefix.
  */
-void warning(const char *fmt, ...) {
+void
+warning(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "%sWARNING%s: ",
-        tk_attr(TKA_WARNING),
-        tk_attr(TKA_NORMAL));
+    fprintf(stderr, "%sWARNING%s: ", tk_attr(TKA_WARNING), tk_attr(TKA_NORMAL));
     fprintf(stderr, "%s", tcpkali_clear_eol());
     vfprintf(stderr, fmt, ap);
     va_end(ap);
@@ -48,14 +47,11 @@ void warning(const char *fmt, ...) {
 
 void
 debug_log(enum verbosity_level at_verbosity,
-          enum verbosity_level current_verbosity,
-          const char *fmt, ...) {
+          enum verbosity_level current_verbosity, const char *fmt, ...) {
     va_list ap;
-    if(at_verbosity > current_verbosity)
-        return;
+    if(at_verbosity > current_verbosity) return;
     va_start(ap, fmt);
     fprintf(stderr, "%s", tcpkali_clear_eol());
     vfprintf(stderr, fmt, ap);
     va_end(ap);
 }
-

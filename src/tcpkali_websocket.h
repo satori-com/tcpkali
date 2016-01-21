@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -30,7 +30,7 @@
 /*
  * Establish the maximum size of the WebSocket frame header.
  */
-#define  WEBSOCKET_MAX_FRAME_HDR_SIZE    (2+8+4)
+#define WEBSOCKET_MAX_FRAME_HDR_SIZE (2 + 8 + 4)
 
 /*
  * Write out a frame header to prefix a payload of given size.
@@ -41,8 +41,7 @@ enum websocket_side {
     WS_SIDE_CLIENT,
     WS_SIDE_SERVER,
 };
-size_t websocket_frame_header(size_t payload_size,
-                              uint8_t *buf, size_t size,
+size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size,
                               enum websocket_side);
 
 
@@ -57,4 +56,4 @@ typedef enum {
 } http_detect_websocket_rval;
 http_detect_websocket_rval http_detect_websocket(int fd, const char *, size_t);
 
-#endif  /* TCPKALI_WEBSOCKET_H */
+#endif /* TCPKALI_WEBSOCKET_H */

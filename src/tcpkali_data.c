@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -37,27 +37,40 @@
  * Format data by escaping special characters. The buffer size should be
  * preallocated to at least (4*data_size+3).
  */
-char *printable_data(char *buffer, size_t buf_size, const void *data, size_t data_size, int quote) {
+char *
+printable_data(char *buffer, size_t buf_size, const void *data,
+               size_t data_size, int quote) {
     const unsigned char *p = data;
     const unsigned char *pend = p + data_size;
 
-    if(buf_size < PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(data_size))
-        return NULL;
+    if(buf_size < PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(data_size)) return NULL;
 
     char *b = buffer;
     if(quote) *b++ = '"';
 
     for(; p < pend; p++) {
         switch(*p) {
-        case '\r': *b++ = '\\'; *b++ = 'r'; break;
-        case '\n': *b++ = '\\'; *b++ = 'n';
-            if(p+1 == pend) break;
-            *b++ = '\n'; *b++ = '\t'; break;
-        case 32 ... 33: *b++ = *p; break;
-        case 35 ... 126: *b++ = *p; break;
-        case 34:    /* '"' */
+        case '\r':
+            *b++ = '\\';
+            *b++ = 'r';
+            break;
+        case '\n':
+            *b++ = '\\';
+            *b++ = 'n';
+            if(p + 1 == pend) break;
+            *b++ = '\n';
+            *b++ = '\t';
+            break;
+        case 32 ... 33:
+            *b++ = *p;
+            break;
+        case 35 ... 126:
+            *b++ = *p;
+            break;
+        case 34: /* '"' */
             if(quote) *b++ = '\\';
-            *b++ = '"'; break;
+            *b++ = '"';
+            break;
         default:
             b += snprintf(b, buf_size - (b - buffer), "\\%03o", *p);
             break;
@@ -85,15 +98,23 @@ unescape_data(void *data, size_t *initial_data_size) {
         case '\\':
             r++;
             switch(*r) {
-            case 'n': *w = '\n'; break;
-            case 'r': *w = '\r'; break;
-            case 'f': *w = '\f'; break;
-            case 'b': *w = '\b'; break;
+            case 'n':
+                *w = '\n';
+                break;
+            case 'r':
+                *w = '\r';
+                break;
+            case 'f':
+                *w = '\f';
+                break;
+            case 'b':
+                *w = '\b';
+                break;
             case 'x': {
                 /* Do not parse more than 2 symbols (ff) */
                 char digits[3];
-                char *endptr = (r+3) < end ? (r+3) : end;
-                memcpy(digits, r+1, endptr-r-1);    /* Ignore leading 'x' */
+                char *endptr = (r + 3) < end ? (r + 3) : end;
+                memcpy(digits, r + 1, endptr - r - 1); /* Ignore leading 'x' */
                 digits[2] = '\0';
                 char *digits_end = digits;
                 unsigned long l = strtoul(digits, &digits_end, 16);
@@ -104,12 +125,11 @@ unescape_data(void *data, size_t *initial_data_size) {
                     r += (digits_end - digits);
                     *w = (l & 0xff);
                 }
-                }
-                break;
+            } break;
             case '0': {
                 char digits[5];
-                char *endptr = (r+4) < end ? (r+4) : end;
-                memcpy(digits, r, endptr-r);
+                char *endptr = (r + 4) < end ? (r + 4) : end;
+                memcpy(digits, r, endptr - r);
                 digits[4] = '\0';
                 char *digits_end = digits;
                 unsigned long l = strtoul(digits, &digits_end, 8);
@@ -119,8 +139,7 @@ unescape_data(void *data, size_t *initial_data_size) {
                     r += (digits_end - digits) - 1;
                     *w = (l & 0xff);
                 }
-                }
-                break;
+            } break;
             default:
                 *w++ = '\\';
                 *w = *r;
@@ -129,8 +148,7 @@ unescape_data(void *data, size_t *initial_data_size) {
     }
     *w = '\0';
 
-    if(initial_data_size)
-        *initial_data_size = (w - (char *)data);
+    if(initial_data_size) *initial_data_size = (w - (char *)data);
 }
 
 int
@@ -152,7 +170,7 @@ read_in_file(const char *filename, char **data, size_t *size) {
     *data = malloc(off + 1);
     size_t r = fread(*data, 1, off, fp);
     assert((long)r == off);
-    (*data)[off] = '\0';    /* Just in case. */
+    (*data)[off] = '\0'; /* Just in case. */
     *size = off;
 
     fclose(fp);

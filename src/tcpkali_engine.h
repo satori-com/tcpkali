@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -45,51 +45,51 @@ struct engine_params {
     struct addresses remote_addresses;
     struct addresses listen_addresses;
     struct addresses source_addresses;
-    size_t requested_workers;       /* Number of threads to start */
-    rate_spec_t channel_send_rate;  /* --channel-upstream */
-    rate_spec_t channel_recv_rate;  /* --channel-downstream */
+    size_t requested_workers;             /* Number of threads to start */
+    rate_spec_t channel_send_rate;        /* --channel-upstream */
+    rate_spec_t channel_recv_rate;        /* --channel-downstream */
     enum verbosity_level verbosity_level; /* Default verbosity level is 1 */
     enum {
         NSET_UNSET = -1,
-        NSET_NODELAY_OFF = 0,  /* Enable Nagle */
-        NSET_NODELAY_ON = 1,   /* Disable Nagle */
+        NSET_NODELAY_OFF = 0, /* Enable Nagle */
+        NSET_NODELAY_ON = 1,  /* Disable Nagle */
     } nagle_setting;
     enum {
-        WRCOMB_OFF  = 0,    /* Disable write coalescing */
-        WRCOMB_ON   = 1,    /* Enable write coalescing (default) */
+        WRCOMB_OFF = 0, /* Disable write coalescing */
+        WRCOMB_ON = 1,  /* Enable write coalescing (default) */
     } write_combine;
     enum {
-        LMODE_DEFAULT   = 0x00,   /* Do not send data, ignore received data */
-        LMODE_ACTIVE    = 0x01,   /* Actively send messages */
+        LMODE_DEFAULT = 0x00, /* Do not send data, ignore received data */
+        LMODE_ACTIVE = 0x01,  /* Actively send messages */
         _LMODE_RCV_MASK = 0xf0,
         _LMODE_SND_MASK = 0x0f,
     } listen_mode;
-    uint32_t sock_rcvbuf_size;        /* SO_RCVBUF setting */
-    uint32_t sock_sndbuf_size;        /* SO_SNDBUF setting */
+    uint32_t sock_rcvbuf_size; /* SO_RCVBUF setting */
+    uint32_t sock_sndbuf_size; /* SO_SNDBUF setting */
     double connect_timeout;
     double channel_lifetime;
     double epoch;
-    int    websocket_enable;        /* Enable Websocket responder on (-l) */
+    int websocket_enable; /* Enable Websocket responder on (-l) */
     /* Pre-computed message data template */
-    struct message_collection    message_collection; /* A descr. what to send */
-    struct transport_data_spec  *data_templates[2]; /* client, server tmpls */
+    struct message_collection message_collection;  /* A descr. what to send */
+    struct transport_data_spec *data_templates[2]; /* client, server tmpls */
     enum {
-        DS_DUMP_ONE_IN  = 1,
+        DS_DUMP_ONE_IN = 1,
         DS_DUMP_ONE_OUT = 2,
-        DS_DUMP_ONE     = 3,    /* 2|1 */
-        DS_DUMP_ALL_IN  = 4,
+        DS_DUMP_ONE = 3, /* 2|1 */
+        DS_DUMP_ALL_IN = 4,
         DS_DUMP_ALL_OUT = 8,
-        DS_DUMP_ALL     = 12    /* 8|4 */
+        DS_DUMP_ALL = 12 /* 8|4 */
     } dump_setting;
     enum {
-        LMEASURE_CONNECT    = (1<<0),
-        LMEASURE_FIRSTBYTE  = (1<<1),
-        LMEASURE_MARKER     = (1<<2)
+        LMEASURE_CONNECT = (1 << 0),
+        LMEASURE_FIRSTBYTE = (1 << 1),
+        LMEASURE_MARKER = (1 << 2)
     } latency_setting;
-    tk_expr_t *latency_marker;      /* --latency-marker */
-    int        latency_marker_skip;    /* --latency-marker-skip <N> */
+    tk_expr_t *latency_marker; /* --latency-marker */
+    int latency_marker_skip;   /* --latency-marker-skip <N> */
 
-    struct StreamBMH_Occ sbmh_shared_occ;  /* Streaming Boyer-Moore-Horspool */
+    struct StreamBMH_Occ sbmh_shared_occ; /* Streaming Boyer-Moore-Horspool */
 };
 
 struct array_of_doubles {
@@ -103,8 +103,9 @@ struct engine *engine_start(struct engine_params);
 /*
  * Report the number of opened connections by categories.
  */
-void engine_get_connection_stats(struct engine *,
-    size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter);
+void engine_get_connection_stats(struct engine *, size_t *connecting,
+                                 size_t *incoming, size_t *outgoing,
+                                 size_t *counter);
 
 /*
  * Snapshot of the current latency.
@@ -123,10 +124,9 @@ size_t engine_initiate_new_connections(struct engine *, size_t n);
 non_atomic_traffic_stats engine_traffic(struct engine *);
 
 void engine_terminate(struct engine *, double epoch_start,
-    /* Traffic observed during ramp-up phase */
-    non_atomic_traffic_stats initial_traffic,
-    /* Report latencies at specified %'iles */
-    struct array_of_doubles want_latency_percentiles
-    );
+                      /* Traffic observed during ramp-up phase */
+                      non_atomic_traffic_stats initial_traffic,
+                      /* Report latencies at specified %'iles */
+                      struct array_of_doubles want_latency_percentiles);
 
-#endif  /* TCPKALI_ENGINE_H */
+#endif /* TCPKALI_ENGINE_H */

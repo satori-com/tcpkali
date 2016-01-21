@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,7 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>    /* for TCP_NODELAY */
+#include <netinet/tcp.h> /* for TCP_NODELAY */
 #include <unistd.h>
 #include <stddef.h> /* offsetof(3) */
 #include <fcntl.h>
@@ -44,7 +44,7 @@
 
 #include <config.h>
 
-#ifdef  HAVE_SCHED_H
+#ifdef HAVE_SCHED_H
 #include <sched.h>
 #endif
 
@@ -64,10 +64,9 @@
 #include "tcpkali_traffic_stats.h"
 
 #ifndef TAILQ_FOREACH_SAFE
-#define TAILQ_FOREACH_SAFE(var, head, field, tvar)             \
-    for ((var) = TAILQ_FIRST((head));                          \
-            (var) && ((tvar) = TAILQ_NEXT((var), field), 1);   \
-            (var) = (tvar))
+#define TAILQ_FOREACH_SAFE(var, head, field, tvar) \
+    for((var) = TAILQ_FIRST((head));               \
+        (var) && ((tvar) = TAILQ_NEXT((var), field), 1); (var) = (tvar))
 #endif
 
 /*
@@ -80,48 +79,49 @@ struct connection {
     struct transport_data_spec data;
     non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
     non_atomic_traffic_stats traffic_reported; /* Reported to worker */
-    float channel_eol_point;    /* End of life time, since epoch */
-    struct pacefier   send_pace;
-    struct pacefier   recv_pace;
+    float channel_eol_point; /* End of life time, since epoch */
+    struct pacefier send_pace;
+    struct pacefier recv_pace;
     bandwidth_limit_t send_limit;
     bandwidth_limit_t recv_limit;
     enum {
-        CW_READ_INTEREST    = 0x01,
-        CW_READ_BLOCKED     = 0x10,
-        CW_WRITE_INTEREST   = 0x02,
-        CW_WRITE_BLOCKED    = 0x20,
-    } conn_wish:8;
+        CW_READ_INTEREST = 0x01,
+        CW_READ_BLOCKED = 0x10,
+        CW_WRITE_INTEREST = 0x02,
+        CW_WRITE_BLOCKED = 0x20,
+    } conn_wish : 8;
     enum conn_type {
         CONN_OUTGOING,
         CONN_INCOMING,
         CONN_ACCEPTOR,
-    } conn_type:2;
+    } conn_type : 2;
     enum conn_state {
         CSTATE_CONNECTED,
         CSTATE_CONNECTING,
-    } conn_state:1;
+    } conn_state : 1;
     enum {
         WSTATE_SENDING_HTTP_UPGRADE,
         WSTATE_WS_ESTABLISHED,
-    } ws_state:1;
-    int16_t remote_index;  /* \x -> loop_arguments.params.remote_addresses.addrs[x] */
+    } ws_state : 1;
+    int16_t remote_index;                     /* \x ->
+                                                 loop_arguments.params.remote_addresses.addrs[x] */
     non_atomic_narrow_t connection_unique_id; /* connection.uid */
     TAILQ_ENTRY(connection) hook;
-    struct sockaddr_storage peer_name;  /* For CONN_INCOMING */
+    struct sockaddr_storage peer_name; /* For CONN_INCOMING */
     /* Latency */
     struct {
         double connection_initiated;
         struct ring_buffer *sent_timestamps;
         struct hdr_histogram *marker_histogram;
-        unsigned message_bytes_credit;  /* See (EXPL:1) below. */
-        unsigned lm_occurrences_skip;   /* See --latency-marker-skip */
+        unsigned message_bytes_credit; /* See (EXPL:1) below. */
+        unsigned lm_occurrences_skip;  /* See --latency-marker-skip */
         /* Boyer-Moore-Horspool substring search algorithm data */
-        struct StreamBMH     *sbmh_ctx;
+        struct StreamBMH *sbmh_ctx;
         /* The following fields might be shared across connections. */
-        int                   sbmh_shared;
+        int sbmh_shared;
         struct StreamBMH_Occ *sbmh_occ;
-        const uint8_t        *sbmh_data;
-        size_t                sbmh_size;
+        const uint8_t *sbmh_data;
+        size_t sbmh_size;
     } latency;
 };
 
@@ -129,26 +129,30 @@ struct loop_arguments {
     /**************************
      * NON-SHARED WORKER DATA *
      **************************/
-    struct engine_params params;    /* A copy of engine parameters */
-    unsigned int address_offset;    /* An offset into the params.remote_addresses[] */
+    struct engine_params params; /* A copy of engine parameters */
+    unsigned int
+        address_offset; /* An offset into the params.remote_addresses[] */
 
     tk_timer stats_timer;
     tk_timer channel_lifetime_timer;
-    int global_control_pipe_rd_nbio;    /* Non-blocking pipe anyone could read from. */
-    int global_feedback_pipe_wr;    /* Blocking pipe for progress reporting. */
-    int private_control_pipe_rd;    /* Private blocking pipe for this worker (read side). */
-    int private_control_pipe_wr;    /* Private blocking pipe for this worker (write side). */
+    int global_control_pipe_rd_nbio; /* Non-blocking pipe anyone could read
+                                        from. */
+    int global_feedback_pipe_wr;     /* Blocking pipe for progress reporting. */
+    int private_control_pipe_rd; /* Private blocking pipe for this worker (read
+                                    side). */
+    int private_control_pipe_wr; /* Private blocking pipe for this worker (write
+                                    side). */
     int thread_no;
-    int dump_connect_fd;            /* Which connection to dump */
+    int dump_connect_fd; /* Which connection to dump */
 
-    TAILQ_HEAD( , connection) open_conns;  /* Thread-local connections */
+    TAILQ_HEAD(, connection) open_conns; /* Thread-local connections */
     unsigned long worker_connections_initiated;
     unsigned long worker_connections_accepted;
     unsigned long worker_connection_failures;
     unsigned long worker_connection_timeouts;
-    struct hdr_histogram *connect_histogram_local;  /* --latency-connect */
-    struct hdr_histogram *firstbyte_histogram_local;/* --latency-first-byte */
-    struct hdr_histogram *marker_histogram_local;   /* --latency-marker */
+    struct hdr_histogram *connect_histogram_local;   /* --latency-connect */
+    struct hdr_histogram *firstbyte_histogram_local; /* --latency-first-byte */
+    struct hdr_histogram *marker_histogram_local;    /* --latency-marker */
 
     /*******************************************
      * WORKER DATA SHARED WITH OTHER PROCESSES *
@@ -168,7 +172,7 @@ struct loop_arguments {
     struct hdr_histogram *connect_histogram_shared;
     struct hdr_histogram *firstbyte_histogram_shared;
     struct hdr_histogram *marker_histogram_shared;
-    pthread_mutex_t       shared_histograms_lock;
+    pthread_mutex_t shared_histograms_lock;
 
     /*
      * Per-remote server stats, pointing to a global table.
@@ -176,7 +180,7 @@ struct loop_arguments {
     struct remote_stats {
         atomic_narrow_t connection_attempts;
         atomic_narrow_t connection_failures;
-    } *remote_stats;
+    } * remote_stats;
 
     /* The following atomic members are accessed outside of worker thread */
     atomic_traffic_stats worker_traffic_stats;
@@ -194,14 +198,14 @@ struct loop_arguments {
  */
 enum control_message_type_e {
     CONTROL_MESSAGE_CONNECT,
-    _CONTROL_MESSAGES_MAXID     /* Do not use. */
+    _CONTROL_MESSAGES_MAXID /* Do not use. */
 };
 
 /*
  * Engine abstracts over workers.
  */
 struct engine {
-    struct engine_params params;    /* A copy of engine parameters */
+    struct engine_params params; /* A copy of engine parameters */
     struct loop_arguments *loops;
     pthread_t *threads;
     int global_control_pipe_wr;
@@ -217,15 +221,16 @@ struct engine {
  * Helper functions defined at the end of the file.
  */
 enum connection_close_reason {
-    CCR_CLEAN,  /* No failure */
+    CCR_CLEAN,    /* No failure */
     CCR_LIFETIME, /* Channel lifetime limit (no failure) */
-    CCR_TIMEOUT, /* Connection timeout */
-    CCR_REMOTE, /* Remote side closed connection */
-    CCR_DATA,   /* Data framing error */
+    CCR_TIMEOUT,  /* Connection timeout */
+    CCR_REMOTE,   /* Remote side closed connection */
+    CCR_DATA,     /* Data framing error */
 };
 static void *single_engine_loop_thread(void *argp);
 static void start_new_connection(TK_P);
-static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason);
+static void close_connection(TK_P_ struct connection *conn,
+                             enum connection_close_reason reason);
 static void connections_flush_stats(TK_P);
 static void connection_flush_stats(TK_P_ struct connection *conn);
 static void close_all_connections(TK_P_ enum connection_close_reason reason);
@@ -238,46 +243,62 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int revents); /* Timeout timer */
 static void expire_channel_lives(TK_P_ tk_timer *w, int revents);
 static void setup_channel_lifetime_timer(TK_P_ double first_timeout);
 static void update_io_interest(TK_P_ struct connection *conn);
-static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs, size_t *remote_index);
+static struct sockaddr_storage *pick_remote_address(
+    struct loop_arguments *largs, size_t *remote_index);
 static char *express_bytes(size_t bytes, char *buf, size_t size);
 static int limit_channel_lifetime(struct loop_arguments *largs);
 static void set_nbio(int fd, int onoff);
 static void set_socket_options(int fd, struct loop_arguments *largs);
-static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd);
-static void largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn, const void **position, size_t *available_header, size_t *available_body);
+static void common_connection_init(TK_P_ struct connection *conn,
+                                   enum conn_type conn_type,
+                                   enum conn_state conn_state, int sockfd);
+static void largest_contiguous_chunk(struct loop_arguments *largs,
+                                     struct connection *conn,
+                                     const void **position,
+                                     size_t *available_header,
+                                     size_t *available_body);
 
-#ifdef  USE_LIBUV
-static void expire_channel_lives_uv(tk_timer *w) {
+#ifdef USE_LIBUV
+static void
+expire_channel_lives_uv(tk_timer *w) {
     expire_channel_lives(w->loop, w, 0);
 }
-static void stats_timer_cb_uv(tk_timer *w) {
+static void
+stats_timer_cb_uv(tk_timer *w) {
     stats_timer_cb(w->loop, w, 0);
 }
-static void conn_timer_cb_uv(tk_timer *w) {
+static void
+conn_timer_cb_uv(tk_timer *w) {
     conn_timer_cb(w->loop, w, 0);
 }
-static void passive_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
+static void
+passive_websocket_cb_uv(tk_io *w, int UNUSED status, int revents) {
     passive_websocket_cb(w->loop, w, revents);
 }
-static void connection_cb_uv(tk_io *w, int UNUSED status, int revents) {
+static void
+connection_cb_uv(tk_io *w, int UNUSED status, int revents) {
     connection_cb(w->loop, w, revents);
 }
-static void accept_cb_uv(tk_io *w, int UNUSED status, int revents) {
+static void
+accept_cb_uv(tk_io *w, int UNUSED status, int revents) {
     accept_cb(w->loop, w, revents);
 }
-static void control_cb_uv(tk_io *w, int UNUSED status, int revents) {
+static void
+control_cb_uv(tk_io *w, int UNUSED status, int revents) {
     control_cb(w->loop, w, revents);
 }
 #endif
 
-#define DEBUG(level, fmt, args...) do {         \
-        if((int)largs->params.verbosity_level >= level)  \
+#define DEBUG(level, fmt, args...)                                        \
+    do {                                                                  \
+        if((int)largs->params.verbosity_level >= level)                   \
             debug_log(level, largs->params.verbosity_level, fmt, ##args); \
     } while(0)
 
-#define REPLICATE_MAX_SIZE  (64*1024)       /* Proven to be a sweet spot */
+#define REPLICATE_MAX_SIZE (64 * 1024) /* Proven to be a sweet spot */
 
-struct engine *engine_start(struct engine_params params) {
+struct engine *
+engine_start(struct engine_params params) {
     int fildes[2];
 
     /* Global control pipe. Engine -> workers. */
@@ -311,10 +332,10 @@ struct engine *engine_start(struct engine_params params) {
     for(tws_side = TWS_SIDE_CLIENT; tws_side <= TWS_SIDE_SERVER; tws_side++) {
         assert(params.data_templates[tws_side] == NULL);
         params.data_templates[tws_side] =
-                transport_spec_from_message_collection(0,
-                    &params.message_collection, 0, 0, tws_side);
+            transport_spec_from_message_collection(
+                0, &params.message_collection, 0, 0, tws_side);
         assert(params.data_templates[tws_side]
-                || params.message_collection.expressions_found);
+               || params.message_collection.expressions_found);
     }
 
     if(params.data_templates[0])
@@ -338,17 +359,18 @@ struct engine *engine_start(struct engine_params params) {
      */
     if(params.latency_marker && EXPR_IS_TRIVIAL(params.latency_marker)) {
         sbmh_init(NULL, &params.sbmh_shared_occ,
-            (void *)params.latency_marker->u.data.data,
-                    params.latency_marker->u.data.size);
+                  (void *)params.latency_marker->u.data.data,
+                  params.latency_marker->u.data.size);
     }
 
-    params.epoch = tk_now(TK_DEFAULT);  /* Single epoch for all threads */
+    params.epoch = tk_now(TK_DEFAULT); /* Single epoch for all threads */
     for(int n = 0; n < eng->n_workers; n++) {
         struct loop_arguments *largs = &eng->loops[n];
         TAILQ_INIT(&largs->open_conns);
         largs->connection_unique_id_atomic = &eng->connection_unique_id_global;
         largs->params = params;
-        largs->remote_stats = calloc(params.remote_addresses.n_addrs, sizeof(largs->remote_stats[0]));
+        largs->remote_stats = calloc(params.remote_addresses.n_addrs,
+                                     sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
         largs->thread_no = n;
         largs->serialize_output_lock = &eng->serialize_output_lock;
@@ -356,26 +378,25 @@ struct engine *engine_start(struct engine_params params) {
         if(params.latency_setting & LMEASURE_CONNECT) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
-                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                100 * decims_in_1s, /* 100 seconds is a max storable value */
                 3, &largs->connect_histogram_local);
             assert(ret == 0);
         }
         if(params.latency_setting & LMEASURE_FIRSTBYTE) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
-                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                100 * decims_in_1s, /* 100 seconds is a max storable value */
                 3, &largs->firstbyte_histogram_local);
             assert(ret == 0);
         }
         if(params.latency_setting & LMEASURE_MARKER) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
-                100 * decims_in_1s,  /* 100 seconds is a max storable value */
+                100 * decims_in_1s, /* 100 seconds is a max storable value */
                 3, &largs->marker_histogram_local);
             assert(ret == 0);
-            DEBUG(DBG_DETAIL,
-                "Initialized HdrHistogram with size %ld\n",
-                    (long)hdr_get_memory_size(largs->marker_histogram_local));
+            DEBUG(DBG_DETAIL, "Initialized HdrHistogram with size %ld\n",
+                  (long)hdr_get_memory_size(largs->marker_histogram_local));
         }
         pthread_mutex_init(&largs->shared_histograms_lock, 0);
 
@@ -387,8 +408,8 @@ struct engine *engine_start(struct engine_params params) {
         largs->global_control_pipe_rd_nbio = gctl_pipe_rd;
         largs->global_feedback_pipe_wr = gfbk_pipe_wr;
 
-        rc = pthread_create(&eng->threads[n], 0,
-                            single_engine_loop_thread, largs);
+        rc = pthread_create(&eng->threads[n], 0, single_engine_loop_thread,
+                            largs);
         assert(rc == 0);
     }
 
@@ -398,13 +419,16 @@ struct engine *engine_start(struct engine_params params) {
 /*
  * Format and print latency snapshot.
  */
-static void print_latency_hdr_histrogram_percentiles(char *title, struct array_of_doubles want_percentiles, struct hdr_histogram *histogram) {
+static void
+print_latency_hdr_histrogram_percentiles(
+    char *title, struct array_of_doubles want_percentiles,
+    struct hdr_histogram *histogram) {
     assert(histogram);
 
     double *percentiles = want_percentiles.doubles;
     size_t size = want_percentiles.size;
 
-    double default_percentiles[] = { 95.0, 99.0, 99.5 };
+    double default_percentiles[] = {95.0, 99.0, 99.5};
     size_t default_size = sizeof(default_percentiles) / sizeof(double);
 
     if(size == 0) {
@@ -415,9 +439,8 @@ static void print_latency_hdr_histrogram_percentiles(char *title, struct array_o
     printf("%s latency at percentiles: ", title);
     for(size_t i = 0; i < size; i++) {
         double perc = percentiles[i];
-        printf("%.1f%s",
-                hdr_value_at_percentile(histogram, perc) / 10.0,
-                i == size - 1 ? "" : "/");
+        printf("%.1f%s", hdr_value_at_percentile(histogram, perc) / 10.0,
+               i == size - 1 ? "" : "/");
     }
     printf(" (");
     for(size_t i = 0; i < size; i++) {
@@ -427,18 +450,20 @@ static void print_latency_hdr_histrogram_percentiles(char *title, struct array_o
     printf("%%)\n");
 }
 
-static void latency_snapshot_print(struct array_of_doubles want_percentiles, struct latency_snapshot *latency) {
+static void
+latency_snapshot_print(struct array_of_doubles want_percentiles,
+                       struct latency_snapshot *latency) {
     if(latency->connect_histogram) {
-        print_latency_hdr_histrogram_percentiles("TCP connect",
-            want_percentiles, latency->connect_histogram);
+        print_latency_hdr_histrogram_percentiles(
+            "TCP connect", want_percentiles, latency->connect_histogram);
     }
     if(latency->firstbyte_histogram) {
-        print_latency_hdr_histrogram_percentiles("First byte",
-            want_percentiles, latency->firstbyte_histogram);
+        print_latency_hdr_histrogram_percentiles("First byte", want_percentiles,
+                                                 latency->firstbyte_histogram);
     }
     if(latency->marker_histogram) {
-        print_latency_hdr_histrogram_percentiles("Message",
-            want_percentiles, latency->marker_histogram);
+        print_latency_hdr_histrogram_percentiles("Message", want_percentiles,
+                                                 latency->marker_histogram);
     }
 }
 
@@ -447,8 +472,8 @@ static void latency_snapshot_print(struct array_of_doubles want_percentiles, str
  */
 static unsigned int
 estimate_segments_per_op(non_atomic_wide_t ops, non_atomic_wide_t bytes) {
-    const int tcp_mss = 1460;   /* TCP Maximum Segment Size, estimate! */
-    return ops ? ((bytes/ops) + (tcp_mss-1)) / tcp_mss : 0;
+    const int tcp_mss = 1460; /* TCP Maximum Segment Size, estimate! */
+    return ops ? ((bytes / ops) + (tcp_mss - 1)) / tcp_mss : 0;
 }
 static double
 estimate_pps(double duration, non_atomic_wide_t ops, non_atomic_wide_t bytes) {
@@ -459,10 +484,14 @@ estimate_pps(double duration, non_atomic_wide_t ops, non_atomic_wide_t bytes) {
 /*
  * Send a signal to finish work and wait for all workers to terminate.
  */
-void engine_terminate(struct engine *eng, double epoch, non_atomic_traffic_stats initial_traffic_stats, struct array_of_doubles want_latency_percentiles) {
+void
+engine_terminate(struct engine *eng, double epoch,
+                 non_atomic_traffic_stats initial_traffic_stats,
+                 struct array_of_doubles want_latency_percentiles) {
     size_t connecting, conn_in, conn_out, conn_counter;
 
-    engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out, &conn_counter);
+    engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out,
+                                &conn_counter);
 
     /*
      * Terminate all workers.
@@ -492,51 +521,49 @@ void engine_terminate(struct engine *eng, double epoch, non_atomic_traffic_stats
     double now = tk_now(TK_DEFAULT);
     double test_duration = now - epoch;
     non_atomic_traffic_stats epoch_traffic =
-            subtract_traffic_stats(eng->total_traffic_stats,
-                                   initial_traffic_stats);
-    non_atomic_wide_t epoch_data_transmitted = epoch_traffic.bytes_sent
-                                             + epoch_traffic.bytes_rcvd;
+        subtract_traffic_stats(eng->total_traffic_stats, initial_traffic_stats);
+    non_atomic_wide_t epoch_data_transmitted =
+        epoch_traffic.bytes_sent + epoch_traffic.bytes_rcvd;
 
     char buf[64];
 
     printf("Total data sent:     %s (%" PRIu64 " bytes)\n",
-        express_bytes(epoch_traffic.bytes_sent, buf, sizeof(buf)),
-        (uint64_t)epoch_traffic.bytes_sent);
+           express_bytes(epoch_traffic.bytes_sent, buf, sizeof(buf)),
+           (uint64_t)epoch_traffic.bytes_sent);
     printf("Total data received: %s (%" PRIu64 " bytes)\n",
-        express_bytes(epoch_traffic.bytes_rcvd, buf, sizeof(buf)),
-        (uint64_t)epoch_traffic.bytes_rcvd);
+           express_bytes(epoch_traffic.bytes_rcvd, buf, sizeof(buf)),
+           (uint64_t)epoch_traffic.bytes_rcvd);
     long conns = (0 * connecting) + conn_in + conn_out;
     if(!conns) conns = 1; /* Assume a single channel. */
     printf("Bandwidth per channel: %.3f⇅ Mbps (%.1f kBps)\n",
-        8 * ((epoch_data_transmitted / test_duration) / conns) / 1000000.0,
-        (epoch_data_transmitted / test_duration) / conns / 1000.0
-    );
+           8 * ((epoch_data_transmitted / test_duration) / conns) / 1000000.0,
+           (epoch_data_transmitted / test_duration) / conns / 1000.0);
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
-        8 * (epoch_traffic.bytes_rcvd / test_duration) / 1000000.0,
-        8 * (epoch_traffic.bytes_sent / test_duration) / 1000000.0);
+           8 * (epoch_traffic.bytes_rcvd / test_duration) / 1000000.0,
+           8 * (epoch_traffic.bytes_sent / test_duration) / 1000000.0);
     printf("Packet rate estimate: %.1f↓, %.1f↑ (%u↓, %u↑ TCP MSS/op)\n",
-        estimate_pps(test_duration,
-                epoch_traffic.num_reads, epoch_traffic.bytes_rcvd),
-        estimate_pps(test_duration,
-                epoch_traffic.num_writes, epoch_traffic.bytes_sent),
-        estimate_segments_per_op(epoch_traffic.num_reads,
-                                 epoch_traffic.bytes_rcvd),
-        estimate_segments_per_op(epoch_traffic.num_writes,
-                                 epoch_traffic.bytes_sent)
-    );
+           estimate_pps(test_duration, epoch_traffic.num_reads,
+                        epoch_traffic.bytes_rcvd),
+           estimate_pps(test_duration, epoch_traffic.num_writes,
+                        epoch_traffic.bytes_sent),
+           estimate_segments_per_op(epoch_traffic.num_reads,
+                                    epoch_traffic.bytes_rcvd),
+           estimate_segments_per_op(epoch_traffic.num_writes,
+                                    epoch_traffic.bytes_sent));
     latency_snapshot_print(want_latency_percentiles, latency);
 
     engine_free_latency_snapshot(latency);
     printf("Test duration: %g s.\n", test_duration);
 }
 
-static char *express_bytes(size_t bytes, char *buf, size_t size) {
+static char *
+express_bytes(size_t bytes, char *buf, size_t size) {
     if(bytes < 2048) {
         snprintf(buf, size, "%ld bytes", (long)bytes);
     } else if(bytes < 512 * 1024) {
-        snprintf(buf, size, "%.1f KiB", (bytes/1024.0));
+        snprintf(buf, size, "%.1f KiB", (bytes / 1024.0));
     } else {
-        snprintf(buf, size, "%.1f MiB", (bytes/(1024*1024.0)));
+        snprintf(buf, size, "%.1f MiB", (bytes / (1024 * 1024.0)));
     }
     return buf;
 }
@@ -544,16 +571,19 @@ static char *express_bytes(size_t bytes, char *buf, size_t size) {
 /*
  * Get number of connections opened by all of the workers.
  */
-void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t *incoming, size_t *outgoing, size_t *counter) {
+void
+engine_get_connection_stats(struct engine *eng, size_t *connecting,
+                            size_t *incoming, size_t *outgoing,
+                            size_t *counter) {
     size_t c_conn = 0;
     size_t c_in = 0;
     size_t c_out = 0;
     size_t c_count = 0;
 
     for(int n = 0; n < eng->n_workers; n++) {
-        c_conn  += atomic_get(&eng->loops[n].outgoing_connecting);
-        c_out   += atomic_get(&eng->loops[n].outgoing_established);
-        c_in    += atomic_get(&eng->loops[n].incoming_established);
+        c_conn += atomic_get(&eng->loops[n].outgoing_connecting);
+        c_out += atomic_get(&eng->loops[n].outgoing_established);
+        c_in += atomic_get(&eng->loops[n].incoming_established);
         c_count += atomic_get(&eng->loops[n].connections_counter);
     }
     *connecting = c_conn;
@@ -562,7 +592,8 @@ void engine_get_connection_stats(struct engine *eng, size_t *connecting, size_t 
     *counter = c_count;
 }
 
-void engine_free_latency_snapshot(struct latency_snapshot *latency) {
+void
+engine_free_latency_snapshot(struct latency_snapshot *latency) {
     if(latency) {
         free(latency->connect_histogram);
         free(latency->firstbyte_histogram);
@@ -574,7 +605,8 @@ void engine_free_latency_snapshot(struct latency_snapshot *latency) {
 /*
  * Prepare latency snapshot data.
  */
-void engine_prepare_latency_snapshot(struct engine *eng) {
+void
+engine_prepare_latency_snapshot(struct engine *eng) {
     if(eng->params.latency_setting != 0) {
         /*
          * If histogram is requested, we first need to ask each worker to
@@ -598,17 +630,17 @@ void engine_prepare_latency_snapshot(struct engine *eng) {
 /*
  * Grab the prepared latency snapshot data.
  */
-struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
+struct latency_snapshot *
+engine_collect_latency_snapshot(struct engine *eng) {
     struct latency_snapshot *latency = calloc(1, sizeof(*latency));
 
-    if(eng->params.latency_setting == 0)
-        return latency;
+    if(eng->params.latency_setting == 0) return latency;
 
     struct hdr_init_values {
         int64_t lowest_trackable_value;
         int64_t highest_trackable_value;
         int64_t significant_figures;
-    } conn_init = {0,0,0}, fb_init = {0,0,0}, mark_init = {0,0,0};
+    } conn_init = {0, 0, 0}, fb_init = {0, 0, 0}, mark_init = {0, 0, 0};
 
     /* There's going to be no wait or contention here due
      * to the pipe-driven command-response logic. However,
@@ -622,7 +654,7 @@ struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
             eng->loops[0].connect_histogram_shared->lowest_trackable_value;
         conn_init.highest_trackable_value =
             eng->loops[0].connect_histogram_shared->highest_trackable_value;
-        conn_init.significant_figures=
+        conn_init.significant_figures =
             eng->loops[0].connect_histogram_shared->significant_figures;
     }
     if(eng->loops[0].firstbyte_histogram_shared) {
@@ -630,7 +662,7 @@ struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
             eng->loops[0].firstbyte_histogram_shared->lowest_trackable_value;
         fb_init.highest_trackable_value =
             eng->loops[0].firstbyte_histogram_shared->highest_trackable_value;
-        fb_init.significant_figures=
+        fb_init.significant_figures =
             eng->loops[0].firstbyte_histogram_shared->significant_figures;
     }
     if(eng->loops[0].marker_histogram_shared) {
@@ -638,33 +670,27 @@ struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
             eng->loops[0].marker_histogram_shared->lowest_trackable_value;
         mark_init.highest_trackable_value =
             eng->loops[0].marker_histogram_shared->highest_trackable_value;
-        mark_init.significant_figures=
+        mark_init.significant_figures =
             eng->loops[0].marker_histogram_shared->significant_figures;
     }
     pthread_mutex_unlock(&eng->loops[0].shared_histograms_lock);
 
     if(conn_init.significant_figures) {
         int ret = hdr_init(
-            conn_init.lowest_trackable_value,
-            conn_init.highest_trackable_value,
-            conn_init.significant_figures,
-            &latency->connect_histogram);
+            conn_init.lowest_trackable_value, conn_init.highest_trackable_value,
+            conn_init.significant_figures, &latency->connect_histogram);
         assert(ret == 0);
     }
     if(fb_init.significant_figures) {
         int ret = hdr_init(
-            fb_init.lowest_trackable_value,
-            fb_init.highest_trackable_value,
-            fb_init.significant_figures,
-            &latency->firstbyte_histogram);
+            fb_init.lowest_trackable_value, fb_init.highest_trackable_value,
+            fb_init.significant_figures, &latency->firstbyte_histogram);
         assert(ret == 0);
     }
     if(mark_init.significant_figures) {
         int ret = hdr_init(
-            mark_init.lowest_trackable_value,
-            mark_init.highest_trackable_value,
-            mark_init.significant_figures,
-            &latency->marker_histogram);
+            mark_init.lowest_trackable_value, mark_init.highest_trackable_value,
+            mark_init.significant_figures, &latency->marker_histogram);
         assert(ret == 0);
     }
 
@@ -685,8 +711,9 @@ struct latency_snapshot *engine_collect_latency_snapshot(struct engine *eng) {
     return latency;
 }
 
-non_atomic_traffic_stats engine_traffic(struct engine *eng) {
-    non_atomic_traffic_stats traffic = { 0, 0, 0, 0 };
+non_atomic_traffic_stats
+engine_traffic(struct engine *eng) {
+    non_atomic_traffic_stats traffic = {0, 0, 0, 0};
     for(int n = 0; n < eng->n_workers; n++) {
         add_traffic_numbers_AtoN(&eng->loops[n].worker_traffic_stats, &traffic);
     }
@@ -696,7 +723,8 @@ non_atomic_traffic_stats engine_traffic(struct engine *eng) {
 /*
  * Enable (1) and disable (0) the non-blocking mode on a file descriptor.
  */
-static void set_nbio(int fd, int onoff) {
+static void
+set_nbio(int fd, int onoff) {
     int rc;
     if(onoff) {
         /* Enable non-blocking mode. */
@@ -708,25 +736,28 @@ static void set_nbio(int fd, int onoff) {
     assert(rc != -1);
 }
 
-#define SET_XXXBUF(fd, opt, value)  do {                    \
-    if((value))                                             \
-        set_socket_xxxbuf(fd, opt, #opt, value, largs);     \
+#define SET_XXXBUF(fd, opt, value)                                  \
+    do {                                                            \
+        if((value)) set_socket_xxxbuf(fd, opt, #opt, value, largs); \
     } while(0)
-static void set_socket_xxxbuf(int fd, int opt, const char *opt_name, size_t value, struct loop_arguments *largs) {
+static void
+set_socket_xxxbuf(int fd, int opt, const char *opt_name, size_t value,
+                  struct loop_arguments *largs) {
     int rc = setsockopt(fd, SOL_SOCKET, opt, &value, sizeof(value));
     assert(rc != -1);
     if(largs->params.verbosity_level >= DBG_DETAIL) {
         size_t end_value = value;
         socklen_t end_value_size = sizeof(end_value);
-        int rc = getsockopt(fd, SOL_SOCKET, SO_SNDBUF,
-                            &end_value, &end_value_size);
+        int rc =
+            getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &end_value, &end_value_size);
         assert(rc != -1);
-        DEBUG(DBG_DETAIL, "setsockopt(%d, %s, %ld) -> %ld\n",
-              fd, opt_name, (long)value, (long)end_value);
+        DEBUG(DBG_DETAIL, "setsockopt(%d, %s, %ld) -> %ld\n", fd, opt_name,
+              (long)value, (long)end_value);
     }
 }
 
-static void set_socket_options(int fd, struct loop_arguments *largs) {
+static void
+set_socket_options(int fd, struct loop_arguments *largs) {
     int on = ~0;
     int rc = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
     assert(rc != -1);
@@ -741,17 +772,22 @@ static void set_socket_options(int fd, struct loop_arguments *largs) {
     SET_XXXBUF(fd, SO_SNDBUF, largs->params.sock_sndbuf_size);
 }
 
-size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
-    static char buf[1024];  /* This is thread-safe! */
+size_t
+engine_initiate_new_connections(struct engine *eng, size_t n_req) {
+    static char buf[1024]; /* This is thread-safe! */
     if(!buf[0]) {
         memset(buf, 'c', sizeof(buf));
     }
     size_t n = 0;
 
-    enum { ATTEMPT_FAIR_BALANCE, FIRST_READER_WINS } balance = ATTEMPT_FAIR_BALANCE;
+    enum {
+        ATTEMPT_FAIR_BALANCE,
+        FIRST_READER_WINS
+    } balance = ATTEMPT_FAIR_BALANCE;
     if(balance == ATTEMPT_FAIR_BALANCE) {
         while(n < n_req) {
-            int worker = eng->next_worker_order[CONTROL_MESSAGE_CONNECT]++ % eng->n_workers;
+            int worker = eng->next_worker_order[CONTROL_MESSAGE_CONNECT]++
+                         % eng->n_workers;
             int fd = eng->loops[worker].private_control_pipe_wr;
             int wrote = write(fd, buf, 1);
             assert(wrote == 1);
@@ -761,11 +797,11 @@ size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
         int fd = eng->global_control_pipe_wr;
         set_nbio(fd, 1);
         while(n < n_req) {
-            int current_batch = (n_req-n) < sizeof(buf) ? (n_req-n) : sizeof(buf);
+            int current_batch =
+                (n_req - n) < sizeof(buf) ? (n_req - n) : sizeof(buf);
             int wrote = write(fd, buf, current_batch);
             if(wrote == -1) {
-                if(errno == EAGAIN)
-                    break;
+                if(errno == EAGAIN) break;
                 assert(wrote != -1);
             }
             if(wrote > 0) n += wrote;
@@ -775,7 +811,8 @@ size_t engine_initiate_new_connections(struct engine *eng, size_t n_req) {
     return n;
 }
 
-static void expire_channel_lives(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
+static void
+expire_channel_lives(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn;
     struct connection *tmpconn;
@@ -797,14 +834,15 @@ static void expire_channel_lives(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
             break;
         }
     }
-
 }
 
-static void stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
+static void
+stats_timer_cb(TK_P_ tk_timer UNUSED *w, int UNUSED revents) {
     connections_flush_stats(TK_A);
 }
 
-static void *single_engine_loop_thread(void *argp) {
+static void *
+single_engine_loop_thread(void *argp) {
     struct loop_arguments *largs = (struct loop_arguments *)argp;
     tk_loop *loop = tk_loop_new();
     tk_set_userdata(loop, largs);
@@ -813,7 +851,7 @@ static void *single_engine_loop_thread(void *argp) {
     tk_io private_control_watcher;
     const int on_main_thread = (largs->thread_no == 0);
 
-#ifdef  SO_REUSEPORT
+#ifdef SO_REUSEPORT
     const int have_reuseport = 1;
 #else
     const int have_reuseport = 0;
@@ -824,8 +862,9 @@ static void *single_engine_loop_thread(void *argp) {
      * tell the user upfront.
      */
     if(!have_reuseport && on_main_thread
-        && largs->params.listen_addresses.n_addrs) {
-            warning("A system without SO_REUSEPORT detected."
+       && largs->params.listen_addresses.n_addrs) {
+        warning(
+            "A system without SO_REUSEPORT detected."
             " Using only one core for serving connections.\n");
     }
 
@@ -835,11 +874,12 @@ static void *single_engine_loop_thread(void *argp) {
      * Open all listening sockets, if they are specified.
      */
     if(largs->params.listen_addresses.n_addrs
-        /* Only listen on stuff on other cores when SO_REUSEPORT is available */
-        && (have_reuseport || on_main_thread)) {
+       /* Only listen on stuff on other cores when SO_REUSEPORT is available */
+       && (have_reuseport || on_main_thread)) {
         int opened_listening_sockets = 0;
         for(size_t n = 0; n < largs->params.listen_addresses.n_addrs; n++) {
-            struct sockaddr_storage *ss = &largs->params.listen_addresses.addrs[n];
+            struct sockaddr_storage *ss =
+                &largs->params.listen_addresses.addrs[n];
             int rc;
             int lsock = socket(ss->ss_family, SOCK_STREAM, IPPROTO_TCP);
             assert(lsock != -1);
@@ -849,20 +889,19 @@ static void *single_engine_loop_thread(void *argp) {
             rc = setsockopt(lsock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
             assert(rc != -1);
 #else
-            /*
-             * SO_REUSEPORT cannot be used, which means that only a single
-             * thread could create their own separate listening socket on
-             * a specified address/port. This is bad, but changing.
-             * See http://permalink.gmane.org/gmane.linux.network/158320
-             */
-#endif  /* SO_REUSEPORT */
+/*
+ * SO_REUSEPORT cannot be used, which means that only a single
+ * thread could create their own separate listening socket on
+ * a specified address/port. This is bad, but changing.
+ * See http://permalink.gmane.org/gmane.linux.network/158320
+ */
+#endif /* SO_REUSEPORT */
             rc = bind(lsock, (struct sockaddr *)ss, sockaddr_len(ss));
             if(rc == -1) {
                 char buf[256];
                 DEBUG(DBG_ALWAYS, "Bind %s is not done on thread %d: %s\n",
-                        format_sockaddr(ss, buf, sizeof(buf)),
-                        largs->thread_no,
-                        strerror(errno));
+                      format_sockaddr(ss, buf, sizeof(buf)), largs->thread_no,
+                      strerror(errno));
                 exit(EX_UNAVAILABLE);
             }
             assert(rc == 0);
@@ -875,12 +914,12 @@ static void *single_engine_loop_thread(void *argp) {
             /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
             pacefier_init(&conn->send_pace, tk_now(TK_A));
             pacefier_init(&conn->recv_pace, tk_now(TK_A));
-#ifdef   USE_LIBUV
-            uv_poll_init(TK_A_ &conn->watcher, lsock);
+#ifdef USE_LIBUV
+            uv_poll_init(TK_A_ & conn->watcher, lsock);
             uv_poll_start(&conn->watcher, TK_READ | TK_WRITE, accept_cb_uv);
 #else
             ev_io_init(&conn->watcher, accept_cb, lsock, TK_READ | TK_WRITE);
-            ev_io_start(TK_A_ &conn->watcher);
+            ev_io_start(TK_A_ & conn->watcher);
 #endif
         }
         if(!opened_listening_sockets) {
@@ -889,16 +928,18 @@ static void *single_engine_loop_thread(void *argp) {
         }
     }
 
-#ifdef  USE_LIBUV
+#ifdef USE_LIBUV
     if(limit_channel_lifetime(largs)) {
-        uv_timer_init(TK_A_ &largs->channel_lifetime_timer);
-        uv_timer_start(&largs->channel_lifetime_timer,
-            expire_channel_lives_uv, 0, 0);
+        uv_timer_init(TK_A_ & largs->channel_lifetime_timer);
+        uv_timer_start(&largs->channel_lifetime_timer, expire_channel_lives_uv,
+                       0, 0);
     }
-    uv_timer_init(TK_A_ &largs->stats_timer);
+    uv_timer_init(TK_A_ & largs->stats_timer);
     uv_timer_start(&largs->stats_timer, stats_timer_cb_uv, 250, 250);
-    uv_poll_init(TK_A_ &global_control_watcher, largs->global_control_pipe_rd_nbio);
-    uv_poll_init(TK_A_ &private_control_watcher, largs->private_control_pipe_rd);
+    uv_poll_init(TK_A_ & global_control_watcher,
+                 largs->global_control_pipe_rd_nbio);
+    uv_poll_init(TK_A_ & private_control_watcher,
+                 largs->private_control_pipe_rd);
     uv_poll_start(&global_control_watcher, TK_READ, control_cb_uv);
     uv_poll_start(&private_control_watcher, TK_READ, control_cb_uv);
     uv_run(TK_A_ UV_RUN_DEFAULT);
@@ -907,19 +948,21 @@ static void *single_engine_loop_thread(void *argp) {
     uv_poll_stop(&private_control_watcher);
 #else
     if(limit_channel_lifetime(largs)) {
-        ev_timer_init(&largs->channel_lifetime_timer,
-            expire_channel_lives, 0, 0);
+        ev_timer_init(&largs->channel_lifetime_timer, expire_channel_lives, 0,
+                      0);
     }
     ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
-    ev_timer_start(TK_A_ &largs->stats_timer);
-    ev_io_init(&global_control_watcher, control_cb, largs->global_control_pipe_rd_nbio, TK_READ);
-    ev_io_init(&private_control_watcher, control_cb, largs->private_control_pipe_rd, TK_READ);
+    ev_timer_start(TK_A_ & largs->stats_timer);
+    ev_io_init(&global_control_watcher, control_cb,
+               largs->global_control_pipe_rd_nbio, TK_READ);
+    ev_io_init(&private_control_watcher, control_cb,
+               largs->private_control_pipe_rd, TK_READ);
     ev_io_start(loop, &global_control_watcher);
     ev_io_start(loop, &private_control_watcher);
     ev_run(loop, 0);
-    ev_timer_stop(TK_A_ &largs->stats_timer);
-    ev_io_stop(TK_A_ &global_control_watcher);
-    ev_io_stop(TK_A_ &private_control_watcher);
+    ev_timer_stop(TK_A_ & largs->stats_timer);
+    ev_io_stop(TK_A_ & global_control_watcher);
+    ev_io_stop(TK_A_ & private_control_watcher);
 #endif
 
     connections_flush_stats(TK_A);
@@ -929,62 +972,64 @@ static void *single_engine_loop_thread(void *argp) {
     /* Avoid mixing debug output from several threads. */
     pthread_mutex_lock(largs->serialize_output_lock);
 
-    DEBUG(DBG_DETAIL, "Exiting worker %d\n"
-            "  %"PRIan"↓, %"PRIan"↑ open connections (%"PRIan" connecting)\n"
-            "  %"PRIan" connections_counter \n"
-            "  ↳ %lu connections_initiated\n"
-            "  ↳ %lu connections_accepted\n"
-            "  %lu connection_failures\n"
-            "  ↳ %lu connection_timeouts\n"
-            "  %"PRIaw" worker_data_sent\n"
-            "  %"PRIaw" worker_data_rcvd\n"
-            "  %"PRIaw" worker_num_writes\n"
-            "  %"PRIaw" worker_num_reads\n",
-        largs->thread_no,
-        atomic_get(&largs->incoming_established),
-        atomic_get(&largs->outgoing_established),
-        atomic_get(&largs->outgoing_connecting),
-        atomic_get(&largs->connections_counter),
-        largs->worker_connections_initiated,
-        largs->worker_connections_accepted,
-        largs->worker_connection_failures,
-        largs->worker_connection_timeouts,
-        atomic_wide_get(&largs->worker_traffic_stats.bytes_sent),
-        atomic_wide_get(&largs->worker_traffic_stats.bytes_rcvd),
-        atomic_wide_get(&largs->worker_traffic_stats.num_writes),
-        atomic_wide_get(&largs->worker_traffic_stats.num_reads));
+    DEBUG(DBG_DETAIL,
+          "Exiting worker %d\n"
+          "  %" PRIan "↓, %" PRIan "↑ open connections (%" PRIan
+          " connecting)\n"
+          "  %" PRIan
+          " connections_counter \n"
+          "  ↳ %lu connections_initiated\n"
+          "  ↳ %lu connections_accepted\n"
+          "  %lu connection_failures\n"
+          "  ↳ %lu connection_timeouts\n"
+          "  %" PRIaw
+          " worker_data_sent\n"
+          "  %" PRIaw
+          " worker_data_rcvd\n"
+          "  %" PRIaw
+          " worker_num_writes\n"
+          "  %" PRIaw " worker_num_reads\n",
+          largs->thread_no, atomic_get(&largs->incoming_established),
+          atomic_get(&largs->outgoing_established),
+          atomic_get(&largs->outgoing_connecting),
+          atomic_get(&largs->connections_counter),
+          largs->worker_connections_initiated,
+          largs->worker_connections_accepted, largs->worker_connection_failures,
+          largs->worker_connection_timeouts,
+          atomic_wide_get(&largs->worker_traffic_stats.bytes_sent),
+          atomic_wide_get(&largs->worker_traffic_stats.bytes_rcvd),
+          atomic_wide_get(&largs->worker_traffic_stats.num_writes),
+          atomic_wide_get(&largs->worker_traffic_stats.num_reads));
 
     if(largs->connect_histogram_local) {
         struct hdr_histogram *hist = largs->connect_histogram_local;
         DEBUG(DBG_DETAIL,
-            "  Connect latency:\n"
-            "    %.1f latency_95_ms\n"
-            "    %.1f latency_99_ms\n"
-            "    %.1f latency_99_5_ms\n"
-            "    %.1f latency_mean_ms\n"
-            "    %.1f latency_max_ms\n",
-            hdr_value_at_percentile(hist, 95.0) / 10.0,
-            hdr_value_at_percentile(hist, 99.0) / 10.0,
-            hdr_value_at_percentile(hist, 99.5) / 10.0,
-            hdr_mean(hist) / 10.0,
-            hdr_max(hist) / 10.0);
+              "  Connect latency:\n"
+              "    %.1f latency_95_ms\n"
+              "    %.1f latency_99_ms\n"
+              "    %.1f latency_99_5_ms\n"
+              "    %.1f latency_mean_ms\n"
+              "    %.1f latency_max_ms\n",
+              hdr_value_at_percentile(hist, 95.0) / 10.0,
+              hdr_value_at_percentile(hist, 99.0) / 10.0,
+              hdr_value_at_percentile(hist, 99.5) / 10.0, hdr_mean(hist) / 10.0,
+              hdr_max(hist) / 10.0);
         if(largs->params.verbosity_level >= DBG_DATA)
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
     if(largs->marker_histogram_local) {
         struct hdr_histogram *hist = largs->marker_histogram_local;
         DEBUG(DBG_DETAIL,
-            "  Marker latency:\n"
-            "    %.1f latency_95_ms\n"
-            "    %.1f latency_99_ms\n"
-            "    %.1f latency_99_5_ms\n"
-            "    %.1f latency_mean_ms\n"
-            "    %.1f latency_max_ms\n",
-            hdr_value_at_percentile(hist, 95.0) / 10.0,
-            hdr_value_at_percentile(hist, 99.0) / 10.0,
-            hdr_value_at_percentile(hist, 99.5) / 10.0,
-            hdr_mean(hist) / 10.0,
-            hdr_max(hist) / 10.0);
+              "  Marker latency:\n"
+              "    %.1f latency_95_ms\n"
+              "    %.1f latency_99_ms\n"
+              "    %.1f latency_99_5_ms\n"
+              "    %.1f latency_mean_ms\n"
+              "    %.1f latency_max_ms\n",
+              hdr_value_at_percentile(hist, 95.0) / 10.0,
+              hdr_value_at_percentile(hist, 99.0) / 10.0,
+              hdr_value_at_percentile(hist, 99.5) / 10.0, hdr_mean(hist) / 10.0,
+              hdr_max(hist) / 10.0);
         if(largs->params.verbosity_level >= DBG_DATA)
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
@@ -1001,11 +1046,10 @@ static struct hdr_histogram *
 hdr_init_similar(struct hdr_histogram *htemplate) {
     if(htemplate) {
         struct hdr_histogram *dst = 0;
-        if(hdr_init(
-            htemplate->lowest_trackable_value,
-            htemplate->highest_trackable_value,
-            htemplate->significant_figures,
-            &dst) == 0) {
+        if(hdr_init(htemplate->lowest_trackable_value,
+                    htemplate->highest_trackable_value,
+                    htemplate->significant_figures, &dst)
+           == 0) {
             return dst;
         } else {
             assert(!"Can't create copy of histogram");
@@ -1018,8 +1062,9 @@ hdr_init_similar(struct hdr_histogram *htemplate) {
  * Copy a histogram by erasing the destination histogram first and adding
  * the source histogram into it.
  */
-static void histogram_data_copy_to_shared(struct hdr_histogram *src,
-                                     struct hdr_histogram **dst) {
+static void
+histogram_data_copy_to_shared(struct hdr_histogram *src,
+                              struct hdr_histogram **dst) {
     if(src) {
         if(*dst) {
             hdr_reset(*dst);
@@ -1039,24 +1084,23 @@ static void histogram_data_copy_to_shared(struct hdr_histogram *src,
  *     are only updated from time to time.
  *     The shared ones are used for reporting to external observers.
  */
-static void worker_update_shared_histograms(struct loop_arguments *largs) {
-
-    if(largs->params.latency_setting == 0)
-        return;
+static void
+worker_update_shared_histograms(struct loop_arguments *largs) {
+    if(largs->params.latency_setting == 0) return;
 
     pthread_mutex_lock(&largs->shared_histograms_lock);
 
     /* --latency-connect */
     histogram_data_copy_to_shared(largs->connect_histogram_local,
-                                 &largs->connect_histogram_shared);
+                                  &largs->connect_histogram_shared);
 
     /* --latency-firstbyte */
     histogram_data_copy_to_shared(largs->firstbyte_histogram_local,
-                                 &largs->firstbyte_histogram_shared);
+                                  &largs->firstbyte_histogram_shared);
 
     /* --latency-marker */
     histogram_data_copy_to_shared(largs->marker_histogram_local,
-                                 &largs->marker_histogram_shared);
+                                  &largs->marker_histogram_shared);
 
     if(largs->marker_histogram_local) {
         /*
@@ -1084,15 +1128,17 @@ static void worker_update_shared_histograms(struct loop_arguments *largs) {
 /*
  * Receive a control event from the pipe.
  */
-static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
+static void
+control_cb(TK_P_ tk_io *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     char c;
     int ret = read(tk_fd(w), &c, 1);
     if(ret != 1) {
         if(errno != EAGAIN)
-            DEBUG(DBG_ALWAYS, "%d Reading from control channel %d returned: %s\n",
-                largs->thread_no, tk_fd(w), strerror(errno));
+            DEBUG(DBG_ALWAYS,
+                  "%d Reading from control channel %d returned: %s\n",
+                  largs->thread_no, tk_fd(w), strerror(errno));
         return;
     }
     switch(c) {
@@ -1109,9 +1155,8 @@ static void control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         assert(wrote == 1);
         break;
     default:
-        DEBUG(DBG_ALWAYS,
-            "Unknown operation '%c' from a control channel %d\n",
-            c, tk_fd(w));
+        DEBUG(DBG_ALWAYS, "Unknown operation '%c' from a control channel %d\n",
+              c, tk_fd(w));
     }
 }
 
@@ -1135,14 +1180,17 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
         break;
     }
 
-    if(s < 0 || s > (ssize_t)size)
-        return -1;
+    if(s < 0 || s > (ssize_t)size) return -1;
     return s;
 }
 
 static void
-explode_data_template(struct message_collection *mc, struct transport_data_spec * const data_templates[2], enum transport_websocket_side tws_side, struct transport_data_spec *out_data, struct loop_arguments *largs UNUSED, struct connection *conn) {
-
+explode_data_template(struct message_collection *mc,
+                      struct transport_data_spec *const data_templates[2],
+                      enum transport_websocket_side tws_side,
+                      struct transport_data_spec *out_data,
+                      struct loop_arguments *largs UNUSED,
+                      struct connection *conn) {
     if(data_templates[tws_side]) {
         /*
          * Return the already once prepared data.
@@ -1154,28 +1202,29 @@ explode_data_template(struct message_collection *mc, struct transport_data_spec 
          * We might need a unique ID for a connection, and it is a bit expensive
          * to obtain it. We set it here once during connection establishment.
          */
-        conn->connection_unique_id = atomic_inc_and_get(
-                                        largs->connection_unique_id_atomic);
+        conn->connection_unique_id =
+            atomic_inc_and_get(largs->connection_unique_id_atomic);
 
         struct transport_data_spec *new_data_ptr;
-        new_data_ptr = transport_spec_from_message_collection(out_data,
-                            mc, expr_callback, conn, tws_side);
+        new_data_ptr = transport_spec_from_message_collection(
+            out_data, mc, expr_callback, conn, tws_side);
         assert(new_data_ptr == out_data);
 
         char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(out_data->total_size)];
 
         DEBUG(DBG_DATA, "Connection data: %s\n",
-                printable_data(tmpbuf, sizeof(tmpbuf),
-                               out_data->ptr, out_data->total_size, 1));
+              printable_data(tmpbuf, sizeof(tmpbuf), out_data->ptr,
+                             out_data->total_size, 1));
 
         replicate_payload(out_data, REPLICATE_MAX_SIZE);
         assert(out_data->ptr);
     }
-
 }
 
 static void
-explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr, struct loop_arguments *largs UNUSED, struct connection *conn) {
+explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr,
+                          struct loop_arguments *largs UNUSED,
+                          struct connection *conn) {
     *buf_p = 0;
     ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0);
     assert(s >= 0);
@@ -1183,7 +1232,7 @@ explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr, struct lo
 }
 
 static void start_new_connection(TK_P) {
-    char tmpbuf[INET6_ADDRSTRLEN+64];
+    char tmpbuf[INET6_ADDRSTRLEN + 64];
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct remote_stats *remote_stats;
     size_t remote_index;
@@ -1201,7 +1250,7 @@ static void start_new_connection(TK_P) {
         case EMFILE:
             DEBUG(DBG_ERROR, "Cannot create socket: %s\n", strerror(errno));
             DEBUG(DBG_ALWAYS,
-                "Increase `ulimit -n` to twice exceed the --connections.\n");
+                  "Increase `ulimit -n` to twice exceed the --connections.\n");
             exit(1);
         case ENFILE:
             DEBUG(DBG_ERROR, "Cannot create socket: %s\n", strerror(errno));
@@ -1217,15 +1266,18 @@ static void start_new_connection(TK_P) {
 
     /* If --source-ip is specified, bind to the next one. */
     if(largs->params.source_addresses.n_addrs) {
-        struct sockaddr_storage *bind_ss = &largs->params.source_addresses.addrs[largs->worker_connections_initiated%largs->params.source_addresses.n_addrs];
-        int rc = bind(sockfd, (struct sockaddr *)bind_ss, sockaddr_len(bind_ss));
+        struct sockaddr_storage *bind_ss =
+            &largs->params.source_addresses
+                 .addrs[largs->worker_connections_initiated
+                        % largs->params.source_addresses.n_addrs];
+        int rc =
+            bind(sockfd, (struct sockaddr *)bind_ss, sockaddr_len(bind_ss));
         if(rc == -1) {
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
             close(sockfd);
             DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
-                    format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
-                    strerror(errno));
+                  format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)), strerror(errno));
             return;
         }
     }
@@ -1241,17 +1293,17 @@ static void start_new_connection(TK_P) {
                 /* This is local problem, not remote address problem. */
                 largs->worker_connection_failures++;
                 DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
-                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
-                        strerror(errno));
+                      format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                      strerror(errno));
             }
-            /* FALL THROUGH */
+        /* FALL THROUGH */
         default:
             atomic_increment(&remote_stats->connection_failures);
             largs->worker_connection_failures++;
             if(atomic_get(&remote_stats->connection_failures) == 1) {
                 DEBUG(DBG_WARNING, "Connection to %s is not done: %s\n",
-                        format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
-                        strerror(errno));
+                      format_sockaddr(ss, tmpbuf, sizeof(tmpbuf)),
+                      strerror(errno));
             }
             close(sockfd);
             return;
@@ -1274,19 +1326,18 @@ static void start_new_connection(TK_P) {
      * Print the src/dst for a connection if verbosity level is high enough.
      */
     if(largs->params.verbosity_level >= DBG_DETAIL) {
-        char srcaddr_buf[INET6_ADDRSTRLEN+64];
-        char dstaddr_buf[INET6_ADDRSTRLEN+64];
+        char srcaddr_buf[INET6_ADDRSTRLEN + 64];
+        char dstaddr_buf[INET6_ADDRSTRLEN + 64];
         struct sockaddr_storage srcaddr;
         socklen_t addrlen = sizeof(srcaddr);
         if(getsockname(sockfd, (struct sockaddr *)&srcaddr, &addrlen) == 0) {
             DEBUG(DBG_DETAIL, "Connection %s -> %s opened as %d\n",
-                      format_sockaddr(&srcaddr,
-                            srcaddr_buf, sizeof(srcaddr_buf)),
-                      format_sockaddr(ss, dstaddr_buf, sizeof(dstaddr_buf)),
-                      sockfd);
+                  format_sockaddr(&srcaddr, srcaddr_buf, sizeof(srcaddr_buf)),
+                  format_sockaddr(ss, dstaddr_buf, sizeof(dstaddr_buf)),
+                  sockfd);
         } else {
-            DEBUG(DBG_WARNING, "Can't getsockname(%d): %s",
-                               sockfd, strerror(errno));
+            DEBUG(DBG_WARNING, "Can't getsockname(%d): %s", sockfd,
+                  strerror(errno));
         }
     }
 
@@ -1298,19 +1349,20 @@ static void start_new_connection(TK_P) {
 /*
  * Pick an address in a round-robin fashion, skipping certainly broken ones.
  */
-static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs, size_t *remote_index) {
-
+static struct sockaddr_storage *
+pick_remote_address(struct loop_arguments *largs, size_t *remote_index) {
     /*
      * If it is known that a particular destination is broken, choose
      * the working one right away.
      */
     size_t off = 0;
-    for(size_t attempts = 0; attempts < largs->params.remote_addresses.n_addrs; attempts++) {
+    for(size_t attempts = 0; attempts < largs->params.remote_addresses.n_addrs;
+        attempts++) {
         off = largs->address_offset++ % largs->params.remote_addresses.n_addrs;
         struct remote_stats *rs = &largs->remote_stats[off];
         if(atomic_get(&rs->connection_attempts) > 10
-            && atomic_get(&rs->connection_failures)
-                == atomic_get(&rs->connection_attempts)) {
+           && atomic_get(&rs->connection_failures)
+                  == atomic_get(&rs->connection_attempts)) {
             continue;
         } else {
             break;
@@ -1321,9 +1373,11 @@ static struct sockaddr_storage *pick_remote_address(struct loop_arguments *largs
     return &largs->params.remote_addresses.addrs[off];
 }
 
-static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
+static void
+conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, timer));
+    struct connection *conn =
+        (struct connection *)((char *)w - offsetof(struct connection, timer));
 
     switch(conn->conn_state) {
     case CSTATE_CONNECTED:
@@ -1334,7 +1388,7 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
                 update_io_interest(TK_A_ conn);
                 break;
             }
-            /* Fall through */
+        /* Fall through */
         case CONN_OUTGOING:
             conn->conn_wish &= ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED);
             update_io_interest(TK_A_ conn);
@@ -1356,22 +1410,24 @@ static void conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
  * finite channel lifetime. Zero channel lifetime is managed differently:
  * the channel closes right after we figure out that the connection took place.
  */
-static int limit_channel_lifetime(struct loop_arguments *largs) {
+static int
+limit_channel_lifetime(struct loop_arguments *largs) {
     return (largs->params.channel_lifetime != INFINITY
-                && largs->params.channel_lifetime > 0.0);
+            && largs->params.channel_lifetime > 0.0);
 }
 
-static void setup_channel_lifetime_timer(TK_P_ double first_timeout) {
+static void
+setup_channel_lifetime_timer(TK_P_ double first_timeout) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-#ifdef  USE_LIBUV
+#ifdef USE_LIBUV
     uint64_t delay = 1000 * first_timeout;
     if(delay == 0) delay = 1;
-    uv_timer_start(&largs->channel_lifetime_timer,
-        expire_channel_lives_uv, delay, 0);
+    uv_timer_start(&largs->channel_lifetime_timer, expire_channel_lives_uv,
+                   delay, 0);
 #else
-    ev_timer_stop(TK_A_ &largs->channel_lifetime_timer);
+    ev_timer_stop(TK_A_ & largs->channel_lifetime_timer);
     ev_timer_set(&largs->channel_lifetime_timer, first_timeout, 0);
-    ev_timer_start(TK_A_ &largs->channel_lifetime_timer);
+    ev_timer_start(TK_A_ & largs->channel_lifetime_timer);
 #endif
 }
 
@@ -1389,15 +1445,15 @@ maybe_enable_dump(struct loop_arguments *largs, enum conn_type ctype, int fd) {
     const int main_thread = (largs->thread_no == 0);
 
     if(main_thread
-        /* DS_DUMP_ALL is handled differently */
-        && (largs->params.dump_setting & DS_DUMP_ONE)
-        && largs->dump_connect_fd == 0
-        /*
-         * In case tcpkali acts as both client and listener (-l), we only dump
-         * client-side connections.
-         */
-        && (ctype == CONN_OUTGOING
-            || largs->params.remote_addresses.n_addrs == 0)) {
+       /* DS_DUMP_ALL is handled differently */
+       && (largs->params.dump_setting & DS_DUMP_ONE)
+       && largs->dump_connect_fd == 0
+       /*
+        * In case tcpkali acts as both client and listener (-l), we only dump
+        * client-side connections.
+        */
+       && (ctype == CONN_OUTGOING
+           || largs->params.remote_addresses.n_addrs == 0)) {
         /*
          * Enable dumping on a chosen file descriptor.
          */
@@ -1408,7 +1464,9 @@ maybe_enable_dump(struct loop_arguments *largs, enum conn_type ctype, int fd) {
 /*
  * Initialize common connection parameters.
  */
-static void common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type, enum conn_state conn_state, int sockfd) {
+static void
+common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
+                       enum conn_state conn_state, int sockfd) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     conn->conn_type = conn_type;
@@ -1443,25 +1501,26 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
      */
 
     int active_socket = conn_type == CONN_OUTGOING
-                    || (largs->params.listen_mode & _LMODE_SND_MASK);
+                        || (largs->params.listen_mode & _LMODE_SND_MASK);
     if(active_socket) {
         pacefier_init(&conn->send_pace, now);
 
         enum transport_websocket_side tws_side =
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
         explode_data_template(&largs->params.message_collection,
-            largs->params.data_templates, tws_side, &conn->data, largs, conn);
+                              largs->params.data_templates, tws_side,
+                              &conn->data, largs, conn);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
-                               largs->params.channel_send_rate,
-                               conn->data.single_message_size);
+            largs->params.channel_send_rate, conn->data.single_message_size);
         if(largs->params.latency_marker && conn->data.single_message_size) {
-            conn->latency.message_bytes_credit  /* See (EXPL:1) below. */
+            conn->latency.message_bytes_credit /* See (EXPL:1) below. */
                 = conn->data.single_message_size - 1;
             /*
              * Figure out how many latency markers to skip
              * before starting to measure latency with them.
              */
-            conn->latency.lm_occurrences_skip = largs->params.latency_marker_skip;
+            conn->latency.lm_occurrences_skip =
+                largs->params.latency_marker_skip;
 
             /*
              * Initialize the Boyer-Moore-Horspool context for substring search.
@@ -1470,32 +1529,34 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
             if(EXPR_IS_TRIVIAL(largs->params.latency_marker)) {
                 /* Shared search table and expression */
                 conn->latency.sbmh_shared = 1;
-                conn->latency.sbmh_occ  = &largs->params.sbmh_shared_occ;
-                conn->latency.sbmh_data = (uint8_t *)largs->params.latency_marker->u.data.data;
-                conn->latency.sbmh_size = largs->params.latency_marker->u.data.size;
+                conn->latency.sbmh_occ = &largs->params.sbmh_shared_occ;
+                conn->latency.sbmh_data =
+                    (uint8_t *)largs->params.latency_marker->u.data.data;
+                conn->latency.sbmh_size =
+                    largs->params.latency_marker->u.data.size;
             } else {
                 /* Individual search table. */
                 conn->latency.sbmh_shared = 0;
-                conn->latency.sbmh_occ = malloc(sizeof(*conn->latency.sbmh_occ));
+                conn->latency.sbmh_occ =
+                    malloc(sizeof(*conn->latency.sbmh_occ));
                 assert(conn->latency.sbmh_occ);
                 init_occ = conn->latency.sbmh_occ;
-                explode_string_expression((char **)&conn->latency.sbmh_data,
-                                          &conn->latency.sbmh_size,
-                                          largs->params.latency_marker,
-                                          largs, conn);
+                explode_string_expression(
+                    (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
+                    largs->params.latency_marker, largs, conn);
             }
             conn->latency.sbmh_ctx = malloc(SBMH_SIZE(conn->latency.sbmh_size));
             assert(conn->latency.sbmh_ctx);
-            sbmh_init(conn->latency.sbmh_ctx, init_occ,
-                      conn->latency.sbmh_data, conn->latency.sbmh_size);
+            sbmh_init(conn->latency.sbmh_ctx, init_occ, conn->latency.sbmh_data,
+                      conn->latency.sbmh_size);
 
             /*
              * Initialize the latency histogram by copying out the template
              * parameter from the loop arguments.
              */
             conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-            conn->latency.marker_histogram = hdr_init_similar(
-                                                largs->marker_histogram_local);
+            conn->latency.marker_histogram =
+                hdr_init_similar(largs->marker_histogram_local);
         }
     }
 
@@ -1503,66 +1564,70 @@ static void common_connection_init(TK_P_ struct connection *conn, enum conn_type
      * Catch connection timeout.
      */
     int want_catch_connect = (conn_state == CSTATE_CONNECTING
-                        && largs->params.connect_timeout > 0.0);
+                              && largs->params.connect_timeout > 0.0);
     if(want_catch_connect) {
         assert(conn_type == CONN_OUTGOING);
-#ifdef  USE_LIBUV
-        uv_timer_init(TK_A_ &conn->timer);
+#ifdef USE_LIBUV
+        uv_timer_init(TK_A_ & conn->timer);
         uint64_t delay = 1000 * largs->params.connect_timeout;
         if(delay == 0) delay = 1;
         uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
 #else
         ev_timer_init(&conn->timer, conn_timer_cb,
                       largs->params.connect_timeout, 0.0);
-        ev_timer_start(TK_A_ &conn->timer);
+        ev_timer_start(TK_A_ & conn->timer);
 #endif
     }
 
-    conn->conn_wish = CW_READ_INTEREST
-                    | ((conn->data.total_size || want_catch_connect)
-                    ? CW_WRITE_INTEREST : 0);
+    conn->conn_wish =
+        CW_READ_INTEREST
+        | ((conn->data.total_size || want_catch_connect) ? CW_WRITE_INTEREST
+                                                         : 0);
 
     if(largs->params.websocket_enable) {
         if(conn_type == CONN_OUTGOING) {
             int want_events = TK_READ | TK_WRITE;
-#ifdef  USE_LIBUV
-            uv_poll_init(TK_A_ &conn->watcher, sockfd);
+#ifdef USE_LIBUV
+            uv_poll_init(TK_A_ & conn->watcher, sockfd);
             uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
 #else
             ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
-            ev_io_start(TK_A_ &conn->watcher);
+            ev_io_start(TK_A_ & conn->watcher);
 #endif
         } else {
-#ifdef  USE_LIBUV
-            uv_poll_init(TK_A_ &conn->watcher, sockfd);
+#ifdef USE_LIBUV
+            uv_poll_init(TK_A_ & conn->watcher, sockfd);
             uv_poll_start(&conn->watcher, TK_READ, passive_websocket_cb_uv);
 #else
             ev_io_init(&conn->watcher, passive_websocket_cb, sockfd, TK_READ);
-            ev_io_start(TK_A_ &conn->watcher);
+            ev_io_start(TK_A_ & conn->watcher);
 #endif
         }
         return;
-    } else {    /* Plain socket */
+    } else { /* Plain socket */
         int want_write = (conn->data.total_size || want_catch_connect);
         int want_events = TK_READ | (want_write ? TK_WRITE : 0);
-#ifdef  USE_LIBUV
-        uv_poll_init(TK_A_ &conn->watcher, sockfd);
+#ifdef USE_LIBUV
+        uv_poll_init(TK_A_ & conn->watcher, sockfd);
         uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
 #else
         ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
-        ev_io_start(TK_A_ &conn->watcher);
+        ev_io_start(TK_A_ & conn->watcher);
 #endif
     }
 }
 
-static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
+static void
+accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     int sockfd = accept(tk_fd(w), 0, 0);
     if(sockfd == -1) {
         switch(errno) {
-        case EINTR: break;
-        case EAGAIN: break;
+        case EINTR:
+            break;
+        case EAGAIN:
+            break;
         case EMFILE:
         case ENFILE:
             if(largs->params.remote_addresses.n_addrs == 0) {
@@ -1574,23 +1639,24 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
                  * even if verbosity is low.
                  */
                 atomic_increment(&largs->connections_counter);
-                DEBUG(DBG_DETAIL,
-                    "Cannot accept a new connection: %s\n", strerror(errno));
+                DEBUG(DBG_DETAIL, "Cannot accept a new connection: %s\n",
+                      strerror(errno));
                 break;
             }
-            DEBUG(DBG_ERROR,
-                "Cannot accept a new connection: %s\n", strerror(errno));
-            if(errno == EMFILE) {           /* Per-process limit */
+            DEBUG(DBG_ERROR, "Cannot accept a new connection: %s\n",
+                  strerror(errno));
+            if(errno == EMFILE) { /* Per-process limit */
                 DEBUG(DBG_ALWAYS,
-                  "Increase `ulimit -n` to twice exceed the --connections.\n");
-            } else if(errno == ENFILE) {    /* System limit */
+                      "Increase `ulimit -n` to twice exceed the "
+                      "--connections.\n");
+            } else if(errno == ENFILE) { /* System limit */
                 DEBUG(DBG_ALWAYS,
-                  "Increase kern.maxfiles/fs.file-max sysctls\n");
+                      "Increase kern.maxfiles/fs.file-max sysctls\n");
             }
             exit(1);
         default:
             DEBUG(DBG_DETAIL, "Cannot accept a new connection: %s\n",
-                strerror(errno));
+                  strerror(errno));
         }
         return;
     }
@@ -1609,8 +1675,9 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
     struct connection *conn = calloc(1, sizeof(*conn));
     socklen_t addrlen = sizeof(conn->peer_name);
     if(getpeername(sockfd, (struct sockaddr *)&conn->peer_name, &addrlen)
-            != 0) {
-        DEBUG(DBG_WARNING, "Can't getpeername(%d): %s", sockfd, strerror(errno));
+       != 0) {
+        DEBUG(DBG_WARNING, "Can't getpeername(%d): %s", sockfd,
+              strerror(errno));
         free(conn);
         close(sockfd);
         return;
@@ -1623,28 +1690,27 @@ static void accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  * Debug data by dumping it in a format escaping all the special
  * characters.
  */
-static void debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
+static void
+debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
     char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
-    fprintf(stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n",
-            tcpkali_clear_eol(), prefix, fd, (long)size,
+    fprintf(stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n", tcpkali_clear_eol(),
+            prefix, fd, (long)size,
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL),
             printable_data(buffer, sizeof(buffer), data, size, 0),
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
-            tk_attr(TKA_NORMAL)
-    );
+            tk_attr(TKA_NORMAL));
 }
 
 static enum lb_return_value {
-    LB_UNLIMITED,   /* Not limiting bandwidth, proceed. */
-    LB_PROCEED,     /* Use pacefier_moved() afterwards. */
-    LB_LOCKSTEP,    /* Proceed but pause right after. */
-    LB_GO_SLEEP,    /* Not allowed to move data.        */
+    LB_UNLIMITED, /* Not limiting bandwidth, proceed. */
+    LB_PROCEED,   /* Use pacefier_moved() afterwards. */
+    LB_LOCKSTEP,  /* Proceed but pause right after. */
+    LB_GO_SLEEP,  /* Not allowed to move data.        */
 } limit_channel_bandwidth(TK_P_ struct connection *conn,
-                          size_t *suggested_move_size,
-                          int event) {
+                          size_t *suggested_move_size, int event) {
     struct pacefier *pace = NULL;
-    bandwidth_limit_t limit = { 0, 0 };
+    bandwidth_limit_t limit = {0, 0};
     enum lb_return_value rvalue = LB_UNLIMITED;
 
     if(event & TK_WRITE) {
@@ -1659,7 +1725,7 @@ static enum lb_return_value {
 
     double bw = limit.bytes_per_second;
     if(bw < 0.0) {
-        return LB_UNLIMITED;    /* Limit not set, don't limit. */
+        return LB_UNLIMITED; /* Limit not set, don't limit. */
     }
 
     size_t smallest_block_to_move = limit.minimal_move_size;
@@ -1694,14 +1760,14 @@ static enum lb_return_value {
             if(allowed_to_move < smallest_block_to_move) {
                 /*   allowed     smallest|suggested
                    |------^-----------^-------^-------> */
-                delay = (double)(smallest_block_to_move-allowed_to_move)/bw;
+                delay = (double)(smallest_block_to_move - allowed_to_move) / bw;
                 *suggested_move_size = 0;
                 rvalue = LB_GO_SLEEP;
             } else {
                 /*   smallest  allowed  suggested
                    |------^--------^-------^-------> */
                 size_t excess = (allowed_to_move % smallest_block_to_move);
-                delay = (double)(smallest_block_to_move - excess)/bw;
+                delay = (double)(smallest_block_to_move - excess) / bw;
                 *suggested_move_size = allowed_to_move - excess;
                 rvalue = LB_LOCKSTEP;
             }
@@ -1710,12 +1776,12 @@ static enum lb_return_value {
         if(delay < 0.001) delay = 0.001;
 
         tk_timer_stop(TK_A, &conn->timer);
-#ifdef  USE_LIBUV
-        uv_timer_init(TK_A_ &conn->timer);
+#ifdef USE_LIBUV
+        uv_timer_init(TK_A_ & conn->timer);
         uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
 #else
         ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
-        ev_timer_start(TK_A_ &conn->timer);
+        ev_timer_start(TK_A_ & conn->timer);
 #endif
 
         return rvalue;
@@ -1724,9 +1790,11 @@ static enum lb_return_value {
     return LB_PROCEED;
 }
 
-static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
+static void
+passive_websocket_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+    struct connection *conn =
+        (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
     if(revents & TK_READ) {
         char buf[16384];
@@ -1741,7 +1809,7 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                     close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
-                /* Fall through */
+            /* Fall through */
             case 0:
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
@@ -1749,17 +1817,19 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 conn->traffic_ongoing.num_reads++;
                 conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
-                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
-                            && largs->dump_connect_fd == tk_fd(w))) {
+                   || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
+                       && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Rcv", tk_fd(w), buf, rd);
                 }
 
                 /*
                  * Attempt to detect websocket key in HTTP and respond.
                  */
-                switch (http_detect_websocket(tk_fd(w), buf, rd)) {
-                case HDW_NOT_ENOUGH_DATA: return;
-                case HDW_WEBSOCKET_DETECTED: break;
+                switch(http_detect_websocket(tk_fd(w), buf, rd)) {
+                case HDW_NOT_ENOUGH_DATA:
+                    return;
+                case HDW_WEBSOCKET_DETECTED:
+                    break;
                 case HDW_TRUNCATED_INPUT:
                 case HDW_UNEXPECTED_ERROR:
                     close_connection(TK_A_ conn, CCR_DATA);
@@ -1768,12 +1838,13 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 conn->ws_state = WSTATE_WS_ESTABLISHED;
 
                 int want_events = TK_READ | TK_WRITE;
-#ifdef  USE_LIBUV
+#ifdef USE_LIBUV
                 uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
 #else
                 ev_io_stop(TK_A_ w);
-                ev_io_init(&conn->watcher, connection_cb, tk_fd(w), want_events);
-                ev_io_start(TK_A_ &conn->watcher);
+                ev_io_init(&conn->watcher, connection_cb, tk_fd(w),
+                           want_events);
+                ev_io_start(TK_A_ & conn->watcher);
 #endif
                 break;
             }
@@ -1781,7 +1852,8 @@ static void passive_websocket_cb(TK_P_ tk_io *w, int revents) {
     }
 }
 
-static void update_io_interest(TK_P_ struct connection *conn) {
+static void
+update_io_interest(TK_P_ struct connection *conn) {
     int events = 0;
     /* Remove read or write wish, if we don't want them */
     events |= (conn->conn_wish & CW_READ_INTEREST) ? TK_READ : 0;
@@ -1790,19 +1862,19 @@ static void update_io_interest(TK_P_ struct connection *conn) {
     events &= ~((conn->conn_wish & CW_READ_BLOCKED) ? TK_READ : 0);
     events &= ~((conn->conn_wish & CW_WRITE_BLOCKED) ? TK_WRITE : 0);
 
-#ifdef  USE_LIBUV
+#ifdef USE_LIBUV
     (void)loop;
     uv_poll_start(&conn->watcher, events, conn->watcher.poll_cb);
 #else
-    ev_io_stop(TK_A_ &conn->watcher);
+    ev_io_stop(TK_A_ & conn->watcher);
     ev_io_set(&conn->watcher, conn->watcher.fd, events);
-    ev_io_start(TK_A_ &conn->watcher);
+    ev_io_start(TK_A_ & conn->watcher);
 #endif
 }
 
-static void latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
-    if(!conn->latency.sent_timestamps)
-        return;
+static void
+latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
+    if(!conn->latency.sent_timestamps) return;
 
     struct loop_arguments *largs = tk_userdata(TK_A);
 
@@ -1835,9 +1907,10 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wro
          */
         const unsigned MEGABYTE = 1024 * 1024;
         if(conn->latency.sent_timestamps->size > 10 * MEGABYTE) {
-            DEBUG(DBG_ERROR,
+            DEBUG(
+                DBG_ERROR,
                 "Sending messages too fast, "
-                    "not receiving them back fast enough.\n"
+                "not receiving them back fast enough.\n"
                 "Check that the --latency-marker data is being received back.\n"
                 "Use --verbose 3 to dump received message data.\n");
             exit(1);
@@ -1845,19 +1918,19 @@ static void latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wro
     }
 }
 
-static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf, size_t size) {
-
-    if(!conn->latency.sent_timestamps)
-        return;
+static void
+latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
+                           size_t size) {
+    if(!conn->latency.sent_timestamps) return;
 
     const uint8_t *lm = conn->latency.sbmh_data;
-    size_t   lm_size  = conn->latency.sbmh_size;
+    size_t lm_size = conn->latency.sbmh_size;
     unsigned num_markers_found = 0;
 
-    for(; size > 0; ) {
-        size_t analyzed = sbmh_feed(conn->latency.sbmh_ctx,
-                                    conn->latency.sbmh_occ,
-                                    lm, lm_size, (unsigned char *)buf, size);
+    for(; size > 0;) {
+        size_t analyzed =
+            sbmh_feed(conn->latency.sbmh_ctx, conn->latency.sbmh_occ, lm,
+                      lm_size, (unsigned char *)buf, size);
         if(conn->latency.sbmh_ctx->found == sbmh_true) {
             buf += analyzed;
             size -= analyzed;
@@ -1891,25 +1964,31 @@ static void latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         int got = ring_buffer_get(conn->latency.sent_timestamps, &ts);
         if(got) {
             int64_t latency = 10000 * (now - ts);
-            if(hdr_record_value(conn->latency.marker_histogram, latency) == false) {
-                fprintf(stderr, "Latency value %g is too large, "
-                                "can't record.\n", now - ts);
+            if(hdr_record_value(conn->latency.marker_histogram, latency)
+               == false) {
+                fprintf(stderr,
+                        "Latency value %g is too large, "
+                        "can't record.\n",
+                        now - ts);
             }
         } else {
-            fprintf(stderr, "More messages received than sent. "
-                        "Choose a different --latency-marker.\n"
-                        "Use --verbose 3 to dump received message data.\n");
+            fprintf(stderr,
+                    "More messages received than sent. "
+                    "Choose a different --latency-marker.\n"
+                    "Use --verbose 3 to dump received message data.\n");
             exit(1);
         }
     }
-
 }
 
 /*
  * Compute the largest amount of data we can send to the channel
  * using a single write() call.
  */
-static void largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn, const void **position, size_t *available_header, size_t *available_body) {
+static void
+largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
+                         const void **position, size_t *available_header,
+                         size_t *available_body) {
     off_t *current_offset = &conn->write_offset;
     size_t accessible_size = conn->data.total_size;
     size_t available = accessible_size - *current_offset;
@@ -1919,9 +1998,9 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
      * We then wait for the server reply.
      */
     if(conn->traffic_ongoing.bytes_rcvd == 0
-            && conn->traffic_ongoing.bytes_sent <= conn->data.ws_hdr_size
-            && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
-            && largs->params.websocket_enable) {
+       && conn->traffic_ongoing.bytes_sent <= conn->data.ws_hdr_size
+       && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
+       && largs->params.websocket_enable) {
         accessible_size = conn->data.ws_hdr_size;
         size_t available = accessible_size - *current_offset;
         *position = conn->data.ptr + *current_offset;
@@ -1932,10 +2011,11 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
 
     if(conn->traffic_ongoing.bytes_sent < conn->data.once_size) {
         /* Send header... once per connection lifetime */
-        *available_header = conn->data.once_size - conn->traffic_ongoing.bytes_sent;
+        *available_header =
+            conn->data.once_size - conn->traffic_ongoing.bytes_sent;
         assert(available);
     } else {
-        *available_header = 0;    /* Sending body */
+        *available_header = 0; /* Sending body */
     }
 
     if(available) {
@@ -1949,10 +2029,15 @@ static void largest_contiguous_chunk(struct loop_arguments *largs, struct connec
     }
 }
 
-static void connection_cb(TK_P_ tk_io *w, int revents) {
+static void
+connection_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
-    struct sockaddr_storage *remote = conn->conn_type == CONN_OUTGOING ? &largs->params.remote_addresses.addrs[conn->remote_index] : &conn->peer_name;
+    struct connection *conn =
+        (struct connection *)((char *)w - offsetof(struct connection, watcher));
+    struct sockaddr_storage *remote =
+        conn->conn_type == CONN_OUTGOING
+            ? &largs->params.remote_addresses.addrs[conn->remote_index]
+            : &conn->peer_name;
 
     if(conn->conn_state == CSTATE_CONNECTING) {
         /*
@@ -1968,8 +2053,8 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         atomic_increment(&largs->outgoing_established);
         conn->conn_state = CSTATE_CONNECTED;
         if(largs->connect_histogram_local) {
-            int64_t latency = 10000 * (tk_now(TK_A)
-                                        - conn->latency.connection_initiated);
+            int64_t latency =
+                10000 * (tk_now(TK_A) - conn->latency.connection_initiated);
             hdr_record_value(largs->connect_histogram_local, latency);
         }
 
@@ -1980,9 +2065,9 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
          */
         tk_timer_stop(TK_A, &conn->timer);
         if(conn->data.total_size == 0) {
-            conn->conn_wish &= ~CW_WRITE_INTEREST;  /* Remove write interest */
+            conn->conn_wish &= ~CW_WRITE_INTEREST; /* Remove write interest */
             update_io_interest(TK_A_ conn);
-            revents &= ~TK_WRITE;   /* Don't actually write in this loop */
+            revents &= ~TK_WRITE; /* Don't actually write in this loop */
         }
     }
 
@@ -1992,14 +2077,15 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
         do {
             size_t read_size = sizeof(buf);
             if(largs->params.websocket_enable == 0
-            || conn->ws_state == WSTATE_WS_ESTABLISHED) {
-                switch(limit_channel_bandwidth(TK_A_ conn, &read_size, TK_READ)) {
+               || conn->ws_state == WSTATE_WS_ESTABLISHED) {
+                switch(
+                    limit_channel_bandwidth(TK_A_ conn, &read_size, TK_READ)) {
                 case LB_UNLIMITED:
                     break;
                 case LB_LOCKSTEP:
                     /* Rate limiter logic does not return it in read mode */
                     assert(!"Unreachable");
-                    /* Fall through */
+                /* Fall through */
                 case LB_PROCEED:
                     record_moved_data = 1;
                     break;
@@ -2020,15 +2106,15 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                     break;
                 default:
                     DEBUG(DBG_NORMAL, "Closing %s: %s\n",
-                        format_sockaddr(remote, buf, sizeof(buf)),
-                        strerror(errno));
+                          format_sockaddr(remote, buf, sizeof(buf)),
+                          strerror(errno));
                     close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
                 }
                 break;
             case 0:
                 DEBUG(DBG_DETAIL, "Connection half-closed by %s\n",
-                    format_sockaddr(remote, buf, sizeof(buf)));
+                      format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
@@ -2039,142 +2125,149 @@ static void connection_cb(TK_P_ tk_io *w, int revents) {
                  * side.
                  */
                 if(conn->traffic_ongoing.bytes_rcvd == 0
-                && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
-                && largs->params.websocket_enable
-                && conn->data.ws_hdr_size
-                        != conn->data.total_size) {
+                   && conn->ws_state == WSTATE_SENDING_HTTP_UPGRADE
+                   && largs->params.websocket_enable
+                   && conn->data.ws_hdr_size != conn->data.total_size) {
                     conn->ws_state = WSTATE_WS_ESTABLISHED;
                     conn->conn_wish |= CW_WRITE_INTEREST;
                     update_io_interest(TK_A_ conn);
                 }
-                if(conn->traffic_ongoing.bytes_rcvd == 0 && largs->firstbyte_histogram_local) {
-                    int64_t latency = 10000 * (tk_now(TK_A)
-                                        - conn->latency.connection_initiated);
+                if(conn->traffic_ongoing.bytes_rcvd == 0
+                   && largs->firstbyte_histogram_local) {
+                    int64_t latency =
+                        10000
+                        * (tk_now(TK_A) - conn->latency.connection_initiated);
                     hdr_record_value(largs->firstbyte_histogram_local, latency);
                 }
                 conn->traffic_ongoing.num_reads++;
                 conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
-                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
-                            && largs->dump_connect_fd == tk_fd(w))) {
+                   || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
+                       && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Rcv", tk_fd(w), buf, rd);
                 }
                 latency_record_incoming_ts(TK_A_ conn, buf, rd);
 
                 if(record_moved_data) {
                     pacefier_moved(&conn->recv_pace,
-                        conn->recv_limit.bytes_per_second,
-                        rd, tk_now(TK_A));
+                                   conn->recv_limit.bytes_per_second, rd,
+                                   tk_now(TK_A));
                 }
                 break;
             }
         } while(0);
     }
 
-  process_WRITE:
+process_WRITE:
     if(revents & TK_WRITE) {
         const void *position;
         size_t available_header, available_body;
         int record_moved = 0;
         int lockstep = 0;
 
-        largest_contiguous_chunk(largs, conn,
-                &position, &available_header, &available_body);
+        largest_contiguous_chunk(largs, conn, &position, &available_header,
+                                 &available_body);
         if(!(available_header + available_body)) {
             /* Only the header was sent. Now, silence. */
             assert(conn->data.total_size == conn->data.once_size
-                || largs->params.websocket_enable);
-            conn->conn_wish &= ~CW_WRITE_INTEREST;  /* disable write interest */
+                   || largs->params.websocket_enable);
+            conn->conn_wish &= ~CW_WRITE_INTEREST; /* disable write interest */
             update_io_interest(TK_A_ conn);
             return;
         }
 
         /* Adjust (available_body) to avoid sending too much stuff. */
         switch(limit_channel_bandwidth(TK_A_ conn, &available_body, TK_WRITE)) {
-        case LB_UNLIMITED: record_moved = 0; break;
-        case LB_LOCKSTEP:  lockstep = 1; /* FALL THROUGH */
-        case LB_PROCEED:   record_moved = 1; break;
+        case LB_UNLIMITED:
+            record_moved = 0;
+            break;
+        case LB_LOCKSTEP:
+            lockstep = 1; /* FALL THROUGH */
+        case LB_PROCEED:
+            record_moved = 1;
+            break;
         case LB_GO_SLEEP:
-            if(available_header)
-                break;
+            if(available_header) break;
             conn->conn_wish |= CW_WRITE_BLOCKED;
             update_io_interest(TK_A_ conn);
             return;
         }
 
-      do {    /* Write de-coalescing loop */
-        size_t available_write = available_header
+        do { /* Write de-coalescing loop */
+            size_t available_write =
+                available_header
                 + (largs->params.write_combine == WRCOMB_ON
-                    ? available_body
-                    : available_body < conn->send_limit.minimal_move_size
-                        ? available_body : conn->send_limit.minimal_move_size);
+                       ? available_body
+                       : available_body < conn->send_limit.minimal_move_size
+                             ? available_body
+                             : conn->send_limit.minimal_move_size);
 
-        ssize_t wrote = write(tk_fd(w), position, available_write);
-        if(wrote == -1) {
-            char buf[INET6_ADDRSTRLEN+64];
-            switch(errno) {
-            case EINTR:
-                continue;
-            case EAGAIN:
-                /* Undo rate limiting if not all data was sent. */
-                if(lockstep) {
-                    tk_timer_stop(TK_A, &conn->timer);
-                    lockstep = 0; /* Don't pause I/O later */
+            ssize_t wrote = write(tk_fd(w), position, available_write);
+            if(wrote == -1) {
+                char buf[INET6_ADDRSTRLEN + 64];
+                switch(errno) {
+                case EINTR:
+                    continue;
+                case EAGAIN:
+                    /* Undo rate limiting if not all data was sent. */
+                    if(lockstep) {
+                        tk_timer_stop(TK_A, &conn->timer);
+                        lockstep = 0; /* Don't pause I/O later */
+                    }
+                    break;
+                case EPIPE:
+                default:
+                    DEBUG(DBG_WARNING, "Connection reset by %s\n",
+                          format_sockaddr(remote, buf, sizeof(buf)));
+                    close_connection(TK_A_ conn, CCR_REMOTE);
+                    return;
                 }
                 break;
-            case EPIPE:
-            default:
-                DEBUG(DBG_WARNING, "Connection reset by %s\n",
-                    format_sockaddr(remote, buf, sizeof(buf)));
-                close_connection(TK_A_ conn, CCR_REMOTE);
-                return;
-            }
-            break;
-        } else {
-            conn->write_offset += wrote;
-            conn->traffic_ongoing.num_writes++;
-            conn->traffic_ongoing.bytes_sent += wrote;
-            if(record_moved)
-                pacefier_moved(&conn->send_pace,
-                               conn->send_limit.bytes_per_second,
-                               wrote, tk_now(TK_A));
-            if(largs->params.dump_setting & DS_DUMP_ALL_OUT
-                || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
-                        && largs->dump_connect_fd == tk_fd(w))) {
-                debug_dump_data("Snd", tk_fd(w), position, wrote);
-            }
-            if((size_t)wrote > available_header) {
-                position += wrote;
-                wrote -= available_header;
-                available_header = 0;
-                available_body -= wrote;
+            } else {
+                conn->write_offset += wrote;
+                conn->traffic_ongoing.num_writes++;
+                conn->traffic_ongoing.bytes_sent += wrote;
+                if(record_moved)
+                    pacefier_moved(&conn->send_pace,
+                                   conn->send_limit.bytes_per_second, wrote,
+                                   tk_now(TK_A));
+                if(largs->params.dump_setting & DS_DUMP_ALL_OUT
+                   || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
+                       && largs->dump_connect_fd == tk_fd(w))) {
+                    debug_dump_data("Snd", tk_fd(w), position, wrote);
+                }
+                if((size_t)wrote > available_header) {
+                    position += wrote;
+                    wrote -= available_header;
+                    available_header = 0;
+                    available_body -= wrote;
 
-                /* Record latencies for the body only, not headers */
-                latency_record_outgoing_ts(TK_A_ conn, wrote);
+                    /* Record latencies for the body only, not headers */
+                    latency_record_outgoing_ts(TK_A_ conn, wrote);
+                }
+            }
+        } while(available_body);
+
+        if(lockstep) {
+            if(available_body) {
+                /* Undo rate limiting if not all was sent. */
+                tk_timer_stop(TK_A, &conn->timer);
+                /* Will circle back and might set up a new timer */
+            } else {
+                conn->conn_wish |= CW_WRITE_BLOCKED;
+                update_io_interest(TK_A_ conn);
             }
         }
-      } while(available_body);
 
-      if(lockstep) {
-        if(available_body) {
-            /* Undo rate limiting if not all was sent. */
-            tk_timer_stop(TK_A, &conn->timer);
-            /* Will circle back and might set up a new timer */
-        } else {
-            conn->conn_wish |= CW_WRITE_BLOCKED;
-            update_io_interest(TK_A_ conn);
-        }
-      }
-     
     } /* (events & TK_WRITE) */
-
 }
 
 /*
  * Ungracefully close all connections and report accumulated stats
  * back to the central loop structure.
  */
-static void close_all_connections(TK_P_ enum connection_close_reason reason) {
+static void
+close_all_connections(TK_P_ enum connection_close_reason reason) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn;
     struct connection *tmpconn;
@@ -2199,30 +2292,32 @@ static void connections_flush_stats(TK_P) {
  * Add whatever data transfer counters we accumulated in a connection
  * back to the worker-wide tally.
  */
-static void connection_flush_stats(TK_P_ struct connection *conn) {
+static void
+connection_flush_stats(TK_P_ struct connection *conn) {
     struct loop_arguments *largs = tk_userdata(TK_A);
-    non_atomic_traffic_stats delta = subtract_traffic_stats(
-                                        conn->traffic_ongoing,
-                                        conn->traffic_reported);
+    non_atomic_traffic_stats delta =
+        subtract_traffic_stats(conn->traffic_ongoing, conn->traffic_reported);
     conn->traffic_reported = conn->traffic_ongoing;
     add_traffic_numbers_NtoA(&delta, &largs->worker_traffic_stats);
 }
 
-static void free_connection_by_handle(tk_io *w) {
-    struct connection *conn = (struct connection *)((char *)w - offsetof(struct connection, watcher));
+static void
+free_connection_by_handle(tk_io *w) {
+    struct connection *conn =
+        (struct connection *)((char *)w - offsetof(struct connection, watcher));
     free(conn);
 }
 
 /*
  * Free internal structures associated with connection.
  */
-static void connection_free_internals(struct connection *conn) {
+static void
+connection_free_internals(struct connection *conn) {
     /* Remove sent timestamps ring */
     ring_buffer_free(conn->latency.sent_timestamps);
 
     /* Remove latency histogram data */
-    if(conn->latency.marker_histogram)
-        free(conn->latency.marker_histogram);
+    if(conn->latency.marker_histogram) free(conn->latency.marker_histogram);
 
     /* Remove Boyer-Moore-Horspool string search context. */
     if(conn->latency.sbmh_ctx) {
@@ -2232,13 +2327,14 @@ static void connection_free_internals(struct connection *conn) {
             free((void *)conn->latency.sbmh_data);
         }
     }
-
 }
 
 /*
  * Close connection and update connection and data transfer counters.
  */
-static void close_connection(TK_P_ struct connection *conn, enum connection_close_reason reason) {
+static void
+close_connection(TK_P_ struct connection *conn,
+                 enum connection_close_reason reason) {
     char buf[256];
     struct loop_arguments *largs = tk_userdata(TK_A);
 
@@ -2256,7 +2352,8 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
         case CONN_OUTGOING:
             /* Make sure we don't go to this address eventually
              * because it is broken. */
-            atomic_increment(&largs->remote_stats[conn->remote_index].connection_failures);
+            atomic_increment(
+                &largs->remote_stats[conn->remote_index].connection_failures);
         case CONN_INCOMING:
         case CONN_ACCEPTOR:
             /* Do not affect counters. */
@@ -2268,10 +2365,10 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
         assert(conn->conn_type == CONN_OUTGOING);
         errno = ETIMEDOUT;
         DEBUG(DBG_NORMAL, "Connection to %s is being closed: %s\n",
-                format_sockaddr(
-                    &largs->params.remote_addresses.addrs[conn->remote_index],
-                    buf, sizeof(buf)),
-                strerror(errno));
+              format_sockaddr(
+                  &largs->params.remote_addresses.addrs[conn->remote_index],
+                  buf, sizeof(buf)),
+              strerror(errno));
         largs->worker_connection_failures++;
         largs->worker_connection_timeouts++;
         break;
@@ -2320,10 +2417,11 @@ static void close_connection(TK_P_ struct connection *conn, enum connection_clos
 /*
  * Determine the amount of parallelism available in this system.
  */
-long number_of_cpus() {
+long
+number_of_cpus() {
     long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 
-#ifdef   HAVE_SCHED_GETAFFINITY
+#ifdef HAVE_SCHED_GETAFFINITY
     cpu_set_t cs;
     CPU_ZERO(&cs);
     sched_getaffinity(0, sizeof(cs), &cs);

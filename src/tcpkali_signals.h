@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014  Machine Zone, Inc.
- * 
+ *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -37,4 +37,4 @@ void block_term_signals();
  */
 void flagify_term_signals(int *flag);
 
-#endif  /* TCPKALI_SIGNAL_H */
+#endif /* TCPKALI_SIGNAL_H */
