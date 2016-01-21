@@ -197,12 +197,13 @@ def main():
     # pylint: disable=too-many-statements
     port = 1350
 
-    print("Correctness of data packetization")
-    port = port + 1
-    t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
-                 "-mFOOBARBAZ"], capture_io=True)
-    (_, errLines) = t.results()
-    assert check_segmentation("Snd", errLines, "FOOBARBAZ")
+    if os.environ.get('CONTINUOUS_INTEGRATION', 'false') == 'false':
+        print("Correctness of data packetization")
+        port = port + 1
+        t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
+                     "-mFOOBARBAZ"], capture_io=True)
+        (_, errLines) = t.results()
+        assert check_segmentation("Snd", errLines, "FOOBARBAZ")
 
     print("Slow rate limiting cuts packets at message boundaries")
     port = port + 1
