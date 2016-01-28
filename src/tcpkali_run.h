@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -24,10 +24,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_H
-#define TCPKALI_H
+#ifndef TCPKALI_RUN_H
+#define TCPKALI_RUN_H
 
 #include "tcpkali_common.h"
+#include "tcpkali_mavg.h"
+#include "tcpkali_atomic.h"
 #include "tcpkali_engine.h"
+#include "tcpkali_statsd.h"
 
-#endif /* TCPKALI_H */
+enum work_phase { PHASE_ESTABLISHING_CONNECTIONS, PHASE_STEADY_STATE };
+
+struct stats_checkpoint {
+    double epoch_start; /* Start of current checkpoint epoch */
+    double last_update; /* Last we updated the checkpoint structure */
+    non_atomic_traffic_stats initial_traffic_stats; /* Ramp-up phase traffic */
+    non_atomic_traffic_stats last_traffic_stats;
+};
+
+int open_connections_until_maxed_out(struct engine *eng, double connect_rate,
+                                     int max_connections, double epoch_end,
+                                     struct stats_checkpoint *checkpoint,
+                                     mavg traffic_mavgs[2], Statsd *statsd,
+                                     int *term_flag, enum work_phase phase,
+                                     int print_stats);
+
+#endif /* TCPKALI_RUN_H */

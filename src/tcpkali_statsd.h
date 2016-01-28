@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -24,10 +24,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef TCPKALI_H
-#define TCPKALI_H
+#ifndef TCPKALI_STATSD_H
+#define TCPKALI_STATSD_H
+
+#include <statsd.h>
 
 #include "tcpkali_common.h"
+#include "tcpkali_atomic.h"
 #include "tcpkali_engine.h"
 
-#endif /* TCPKALI_H */
+/*
+ * What we are sending to statsd?
+ */
+typedef struct {
+    size_t opened;
+    size_t conns_in;
+    size_t conns_out;
+    size_t bps_in;
+    size_t bps_out;
+    non_atomic_traffic_stats traffic_delta;
+    struct latency_snapshot *latency;
+} statsd_feedback;
+
+void report_to_statsd(Statsd *statsd, statsd_feedback *feedback_optional);
+
+
+#endif /* TCPKALI_STATSD_H */

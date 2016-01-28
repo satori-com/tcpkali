@@ -36,6 +36,7 @@
 #include "tcpkali_atomic.h"
 #include "tcpkali_rate.h"
 #include "tcpkali_expr.h"
+#include "tcpkali_dns.h"
 
 long number_of_cpus();
 
