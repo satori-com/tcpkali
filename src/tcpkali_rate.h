@@ -52,13 +52,14 @@ typedef struct rate_spec {
  * figured out from the rate specification once we know the message size.
  */
 typedef struct bandwidth_limit {
-    double bytes_per_second; /* floating point OK */
-                             /*
-                              * --channel-bandwidth intentionally disregards the message
-                              * boundary, unlike --message-rate, which attempts to preserve it.
-                              * Thus minimal_move_size is 1 for --channel-bandwidth and is equal to
-                              * message size if not.
-                              */
+    /* floating point OK */
+    double bytes_per_second;
+    /*
+     * --channel-bandwidth intentionally disregards the message
+     * boundary, unlike --message-rate, which attempts to preserve it.
+     * Thus minimal_move_size is 1 for --channel-bandwidth and is equal to
+     * message size if not.
+     */
     uint32_t minimal_move_size;
 } bandwidth_limit_t;
 

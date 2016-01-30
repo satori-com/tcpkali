@@ -1,6 +1,6 @@
 % tcpkali(1) TCPKali user manual
 % Lev Walkin <lwalkin@machinezone.com>
-% 2016-01-15
+% 2016-01-29
 
 # NAME
 
@@ -136,6 +136,13 @@ open more than 64k connections to destinations.
     **--channel-bandwidth-upstream** option, because they both control
     the message sending rate.
 
+-r, --message-rate @*Latency*
+:   Instead of specifying the message rate, attempt to figure out the
+    maximum message rate that does not result in exceeding the given
+    message latency. Requires **--latency-marker** option to be set.
+
+    EXAMPLE: tcpkali **-m** "PING" **--latency-marker** "PONG" -r **@100ms**
+
 ### Traffic content expressions
 
 tcpkali supports injecting a limited form of variability into the
@@ -207,20 +214,20 @@ and the time the latency marker is observed in the downstream traffic
 # VARIABLE UNITS
 
 -----------------------------------------------------------------------
-Placeholder    Recognized unit suffixes
--------------- --------------------------------------------------------
-*N* and *Rate* k (1000, as in "5k" equals to 5000), m (1000000).
+Placeholder       Recognized unit suffixes
+----------------  -----------------------------------------------------
+*N* and *Rate*    k (1000, as in "5k" equals to 5000), m (1000000).
 
-*SizeBytes*    k (1024, as in "5k" equals to 5120), m (1024*1024).
+*SizeBytes*       k (1024, as in "5k" equals to 5120), m (1024*1024).
 
-*Bandwidth*    kbps, Mbps (for bits per second),
-               kBps,\ MBps\ (for\ bytes\ per\ second).
+*Bandwidth*       kbps, Mbps (for bits per second),
+                  kBps,\ MBps\ (for\ bytes\ per\ second).
 
-*Time*         ms, s, m, h, d (milliseconds, seconds, minutes, etc).
+*Time*, *Latency* ms, s, m, h, d (milliseconds, seconds, etc).
 -----------------------------------------------------------------------
 Table: tcpkali recognizes a number of suffixes for numeric values.
 
-*Rate* and *Time* can be fractional values, such as 0.25.
+*Rate*, *Time* and *Latency* can be fractional values, such as 0.25.
 
 # EXAMPLES
 

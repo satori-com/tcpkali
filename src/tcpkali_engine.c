@@ -158,6 +158,8 @@ struct loop_arguments {
      * WORKER DATA SHARED WITH OTHER PROCESSES *
      *******************************************/
 
+    const struct engine_params *shared_eng_params;
+
     /*
      * Connection identifier counter is shared between all connections
      * across all workers. We don't allocate it per worker, so it points
@@ -216,6 +218,11 @@ struct engine {
     atomic_narrow_t connection_unique_id_global;
     pthread_mutex_t serialize_output_lock;
 };
+
+const struct engine_params *
+engine_params(struct engine *eng) {
+    return &eng->params;
+}
 
 /*
  * Helper functions defined at the end of the file.
@@ -369,6 +376,7 @@ engine_start(struct engine_params params) {
         TAILQ_INIT(&largs->open_conns);
         largs->connection_unique_id_atomic = &eng->connection_unique_id_global;
         largs->params = params;
+        largs->shared_eng_params = &eng->params;
         largs->remote_stats = calloc(params.remote_addresses.n_addrs,
                                      sizeof(largs->remote_stats[0]));
         largs->address_offset = n;
@@ -479,6 +487,18 @@ static double
 estimate_pps(double duration, non_atomic_wide_t ops, non_atomic_wide_t bytes) {
     unsigned packets_per_op = estimate_segments_per_op(ops, bytes);
     return (packets_per_op * ops) / duration;
+}
+
+void
+engine_update_message_send_rate(struct engine *eng, double msg_rate) {
+    /*
+     * Ask workers to recompute per-connection rates.
+     */
+    eng->params.channel_send_rate = RATE_MPS(msg_rate);
+    for(int n = 0; n < eng->n_workers; n++) {
+        int rc = write(eng->loops[n].private_control_pipe_wr, "r", 1);
+        assert(rc == 1);
+    }
 }
 
 /*
@@ -1144,6 +1164,24 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
     switch(c) {
     case 'c':
         start_new_connection(TK_A);
+        break;
+    case 'r': /* Recompute message rate on live connections */
+        largs->params.channel_send_rate =
+            largs->shared_eng_params->channel_send_rate;
+        if(largs->params.channel_send_rate.value_base
+           == RS_MESSAGES_PER_SECOND) {
+            struct connection *conn;
+            pthread_mutex_lock(&largs->shared_histograms_lock);
+            hdr_reset(largs->marker_histogram_local);
+            hdr_reset(largs->marker_histogram_shared);
+            pthread_mutex_unlock(&largs->shared_histograms_lock);
+            TAILQ_FOREACH(conn, &largs->open_conns, hook) {
+                hdr_reset(conn->latency.marker_histogram);
+                conn->send_limit = compute_bandwidth_limit_by_message_size(
+                    largs->params.channel_send_rate,
+                    conn->data.single_message_size);
+            }
+        }
         break;
     case 'T':
         worker_update_shared_histograms(largs);

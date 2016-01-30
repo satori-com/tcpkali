@@ -99,6 +99,8 @@ struct array_of_doubles {
 };
 
 struct engine *engine_start(struct engine_params);
+const struct engine_params *engine_params(struct engine *);
+void engine_update_message_send_rate(struct engine *, double msg_rate);
 
 
 /*

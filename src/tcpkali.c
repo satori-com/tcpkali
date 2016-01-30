@@ -179,6 +179,7 @@ main(int argc, char **argv) {
                                           .channel_lifetime = INFINITY,
                                           .nagle_setting = NSET_UNSET,
                                           .write_combine = WRCOMB_ON};
+    struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
 
     struct array_of_doubles latency_percentiles = {
@@ -343,14 +344,47 @@ main(int argc, char **argv) {
             break;
         }
         case 'r': { /* --message-rate <Rate> */
-            double rate = parse_with_multipliers(
-                option, optarg, km_multiplier,
-                sizeof(km_multiplier) / sizeof(km_multiplier[0]));
-            if(rate <= 0) {
-                fprintf(stderr, "Expecting --message-rate > 0\n");
-                exit(EX_USAGE);
+            if(optarg[0] == '@') {
+                double latency = parse_with_multipliers(
+                    option, optarg + 1, s_multiplier,
+                    sizeof(s_multiplier) / sizeof(s_multiplier[0]));
+                if(latency <= 0) {
+                    fprintf(stderr, "Expecting --message-rate @<Latency>\n");
+                    exit(EX_USAGE);
+                }
+
+                /* Override -r<Rate> spec. */
+                if(rate_modulator.mode == RM_UNMODULATED
+                   && engine_params.channel_send_rate.value_base
+                          != RS_UNLIMITED) {
+                    warning(
+                        "--message-rate %s overrides previous fixed "
+                        "--message-rate specification.\n",
+                        optarg);
+                }
+                engine_params.channel_send_rate = RATE_MPS(100); /* Initial */
+                rate_modulator.mode = RM_MAX_RATE_AT_TARGET_LATENCY;
+                rate_modulator.latency_target = latency;
+                rate_modulator.latency_target_s = strdup(optarg + 1);
+                conf.test_duration = INFINITY;
+            } else {
+                double rate = parse_with_multipliers(
+                    option, optarg, km_multiplier,
+                    sizeof(km_multiplier) / sizeof(km_multiplier[0]));
+                if(rate <= 0) {
+                    fprintf(stderr, "Expecting --message-rate > 0\n");
+                    exit(EX_USAGE);
+                }
+                engine_params.channel_send_rate = RATE_MPS(rate);
+                /* Override -r@<Time> spec. */
+                if(rate_modulator.mode != RM_UNMODULATED) {
+                    warning(
+                        "--message-rate %s overrides previous dynamic "
+                        "--message-rate specification.\n",
+                        optarg);
+                    rate_modulator.mode = RM_UNMODULATED;
+                }
             }
-            engine_params.channel_send_rate = RATE_MPS(rate);
             break;
         }
         case 'N': /* --nagle {on|off} */
@@ -528,6 +562,20 @@ main(int argc, char **argv) {
         }
     }
 
+    if(rate_modulator.latency_target > 1) {
+        char *end = 0;
+        strtod(rate_modulator.latency_target_s, &end);
+        if(*end == '\0') {
+            /* No explicit unit ending, such as "ms" */
+            warning(
+                "--message-rate @%s: target latency is greater than one "
+                "second, which is probably not what you want\n",
+                rate_modulator.latency_target_s);
+            warning("Suggesting using --message-rate @%gms\n",
+                    rate_modulator.latency_target);
+        }
+    }
+
     /*
      * Avoid spawning more threads than connections.
      */
@@ -635,19 +683,23 @@ main(int argc, char **argv) {
                     "are supposed to be sent. Specify --message?\n");
             exit(EX_USAGE);
         }
+    } else if(rate_modulator.mode != RM_UNMODULATED) {
+        fprintf(stderr,
+                "--message-rate @<Latency> requires specifying "
+                "--latency-marker as well.\n");
+        exit(EX_USAGE);
     }
 
     /*
      * Make sure the message rate makes sense (e.g. the -m param is there).
      */
-    if(engine_params.channel_send_rate.value_base == RS_MESSAGES_PER_SECOND
+    if((engine_params.channel_send_rate.value_base == RS_MESSAGES_PER_SECOND
+        || rate_modulator.mode != RM_UNMODULATED)
        && no_message_to_send) {
-        if(engine_params.channel_send_rate.value_base) {
-            fprintf(stderr,
-                    "--message-rate parameter makes no sense "
-                    "without --message or --message-file\n");
-            exit(EX_USAGE);
-        }
+        fprintf(stderr,
+                "--message-rate parameter makes no sense "
+                "without --message or --message-file\n");
+        exit(EX_USAGE);
     }
 
     /*
@@ -748,8 +800,8 @@ main(int argc, char **argv) {
         if(open_connections_until_maxed_out(
                eng, conf.connect_rate, conf.max_connections, epoch_end,
                &checkpoint, traffic_mavgs, statsd, &term_flag,
-               PHASE_ESTABLISHING_CONNECTIONS, print_stats)
-           == 0) {
+               PHASE_ESTABLISHING_CONNECTIONS, &rate_modulator, print_stats)
+           == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -776,14 +828,11 @@ main(int argc, char **argv) {
     checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
-    for(double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;;) {
-        if(open_connections_until_maxed_out(
-               eng, conf.connect_rate, conf.max_connections, epoch_end,
-               &checkpoint, traffic_mavgs, statsd, &term_flag,
-               PHASE_STEADY_STATE, print_stats)
-           == -1)
-            break;
-    }
+    double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
+    enum oc_return_value orv = open_connections_until_maxed_out(
+        eng, conf.connect_rate, conf.max_connections, epoch_end, &checkpoint,
+        traffic_mavgs, statsd, &term_flag, PHASE_STEADY_STATE, &rate_modulator,
+        print_stats);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
@@ -793,6 +842,36 @@ main(int argc, char **argv) {
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0);
+
+    switch(orv) {
+    case OC_CONNECTED:
+        assert(orv != OC_CONNECTED);
+    /* Fall through */
+    case OC_INTERRUPT:
+        exit(EX_USAGE);
+        break;
+    case OC_TIMEOUT:
+        if(rate_modulator.mode != RM_UNMODULATED) {
+            fprintf(stderr,
+                    "Failed to find the best --message-rate for latency %s in "
+                    "-T%g seconds\n",
+                    rate_modulator.latency_target_s, conf.test_duration);
+            exit(EX_UNAVAILABLE);
+        }
+        break;
+    case OC_RATE_GOAL_MET:
+        printf("Best --message-rate for latency %s⁹⁵ᵖ is %g\n",
+               rate_modulator.latency_target_s,
+               rate_modulator.suggested_rate_value);
+        break;
+    case OC_RATE_GOAL_FAILED:
+        fprintf(stderr,
+                "Best --message-rate for latency %s can not be determined in "
+                "time due to unstable target system behavior\n",
+                rate_modulator.latency_target_s);
+        exit(EX_UNAVAILABLE);
+        break;
+    }
 
     return 0;
 }
@@ -899,6 +978,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -m, --message <string>       Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>    Read message to send from a file\n"
     "  -r, --message-rate <Rate>    Messages per second to send in a connection\n"
+    "  -r, --message-rate @<Latency> Measure a message rate at a given latency\n"
     "\n"
     "  --latency-connect            Measure TCP connection establishment latency\n"
     "  --latency-first-byte         Measure time to first byte latency\n"
@@ -915,8 +995,8 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <SizeBytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
     "  <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
-    "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
-    "  <Rate> and <Time> can be fractional values, such as 0.25.\n",
+    "  <Time>, <Latency>:  ms, s, m, h, d (milliseconds, seconds, minutes, etc)\n"
+    "  <Rate>, <Time> and <Latency> can be fractional values, such as 0.25.\n",
         /* clang-format on */
 
         (_DBG_MAX - 1), number_of_cpus(), number_of_cpus() < 10 ? " " : "",

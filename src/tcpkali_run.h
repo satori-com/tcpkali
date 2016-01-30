@@ -42,11 +42,42 @@ struct stats_checkpoint {
     non_atomic_traffic_stats last_traffic_stats;
 };
 
-int open_connections_until_maxed_out(struct engine *eng, double connect_rate,
-                                     int max_connections, double epoch_end,
-                                     struct stats_checkpoint *checkpoint,
-                                     mavg traffic_mavgs[2], Statsd *statsd,
-                                     int *term_flag, enum work_phase phase,
-                                     int print_stats);
+struct rate_modulator {
+    enum {
+        RM_UNMODULATED, /* Do not modulate request rate */
+        RM_MAX_RATE_AT_TARGET_LATENCY
+    } mode;
+    enum { RMS_STATE_INITIAL, RMS_RATE_RAMP_UP, RMS_RATE_BINARY_SEARCH } state;
+    double last_update_long;
+    double last_update_short;
+    double latency_target; /* In seconds. */
+    char *latency_target_s;
+    int binary_search_steps;
+    /*
+     * Runtime parameters.
+     */
+    /* Previous latency value */
+    double prev_latency;
+    int prev_max_latency_exceeded;
+    /*
+     * Rate bounds for binary search.
+     */
+    double rate_min_bound;
+    double rate_max_bound;
+    double suggested_rate_value;
+};
+
+enum oc_return_value {
+    OC_CONNECTED,
+    OC_TIMEOUT,
+    OC_INTERRUPT,
+    OC_RATE_GOAL_MET,
+    OC_RATE_GOAL_FAILED
+};
+enum oc_return_value open_connections_until_maxed_out(
+    struct engine *eng, double connect_rate, int max_connections,
+    double epoch_end, struct stats_checkpoint *checkpoint,
+    mavg traffic_mavgs[2], Statsd *statsd, int *term_flag,
+    enum work_phase phase, struct rate_modulator *, int print_stats);
 
 #endif /* TCPKALI_RUN_H */
