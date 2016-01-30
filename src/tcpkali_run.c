@@ -113,6 +113,20 @@ format_latencies(char *buf, size_t size, struct latency_snapshot *latency) {
     }
 }
 
+/*
+ * Return non-zero value every time we're more than (delta_time)
+ * away from the checkpoint time; updates the checkpoint time.
+ */
+static int
+every(double delta_time, double now, double *checkpoint_time) {
+    if((now - *checkpoint_time) < delta_time) {
+        return 0;
+    } else {
+        *checkpoint_time = now;
+        return 1;
+    }
+}
+
 int
 open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                                  int max_connections, double epoch_end,
@@ -144,7 +158,6 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
         usleep(timeout_us);
         tk_now_update(TK_DEFAULT);
         now = tk_now(TK_DEFAULT);
-        int update_stats = (now - checkpoint->last_update) >= 0.25;
 
         size_t connecting, conns_in, conns_out, conns_counter;
         engine_get_connection_stats(eng, &connecting, &conns_in, &conns_out,
@@ -163,12 +176,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
         pacefier_moved(&keepup_pace, connect_rate, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
-        if(update_stats) {
-            checkpoint->last_update = now;
-            /* Fall through and do the chekpoint update. */
-        } else {
-            continue;
-        }
+        if(!every(0.25, now, &checkpoint->last_update)) continue;
 
         /*
          * traffic_delta.* contains traffic observed within the last
