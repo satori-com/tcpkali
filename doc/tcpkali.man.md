@@ -120,15 +120,21 @@ open more than 64k connections to destinations.
 
 --first-message <string>
 :   Send this message first, once at the beginning of each connection.
+    This option can be specified several times to send several initial
+    messages at the beginning of each connection. If **--websocket** option
+    is given, each message is wrapped into its own WebSocket frame.
 
 --first-message-file *filename*
 :   Read the message from a file and send it once at the beginning of each connection.
+    This option can be specified several times.
 
 -m, --message *string*
 :   Repeatedly send the specified message to each destination.
+    This option can be specified several times.
 
 -f, --message-file *filename*
 :   Repeatedly send the message read from the file to each destination.
+    This option can be specified several times.
 
 -r, --message-rate *Rate*
 :   Messages per second to send in a connection. tcpkali attempts to preserve
