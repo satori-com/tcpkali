@@ -677,10 +677,15 @@ main(int argc, char **argv) {
      * if we are also told to measure latency.
      */
     if(engine_params.latency_marker) {
-        if(no_message_to_send || (argc - optind == 0)) {
+        if(no_message_to_send) {
             fprintf(stderr,
                     "--latency-marker is given, but no messages "
                     "are supposed to be sent. Specify --message?\n");
+            exit(EX_USAGE);
+        } else if(argc - optind == 0) {
+            fprintf(stderr,
+                    "--latency-marker is given, but no connections "
+                    "are supposed to be initiated. Specify <host:port>?\n");
             exit(EX_USAGE);
         }
     } else if(rate_modulator.mode != RM_UNMODULATED) {
