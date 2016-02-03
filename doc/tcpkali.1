@@ -194,22 +194,29 @@ values, \\n into a newline character, etc.
 .TP
 .B \-\-first\-message 
 Send this message first, once at the beginning of each connection.
+This option can be specified several times to send several initial
+messages at the beginning of each connection.
+If \f[B]\-\-websocket\f[] option is given, each message is wrapped into
+its own WebSocket frame.
 .RS
 .RE
 .TP
 .B \-\-first\-message\-file \f[I]filename\f[]
 Read the message from a file and send it once at the beginning of each
 connection.
+This option can be specified several times.
 .RS
 .RE
 .TP
 .B \-m, \-\-message \f[I]string\f[]
 Repeatedly send the specified message to each destination.
+This option can be specified several times.
 .RS
 .RE
 .TP
 .B \-f, \-\-message\-file \f[I]filename\f[]
 Repeatedly send the message read from the file to each destination.
+This option can be specified several times.
 .RS
 .RE
 .TP
