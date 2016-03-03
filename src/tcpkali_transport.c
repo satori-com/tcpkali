@@ -156,7 +156,6 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
         struct message_collection_snippet *ptr =
             realloc(mc->snippets, mc->snippets_size * sizeof(mc->snippets[0]));
         if(!ptr) {
-            /* TODO: make snippets[] dynamic. */
             fprintf(stderr,
                     "Too many --message "
                     "or --first-message arguments\n");
