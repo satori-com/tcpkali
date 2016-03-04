@@ -80,7 +80,9 @@ AC_ARG_ENABLE([asan],
         AC_MSG_FAILURE(
             [--enable-asan is given, but not supported on this platform.
  Check out https://code.google.com/p/address-sanitizer/wiki/HowToBuild])])
-    dnl Keep error messages nice.
+    dnl Keep error messages nice. Also consider:
+    dnl export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer
+    dnl export ASAN_OPTIONS=symbolize=1
     AX_CHECK_COMPILE_FLAG([-fno-omit-frame-pointer],
                           [CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
                           [], [${TK_CFLAGS}])
