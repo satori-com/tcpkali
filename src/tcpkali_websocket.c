@@ -35,19 +35,27 @@
 #include "libcows_base64.h"
 #include "sha-1.c"
 
+
+/*
+ * RFC 6455, 5.5:
+ * Control frames are identified by opcodes where the most significant
+ * bit of the opcode is 1.
+ */
+#define IS_WS_CONTROL_FRAME(op) ((((unsigned)(op)) & 0x8) ? 1 : 0)
+
 /*
  * Write out a frame header to prefix a payload of given size.
  */
 size_t
-websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size,
-                       enum websocket_side side) {
+websocket_frame_header(uint8_t *buf, size_t size,
+                       enum websocket_side side, enum ws_frame_opcode opcode, size_t payload_size) {
     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
     uint8_t *orig_buf_ptr;
 
     /* Return the frame header size if there's no buffer to write to. */
     if(buf) {
         /* Buf should be able to contain the largest frame header. */
-        assert(!buf || size >= WEBSOCKET_MAX_FRAME_HDR_SIZE);
+        assert(size >= WEBSOCKET_MAX_FRAME_HDR_SIZE);
         orig_buf_ptr = buf;
     } else {
         orig_buf_ptr = buf = tmpbuf;
@@ -55,17 +63,10 @@ websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size,
     }
 
     struct ws_frame {
-        enum {
-            OP_CONTINUATION = 0x0,
-            OP_TEXT_FRAME = 0x1,
-            OP_BINARY_FRAME = 0x2,
-            OP_CLOSE = 0x8,
-            OP_PING = 0x9,
-            OP_PONG = 0xA
-        } opcode : 4;
+        enum ws_frame_opcode opcode : 4;
         unsigned int rsvs : 3;
         unsigned int fin : 1;
-    } first_byte = {.opcode = OP_TEXT_FRAME, .fin = 1};
+    } first_byte = {.opcode = opcode, .fin = 1};
 
     *buf++ = *(uint8_t *)&first_byte;
 

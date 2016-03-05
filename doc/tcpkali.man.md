@@ -162,6 +162,8 @@ Expression          Description
 
  connection.ptr     Pointer to a connection structure. Don't use.
 
+ ws.ping, ws.pong   WebSocket PING or PONG frames.
+
  EXPRESSION % *int* Remainder of the expression value divided by *int*.
 -----------------------------------------------------------------------
 : Expressions can be of the following forms:

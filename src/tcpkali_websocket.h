@@ -27,10 +27,24 @@
 #ifndef TCPKALI_WEBSOCKET_H
 #define TCPKALI_WEBSOCKET_H
 
+#include "tcpkali_common.h"
+
 /*
  * Establish the maximum size of the WebSocket frame header.
  */
 #define WEBSOCKET_MAX_FRAME_HDR_SIZE (2 + 8 + 4)
+
+/*
+ * Available WebSocket frame opcodes.
+ */
+enum ws_frame_opcode {
+    WS_OP_CONTINUATION = 0x0,
+    WS_OP_TEXT_FRAME = 0x1,
+    WS_OP_BINARY_FRAME = 0x2,
+    WS_OP_CLOSE = 0x8,
+    WS_OP_PING = 0x9,
+    WS_OP_PONG = 0xA
+};
 
 /*
  * Write out a frame header to prefix a payload of given size.
@@ -41,8 +55,7 @@ enum websocket_side {
     WS_SIDE_CLIENT,
     WS_SIDE_SERVER,
 };
-size_t websocket_frame_header(size_t payload_size, uint8_t *buf, size_t size,
-                              enum websocket_side);
+size_t websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side, enum ws_frame_opcode, size_t payload_size);
 
 
 /*

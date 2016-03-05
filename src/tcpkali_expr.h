@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2015, 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -34,6 +34,8 @@ typedef struct tk_expr {
         EXPR_MODULO,         /* '%' */
         EXPR_CONNECTION_PTR, /* 'connection.ptr' */
         EXPR_CONNECTION_UID, /* 'connection.uid' */
+        EXPR_WS_PING,        /* 'ws.ping' */
+        EXPR_WS_PONG,        /* 'ws.pong' */
     } type;
     union {
         struct {
@@ -49,6 +51,7 @@ typedef struct tk_expr {
         } concat;
     } u;
     size_t estimate_size;
+    size_t dynamic;
 } tk_expr_t;
 
 /*
@@ -59,12 +62,15 @@ typedef struct tk_expr {
 #define EXPR_IS_TRIVIAL(e) ((e)->type == EXPR_DATA)
 
 /*
- * Return values:
- *  0: No expression was found, returns a simple EXPR_DATA node.
- *  1: An expression was found, returned.
- * -1: Expression parsing failed.
+ * Parse the expression string of a given length into an expression.
  */
-int parse_expression(tk_expr_t **, const char *expr_buf, size_t size,
+enum parse_expression_result {
+    NO_EXPRESSION_FOUND,        /* Returns a trivial EXPR_DATA node, returned. */
+    EXPRESSIONS_FOUND,          /* One or more expressions found, returned. */
+    EXPR_PARSE_FAILED    /* Expressions parsing failed; expression not returned */
+};
+enum parse_expression_result
+parse_expression(tk_expr_t **, const char *expr_string, size_t size,
                      int debug);
 
 void free_expression(tk_expr_t *expr);
@@ -73,6 +79,29 @@ void free_expression(tk_expr_t *expr);
 typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
                                  long *output_value);
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
-                        void *key, long *output_value);
+                        void *key, long *output_value, int client_mode);
+
+/*
+ * Concatenate expressions. One or both expressions can be NULL.
+ */
+tk_expr_t *concat_expressions(tk_expr_t *, tk_expr_t *);
+
+
+/*
+ * Split expression into three parts: prefix, predefined websocket frame, and the remainder.
+ * Expression "foo\{ws.ping}bar" will be split to "foo", \{ws.ping} and "bar" expressions.
+ * This function destroys the original expression.
+ */
+struct esw_result {
+    tk_expr_t *esw_prefix;
+    tk_expr_t *esw_websocket_frame;
+    tk_expr_t *esw_remainder;
+};
+struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr);
+
+/*
+ * Recursively go over all of the parts of the expression and unescape them.
+ */
+void unescape_expression(tk_expr_t *expr);
 
 #endif /* TCPKALI_EXPR_H */

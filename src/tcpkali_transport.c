@@ -79,9 +79,10 @@ message_collection_finalize(struct message_collection *mc, int as_websocket,
                                   ws_http_headers_fmt, path, hostport);
         assert(h_size == estimated_size);
 
-        const int DISABLE_UNESCAPE = 0;
+        const int NO_UNESCAPE = 0;
+        const int PERFORM_EXPR_PARSING = 1;
         message_collection_add(mc, MSK_PURPOSE_HTTP_HEADER, http_headers,
-                               h_size, DISABLE_UNESCAPE);
+                               h_size, NO_UNESCAPE, PERFORM_EXPR_PARSING);
 
         mc->state = MC_FINALIZED_WEBSOCKET;
     } else {
@@ -132,26 +133,9 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
 }
 
 
-void
-message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
-                       void *data, size_t size, int unescape) {
-    assert(mc->state == MC_EMBRYONIC);
-
-    /* Verify that messages are properly kinded. */
-    switch(kind) {
-    case MSK_PURPOSE_HTTP_HEADER:
-        break;
-    case MSK_PURPOSE_FIRST_MSG:
-    case MSK_PURPOSE_MESSAGE:
-        kind |= MSK_FRAMING_ALLOWED;
-        break;
-    default:
-        assert(!"Cannot add message with non-MSK_PURPOSE_ kind");
-        return; /* Unreachable */
-    }
-
+static void message_collection_ensure_space(struct message_collection *mc, size_t need) {
     /* Reallocate snippets array, if needed. */
-    if(mc->snippets_count >= mc->snippets_size) {
+    while(mc->snippets_count + need > mc->snippets_size) {
         mc->snippets_size = 2 * (mc->snippets_size ? mc->snippets_size : 8);
         struct message_collection_snippet *ptr =
             realloc(mc->snippets, mc->snippets_size * sizeof(mc->snippets[0]));
@@ -165,40 +149,114 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
                (mc->snippets_size - mc->snippets_count) * sizeof(ptr[0]));
         mc->snippets = ptr;
     }
+}
+
+void
+message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
+                       void *data, size_t size, int unescape, int parse_expressions) {
+    assert(mc->state == MC_EMBRYONIC);
+
+    /* Verify that messages are properly kinded. */
+    enum mc_snippet_kind adjusted_kind = kind;
+    switch(adjusted_kind) {
+    case MSK_PURPOSE_HTTP_HEADER:
+        break;
+    case MSK_PURPOSE_FIRST_MSG:
+    case MSK_PURPOSE_MESSAGE:
+        adjusted_kind |= MSK_FRAMING_ALLOWED;
+        break;
+    default:
+        assert(!"Cannot add message with non-MSK_PURPOSE_ kind");
+        return; /* Unreachable */
+    }
+
+    message_collection_ensure_space(mc, 1);
 
     char *p = malloc(size + 1);
     assert(p);
     memcpy(p, data, size);
     p[size] = 0;
 
-    if(unescape) unescape_data(p, &size);
-
     struct message_collection_snippet *snip;
-    snip = &mc->snippets[mc->snippets_count++];
+    snip = &mc->snippets[mc->snippets_count];
     snip->data = p;
     snip->size = size;
     snip->expr = 0;
-    snip->flags = kind;
+    snip->flags = adjusted_kind;
     snip->sort_index = mc->snippets_count;
 
-    const int ENABLE_DEBUG = 1;
-    tk_expr_t *expr = 0;
-    switch(parse_expression(&expr, p, size, ENABLE_DEBUG)) {
-    case 0:
-        /* Trivial expression, does not change wrt. environment. */
-        free_expression(expr);
-        /* Just use the data instead. */
-        break;
-    case 1:
-        snip->expr = expr;
-        snip->flags |= MSK_EXPRESSION_FOUND;
-        mc->expressions_found++;
-        break;
-    case -1:
-        /* parse_expression() would have already printed the failure reason */
-        exit(1);
+    if(parse_expressions) {
+        const int ENABLE_DEBUG = 1;
+        tk_expr_t *expr = 0;
+        switch(parse_expression(&expr, p, size, ENABLE_DEBUG)) {
+        case NO_EXPRESSION_FOUND:
+            /* Trivial expression, does not change wrt. environment. */
+            free_expression(expr);
+            if(unescape) unescape_data(snip->data, &snip->size);
+            /* Just use the snip->data instead. */
+            mc->snippets_count++;
+            break;
+        case EXPRESSIONS_FOUND:
+            if(unescape) unescape_expression(expr);
+            message_collection_add_expr(mc, kind, expr);
+            break;
+        case EXPR_PARSE_FAILED:
+            /* parse_expression() would have already printed the failure reason */
+            exit(1);
+        }
+    } else {
+        if(unescape) unescape_data(snip->data, &snip->size);
+        mc->snippets_count++;
     }
 }
+
+void message_collection_add_expr(struct message_collection *mc, enum mc_snippet_kind kind, struct tk_expr *expr) {
+
+    while(expr) {
+        message_collection_ensure_space(mc, 2);
+
+        struct esw_result result = expression_split_by_websocket_frame(expr);
+
+        struct message_collection_snippet *snip;
+        snip = &mc->snippets[mc->snippets_count];
+        snip->data = 0;
+        snip->size = 0;
+        snip->expr = 0;
+        snip->flags = kind;
+        snip->sort_index = mc->snippets_count;
+
+        if(result.esw_prefix) {
+            snip->expr = result.esw_prefix;
+            snip->flags = kind;
+            snip->flags |= MSK_FRAMING_ALLOWED;
+            snip->flags |= MSK_EXPRESSION_FOUND;
+            mc->dynamic_expressions_found += snip->expr->dynamic;
+            mc->snippets_count++;
+
+            snip = &mc->snippets[mc->snippets_count];
+            snip->data = 0;
+            snip->size = 0;
+            snip->expr = 0;
+            snip->sort_index = mc->snippets_count;
+        }
+
+        if(result.esw_websocket_frame) {
+            snip->expr = result.esw_websocket_frame;
+            /* Disallow framing of websocket frames. */
+            snip->flags = kind;
+            snip->flags &= (~MSK_FRAMING_ALLOWED);
+            snip->flags |= MSK_EXPRESSION_FOUND;
+            mc->snippets_count++;
+        }
+
+        /*
+         * Figure out what to do with the rest of the expression.
+         * It might contain more websocket frames.
+         */
+        expr = result.esw_remainder;
+    }
+}
+
 
 /*
  * Give the largest size the message can possibly occupy.
@@ -241,7 +299,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
      * If expressions found we can not create a transport data specification
      * from this collection directly. Need to go through expression evaluator.
      */
-    if(mc->expressions_found) {
+    if(mc->dynamic_expressions_found) {
         if(!optional_cb) return NULL;
     }
 
@@ -271,7 +329,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                    >= data_spec->total_size + snip->expr->estimate_size);
             reified_size =
                 eval_expression(&tptr, estimate_size - data_spec->total_size,
-                                snip->expr, optional_cb, expr_cb_key, 0);
+                                snip->expr, optional_cb, expr_cb_key, 0,
+                                (tws_side == TWS_SIDE_CLIENT));
             assert(reified_size >= 0);
             data = 0;
             size = reified_size;
@@ -289,7 +348,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
                     /* Save the websocket frame elsewhere temporarily */
                     ws_frame_size = websocket_frame_header(
-                        size, tmpbuf, sizeof(tmpbuf), ws_side);
+                        tmpbuf, sizeof(tmpbuf), ws_side, WS_OP_TEXT_FRAME, size);
                     /* Move the data to the right to make space for framing */
                     memmove((char *)data_spec->ptr + data_spec->total_size
                                 + ws_frame_size,
@@ -300,8 +359,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                            tmpbuf, ws_frame_size);
                 } else {
                     ws_frame_size = websocket_frame_header(
-                        size, (uint8_t *)data_spec->ptr + data_spec->total_size,
-                        estimate_size - data_spec->total_size, ws_side);
+                        (uint8_t *)data_spec->ptr + data_spec->total_size,
+                        estimate_size - data_spec->total_size, ws_side, WS_OP_TEXT_FRAME, size);
                 }
             }
         }

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "tcpkali_data.h"
 #include "tcpkali_expr.h"
 #include "tcpkali_expr_y.h"
 
@@ -18,6 +19,7 @@ int transport_expr_lex(void);
 %option noyywrap stack
 
 %x in_expression
+%x in_quotes
 
 WSP [\t\r\v\f\n ]
 
@@ -31,17 +33,18 @@ WSP [\t\r\v\f\n ]
             yylval.tv_string.len = yyleng;
             memcpy(yylval.tv_string.buf, yytext, yyleng);
             yylval.tv_string.buf[yyleng] = '\0';
-            return string;
+            return string_token;
         }
-
     }
 
 <INITIAL><<EOF>>        yyterminate();
 
-
 <in_expression>{
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
+    "ws"            return TOK_ws;
+    "ping"          return TOK_ping;
+    "pong"          return TOK_pong;
     "connection"    return TOK_connection;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;
@@ -51,16 +54,19 @@ WSP [\t\r\v\f\n ]
         }
     "."             return '.';
     "%"             return '%';
-    .     {
-                    fprintf(stderr,
-                        "Unexpected token in message expression: %s\n",
-                        yytext);
-                    yy_top_state(); /* Just to use this function */
-                    (void)yyunput;  /* Just to use this symbol */
-                    return -1;
-            }
 
-    [^} .]+     {
+
+    \"([^\\"]|\\.)*\" {
+                    size_t new_size = yyleng - 2;
+                    char *new_str = malloc(new_size + 1);
+                    memcpy(new_str, yytext + 1, new_size);
+                    new_str[new_size] = '\0';
+                    yylval.tv_string.buf = new_str;
+                    yylval.tv_string.len = new_size;
+                    return quoted_string;
+                }
+
+    [^"} .]+     {
                     fprintf(stderr,
                         "Unexpected token in message expression: %s\n",
                         yytext);
@@ -68,6 +74,16 @@ WSP [\t\r\v\f\n ]
                     (void)yyunput;  /* Just to use this symbol */
                     return -1;
                 }
-    }
+
+    .     {
+                    fprintf(stderr,
+                        "Unexpected token in message expression: %s\n",
+                        yytext);
+                    yy_top_state(); /* Just to use this function */
+                    (void)yyunput;  /* Just to use this symbol */
+                    return -1;
+                }
+
+}
 
 %%

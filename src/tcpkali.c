@@ -280,12 +280,12 @@ main(int argc, char **argv) {
         case 'm': /* --message */
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_MESSAGE, optarg, strlen(optarg),
-                                   unescape_message_data);
+                                   unescape_message_data, 1);
             break;
         case '1': /* --first-message */
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_FIRST_MSG, optarg,
-                                   strlen(optarg), unescape_message_data);
+                                   strlen(optarg), unescape_message_data, 1);
             break;
         case 'f': { /* --message-file */
             char *data;
@@ -293,7 +293,7 @@ main(int argc, char **argv) {
             if(read_in_file(optarg, &data, &size) != 0) exit(EX_DATAERR);
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_MESSAGE, data, size,
-                                   unescape_message_data);
+                                   unescape_message_data, 1);
             free(data);
         } break;
         case 'F': { /* --first-message-file */
@@ -302,7 +302,7 @@ main(int argc, char **argv) {
             if(read_in_file(optarg, &data, &size) != 0) exit(EX_DATAERR);
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_FIRST_MSG, data, size,
-                                   unescape_message_data);
+                                   unescape_message_data, 1);
         } break;
         case 'w': {
             int n = atoi(optarg);
@@ -509,7 +509,7 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             if(parse_expression(&engine_params.latency_marker, data, size, 0)
-               == -1) {
+               == EXPR_PARSE_FAILED) {
                 fprintf(stderr,
                         "--latency-marker: Failed to parse expression\n");
                 exit(EX_USAGE);

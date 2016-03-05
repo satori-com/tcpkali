@@ -31,6 +31,7 @@
 #include <assert.h>
 
 #include "tcpkali_transport.h"
+#include "tcpkali_websocket.h"
 #include "tcpkali_terminfo.h"
 #include "tcpkali_data.h"
 #include "tcpkali_expr.h"
@@ -53,6 +54,8 @@ free_expression(tk_expr_t *expr) {
     if(expr) {
         switch(expr->type) {
         case EXPR_DATA:
+        case EXPR_WS_PING:
+        case EXPR_WS_PONG:
             free((void *)expr->u.data.data);
             break;
         case EXPR_MODULO:
@@ -69,13 +72,13 @@ free_expression(tk_expr_t *expr) {
     }
 }
 
-int
+enum parse_expression_result
 parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
     void *ybuf;
     ybuf = yy_scan_bytes(buf, size);
     if(!ybuf) {
         assert(ybuf);
-        return -1;
+        return EXPR_PARSE_FAILED;
     }
 
     if(expr_p) *expr_p = 0;
@@ -96,26 +99,26 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
                 *expr_p = expr;
             else
                 free_expression(expr);
-            return 0; /* No expression found */
+            return NO_EXPRESSION_FOUND; /* No expression found */
         } else {
             if(expr_p)
                 *expr_p = expr;
             else
                 free_expression(expr);
-            return 1;
+            return EXPRESSIONS_FOUND;
         }
     } else {
         char tmp[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
         DEBUG("Failed to parse \"%s\"\n",
               printable_data(tmp, sizeof(tmp), buf, size, 1));
         free_expression(expr);
-        return -1;
+        return EXPR_PARSE_FAILED;
     }
 }
 
 ssize_t
 eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
-                void *key, long *value) {
+                void *key, long *value, int client_mode) {
     char *buf;
 
     if(!*buf_p) {
@@ -131,9 +134,18 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         if(size < expr->u.data.size) return -1;
         memcpy(buf, expr->u.data.data, expr->u.data.size);
         return expr->u.data.size;
+    case EXPR_WS_PING:
+    case EXPR_WS_PONG:
+        if(size < expr->estimate_size) {
+            return -1;
+        } else {
+            size_t hdr_size = websocket_frame_header((uint8_t *)buf, size, client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER, expr->type == EXPR_WS_PING ? WS_OP_PING : WS_OP_PONG, expr->u.data.size);
+            memcpy(buf + hdr_size, expr->u.data.data, expr->u.data.size);
+            return (hdr_size + expr->u.data.size);
+        }
     case EXPR_MODULO: {
         long v = 0;
-        (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v);
+        (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v, client_mode);
         v %= expr->u.modulo.modulo_value;
         ssize_t s = snprintf(buf, size, "%ld", v);
         if(s < 0 || s > (ssize_t)size) return -1;
@@ -145,19 +157,115 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
                 + expr->u.concat.expr[1]->estimate_size)
                <= size);
         ssize_t size1 =
-            eval_expression(&buf, size, expr->u.concat.expr[0], cb, key, value);
+            eval_expression(&buf, size, expr->u.concat.expr[0], cb, key, value, client_mode);
         if(size1 < 0) return -1;
         char *buf2 = buf + size1;
         ssize_t size2 = eval_expression(&buf2, size - size1,
-                                        expr->u.concat.expr[1], cb, key, value);
+                                        expr->u.concat.expr[1], cb, key, value, client_mode);
         if(size1 < 0) return -1;
         return size1 + size2;
     }
     case EXPR_CONNECTION_PTR:
-    case EXPR_CONNECTION_UID: {
+    case EXPR_CONNECTION_UID:
         return cb(buf, size, expr, key, value);
-    }
     }
 
     return -1;
+}
+
+tk_expr_t *concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
+    if(expr1 && expr2) {
+        tk_expr_t *expr = calloc(1, sizeof(*expr));
+        expr->type = EXPR_CONCAT;
+        expr->u.concat.expr[0] = expr1;
+        expr->u.concat.expr[1] = expr2;
+        expr->estimate_size = expr1->estimate_size + expr2->estimate_size;
+        expr->dynamic = (expr1->dynamic || expr2->dynamic);
+        return expr;
+    } else if(expr1) {
+        return expr1;
+    } else if(expr2) {
+        return expr2;
+    } else {
+        return NULL;
+    }
+}
+
+/*
+ * Split result into parts that may be WS-framed, the WS frame itself,
+ * and a remainder.
+ */
+struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr) {
+    struct esw_result result = { 0, 0, 0 };
+
+    if(!expr) return result;
+
+    switch(expr->type) {
+    case EXPR_DATA:
+    case EXPR_MODULO:
+    case EXPR_CONNECTION_PTR:
+    case EXPR_CONNECTION_UID:
+        result.esw_prefix = expr;
+        return result;
+    case EXPR_WS_PING:
+    case EXPR_WS_PONG:
+        result.esw_websocket_frame = expr;
+        return result;
+    case EXPR_CONCAT: {
+            struct esw_result result0 = expression_split_by_websocket_frame(expr->u.concat.expr[0]);
+            struct esw_result result1 = expression_split_by_websocket_frame(expr->u.concat.expr[1]);
+            /* No websocket frames in both branches of concatenation */
+            if(result0.esw_websocket_frame == NULL
+                && result1.esw_websocket_frame == NULL) {
+                result.esw_prefix = expr;
+                return result;
+            }
+            expr->u.concat.expr[0] = NULL;
+            expr->u.concat.expr[1] = NULL;
+            free_expression(expr);
+            expr = NULL;
+            if(result0.esw_websocket_frame) {
+                result0.esw_remainder = concat_expressions(
+                        concat_expressions(result0.esw_remainder,
+                            result1.esw_prefix),
+                        concat_expressions(result1.esw_websocket_frame,
+                            result1.esw_remainder));
+                return result0;
+            }
+            assert(result0.esw_prefix != NULL);
+            assert(result0.esw_websocket_frame == NULL);
+            assert(result0.esw_remainder == NULL);
+            result1.esw_prefix = concat_expressions(result0.esw_prefix, result1.esw_prefix);
+            return result1;
+        }
+    }
+
+    return result;
+}
+
+void
+unescape_expression(tk_expr_t *expr) {
+    switch(expr->type) {
+    case EXPR_DATA:
+        unescape_data((char *)expr->u.data.data, &expr->u.data.size);
+        expr->estimate_size = expr->u.data.size;
+        return;
+    case EXPR_CONCAT:
+        unescape_expression(expr->u.concat.expr[0]);
+        unescape_expression(expr->u.concat.expr[1]);
+        expr->estimate_size = expr->u.concat.expr[0]->estimate_size
+                            + expr->u.concat.expr[1]->estimate_size;
+        return;
+    case EXPR_MODULO:
+    case EXPR_CONNECTION_PTR:
+    case EXPR_CONNECTION_UID:
+        return;
+    case EXPR_WS_PING:
+    case EXPR_WS_PONG: {
+        size_t overhead = expr->estimate_size - expr->u.data.size;
+        unescape_data((char *)expr->u.data.data, &expr->u.data.size);
+        expr->estimate_size = expr->u.data.size + overhead;
+        return;
+        }
+    }
 }

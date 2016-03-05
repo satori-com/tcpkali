@@ -342,7 +342,7 @@ engine_start(struct engine_params params) {
             transport_spec_from_message_collection(
                 0, &params.message_collection, 0, 0, tws_side);
         assert(params.data_templates[tws_side]
-               || params.message_collection.expressions_found);
+               || params.message_collection.dynamic_expressions_found);
     }
 
     if(params.data_templates[0])
@@ -1264,7 +1264,8 @@ explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr,
                           struct loop_arguments *largs UNUSED,
                           struct connection *conn) {
     *buf_p = 0;
-    ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0);
+    ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0,
+                    conn->conn_type == CONN_OUTGOING);
     assert(s >= 0);
     *size = s;
 }

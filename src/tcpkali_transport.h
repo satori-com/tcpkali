@@ -62,9 +62,9 @@ struct message_collection {
      */
     size_t snippets_size;
     /*
-     * Whether \{expressions} were found in snippets
+     * Whether variable \{expressions} were found in snippets
      */
-    int expressions_found;
+    int dynamic_expressions_found;
     /*
      * A collection must be finalized before use.
      */
@@ -80,7 +80,14 @@ struct message_collection {
  * The function copies data.
  */
 void message_collection_add(struct message_collection *mc, enum mc_snippet_kind,
-                            void *data, size_t size, int unescape);
+                            void *data, size_t size, int unescape, int parse_expressions);
+
+/*
+ * Add a new expression to the message collection.
+ * The function takes over the expression pointer.
+ */
+void message_collection_add_expr(struct message_collection *mc, enum mc_snippet_kind,
+                            struct tk_expr *);
 
 /*
  * Finalize the collection, preventing new data to be added,
