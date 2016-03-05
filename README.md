@@ -65,6 +65,7 @@ Install the following packages first:
       -T <Time=10s>        Exit after the specified amount of time
 
       -e                   Unescape backslash-escaping in a message string
+      -1 <string>          Message to send to the remote host once
       -m <string>          Message to repeatedly send to the remote
       -r <Rate>            Messages per second to send in a connection
 

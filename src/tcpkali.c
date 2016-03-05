@@ -189,7 +189,7 @@ main(int argc, char **argv) {
     while(1) {
         char *option = argv[optind];
         int c;
-        c = getopt_long(argc, argv, "dhc:em:f:r:l:vw:T:", cli_long_options,
+        c = getopt_long(argc, argv, "dhc:e1:m:f:r:l:vw:T:", cli_long_options,
                         NULL);
         if(c == -1) break;
         switch(c) {
@@ -978,7 +978,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -T, --duration <Time=10s>    Exit after the specified amount of time\n"
     "\n"
     "  -e, --unescape-message-args  Unescape the message data arguments\n"
-    "  --first-message <string>     Send this message first, once\n"
+    "  -1, --first-message <string> Send this message first, once\n"
     "  --first-message-file <name>  Read the first message from a file\n"
     "  -m, --message <string>       Message to repeatedly send to the remote\n"
     "  -f, --message-file <name>    Read message to send from a file\n"
@@ -1028,6 +1028,7 @@ usage_short(char *argv0) {
     "  -T <Time=10s>        Exit after the specified amount of time\n"
     "\n"
     "  -e                   Unescape backslash-escaping in a message string\n"
+    "  -1 <string>          Message to send to the remote host once\n"
     "  -m <string>          Message to repeatedly send to the remote\n"
     "  -r <Rate>            Messages per second to send in a connection\n"
     "\n"

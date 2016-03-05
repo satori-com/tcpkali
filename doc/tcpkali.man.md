@@ -118,7 +118,7 @@ open more than 64k connections to destinations.
     Transforms \\xxx sequences into bytes with the corresponding octal values,
     \\n into a newline character, etc.
 
---first-message <string>
+-1, --first-message <string>
 :   Send this message first, once at the beginning of each connection.
     This option can be specified several times to send several initial
     messages at the beginning of each connection. If **--websocket** option
