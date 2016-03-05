@@ -10,6 +10,8 @@
 
 int transport_expr_lex(void);
 
+void tcpkali_push_state__file_or_qstring(void);
+
 #define yyterminate()   return END;
 
 %}
@@ -19,7 +21,7 @@ int transport_expr_lex(void);
 %option noyywrap stack
 
 %x in_expression
-%x in_quotes
+%x in_file_or_qstring
 
 WSP [\t\r\v\f\n ]
 
@@ -38,6 +40,32 @@ WSP [\t\r\v\f\n ]
     }
 
 <INITIAL><<EOF>>        yyterminate();
+
+<in_file_or_qstring>{
+
+    {WSP}+          /* Ignore whitespace */
+
+    [^"} ]+  {
+            yylval.tv_string.buf = strdup(yytext);
+            yylval.tv_string.len = yyleng;
+            yy_pop_state();
+            return filename;
+        }
+
+    \"([^\\"]|\\.)*\" {
+            size_t new_size = yyleng - 2;
+            char *new_str = malloc(new_size + 1);
+            memcpy(new_str, yytext + 1, new_size);
+            new_str[new_size] = '\0';
+            yylval.tv_string.buf = new_str;
+            yylval.tv_string.len = new_size;
+            yy_pop_state();
+            return quoted_string;
+        }
+
+    .       { yy_pop_state(); yyless(0); }
+
+}
 
 <in_expression>{
     "}"             { yy_pop_state(); return '}'; }
@@ -97,3 +125,8 @@ WSP [\t\r\v\f\n ]
 }
 
 %%
+
+void tcpkali_push_state__file_or_qstring(void) {
+    yy_push_state(in_file_or_qstring);
+}
+

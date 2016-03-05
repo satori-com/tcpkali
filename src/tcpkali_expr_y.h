@@ -54,7 +54,8 @@ extern int yydebug;
      TOK_uid = 262,
      string_token = 263,
      quoted_string = 264,
-     integer = 265
+     filename = 265,
+     integer = 266
    };
 #endif
 /* Tokens.  */
@@ -66,7 +67,8 @@ extern int yydebug;
 #define TOK_uid 262
 #define string_token 263
 #define quoted_string 264
-#define integer 265
+#define filename 265
+#define integer 266
 
 
 
@@ -74,7 +76,7 @@ extern int yydebug;
 typedef union YYSTYPE
 {
 /* Line 2058 of yacc.c  */
-#line 18 "tcpkali_expr_y.y"
+#line 21 "tcpkali_expr_y.y"
 
     tk_expr_t   *tv_expr;
     long         tv_long;
@@ -87,7 +89,7 @@ typedef union YYSTYPE
 
 
 /* Line 2058 of yacc.c  */
-#line 91 "tcpkali_expr_y.h"
+#line 93 "tcpkali_expr_y.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

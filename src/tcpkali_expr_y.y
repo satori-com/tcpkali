@@ -3,12 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "tcpkali_websocket.h"
 #include "tcpkali_expr.h"
 
 int yylex(void);
 int yyerror(const char *);
+
+void tcpkali_push_state__file_or_qstring(void);
 
 #define YYPARSE_PARAM   param
 #define YYERROR_VERBOSE
@@ -34,9 +37,10 @@ int yyerror(const char *);
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
 %token  <tv_string> quoted_string    "quoted string"
+%token  <tv_string> filename         "file name"
 %token  <tv_long>   integer
 
-%type   <tv_string> String
+%type   <tv_string> String FileOrData
 %type   <tv_expr>   NumericExpr
 %type   <tv_expr>   DataExpr
 %type   <tv_expr>   WSFrame
@@ -115,11 +119,9 @@ NumericExpr:
     }
 
 DataExpr:
-    WSFrame {
-        $$ = $1;
-    }
+    WSFrame
     /* \{ws.ping "Some payload"} */
-    | WSFrame quoted_string {
+    | WSFrame FileOrData {
         $$ = $1;
         $$->u.ws_frame.data = ($2).buf;
         $$->u.ws_frame.size = ($2).len;
@@ -127,12 +129,34 @@ DataExpr:
     }
 
 WSFrame:
-    TOK_ws '.' TOK_ws_opcode {
+    TOK_ws '.' TOK_ws_opcode { tcpkali_push_state__file_or_qstring(); } {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_WS_FRAME;
         $$->u.ws_frame.opcode = $3;
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
+
+FileOrData:
+    quoted_string
+    | filename {
+        const char *name = $1.buf;
+        FILE *fp = fopen(name, "r");
+        if(!fp) {
+            fprintf(stderr, "Can't open \"%s\": %s\n", name, strerror(errno));
+            exit(1);
+        }
+        fseek(fp, 0, SEEK_END);
+        $$.len = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        $$.buf = malloc($$.len + 1);
+        if($$.buf == NULL || fread($$.buf, 1, $$.len, fp) != $$.len) {
+            fprintf(stderr, "Can't read \"%s\": %s\n", name, strerror(errno));
+            exit(1);
+        }
+        fclose(fp);
+        $$.buf[$$.len] = '\0';
+    }
+    
 
 %%
 
