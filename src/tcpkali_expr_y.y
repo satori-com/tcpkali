@@ -129,12 +129,14 @@ DataExpr:
 WSPingPong:
     TOK_ws '.' TOK_ping {
         $$ = calloc(1, sizeof(*($$)));
-        $$->type = EXPR_WS_PING;
+        $$->type = EXPR_WS_FRAME;
+        $$->u.ws_frame.opcode = WS_OP_PING;
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
     | TOK_ws '.' TOK_pong {
         $$ = calloc(1, sizeof(*($$)));
-        $$->type = EXPR_WS_PONG;
+        $$->type = EXPR_WS_FRAME;
+        $$->u.ws_frame.opcode = WS_OP_PONG;
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
 

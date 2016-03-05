@@ -482,7 +482,7 @@ static const yytype_int8 yyrhs[] =
 static const yytype_uint8 yyrline[] =
 {
        0,    49,    49,    55,    61,    64,    69,    70,    81,    90,
-      94,    99,   106,   111,   118,   122,   130,   135
+      94,    99,   106,   111,   118,   122,   130,   136
 };
 #endif
 
@@ -1526,24 +1526,26 @@ yyreduce:
 #line 130 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
-        (yyval.tv_expr)->type = EXPR_WS_PING;
+        (yyval.tv_expr)->type = EXPR_WS_FRAME;
+        (yyval.tv_expr)->u.ws_frame.opcode = WS_OP_PING;
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
     break;
 
   case 17:
 /* Line 1792 of yacc.c  */
-#line 135 "tcpkali_expr_y.y"
+#line 136 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
-        (yyval.tv_expr)->type = EXPR_WS_PONG;
+        (yyval.tv_expr)->type = EXPR_WS_FRAME;
+        (yyval.tv_expr)->u.ws_frame.opcode = WS_OP_PONG;
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
     break;
 
 
 /* Line 1792 of yacc.c  */
-#line 1547 "tcpkali_expr_y.c"
+#line 1549 "tcpkali_expr_y.c"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1775,7 +1777,7 @@ yyreturn:
 
 
 /* Line 2055 of yacc.c  */
-#line 141 "tcpkali_expr_y.y"
+#line 143 "tcpkali_expr_y.y"
 
 
 int

@@ -54,9 +54,10 @@ free_expression(tk_expr_t *expr) {
     if(expr) {
         switch(expr->type) {
         case EXPR_DATA:
-        case EXPR_WS_PING:
-        case EXPR_WS_PONG:
             free((void *)expr->u.data.data);
+            break;
+        case EXPR_WS_FRAME:
+            free((void *)expr->u.ws_frame.data);
             break;
         case EXPR_MODULO:
             free_expression((void *)expr->u.modulo.expr);
@@ -134,14 +135,13 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         if(size < expr->u.data.size) return -1;
         memcpy(buf, expr->u.data.data, expr->u.data.size);
         return expr->u.data.size;
-    case EXPR_WS_PING:
-    case EXPR_WS_PONG:
+    case EXPR_WS_FRAME:
         if(size < expr->estimate_size) {
             return -1;
         } else {
-            size_t hdr_size = websocket_frame_header((uint8_t *)buf, size, client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER, expr->type == EXPR_WS_PING ? WS_OP_PING : WS_OP_PONG, expr->u.data.size);
-            memcpy(buf + hdr_size, expr->u.data.data, expr->u.data.size);
-            return (hdr_size + expr->u.data.size);
+            size_t hdr_size = websocket_frame_header((uint8_t *)buf, size, client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER, expr->u.ws_frame.opcode, expr->u.ws_frame.size);
+            memcpy(buf + hdr_size, expr->u.ws_frame.data, expr->u.ws_frame.size);
+            return (hdr_size + expr->u.ws_frame.size);
         }
     case EXPR_MODULO: {
         long v = 0;
@@ -207,8 +207,7 @@ struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr) {
     case EXPR_CONNECTION_UID:
         result.esw_prefix = expr;
         return result;
-    case EXPR_WS_PING:
-    case EXPR_WS_PONG:
+    case EXPR_WS_FRAME:
         result.esw_websocket_frame = expr;
         return result;
     case EXPR_CONCAT: {
@@ -260,11 +259,10 @@ unescape_expression(tk_expr_t *expr) {
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
         return;
-    case EXPR_WS_PING:
-    case EXPR_WS_PONG: {
-        size_t overhead = expr->estimate_size - expr->u.data.size;
-        unescape_data((char *)expr->u.data.data, &expr->u.data.size);
-        expr->estimate_size = expr->u.data.size + overhead;
+    case EXPR_WS_FRAME: {
+        size_t overhead = expr->estimate_size - expr->u.ws_frame.size;
+        unescape_data((char *)expr->u.ws_frame.data, &expr->u.ws_frame.size);
+        expr->estimate_size = expr->u.ws_frame.size + overhead;
         return;
         }
     }

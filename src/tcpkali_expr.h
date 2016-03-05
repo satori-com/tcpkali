@@ -27,15 +27,16 @@
 #ifndef TCPKALI_EXPR_H
 #define TCPKALI_EXPR_H
 
+#include "tcpkali_websocket.h"
+
 typedef struct tk_expr {
     enum {
         EXPR_DATA,
+        EXPR_WS_FRAME,       /* 'ws.ping', 'ws.pong', etc */
         EXPR_CONCAT,
         EXPR_MODULO,         /* '%' */
         EXPR_CONNECTION_PTR, /* 'connection.ptr' */
         EXPR_CONNECTION_UID, /* 'connection.uid' */
-        EXPR_WS_PING,        /* 'ws.ping' */
-        EXPR_WS_PONG,        /* 'ws.pong' */
     } type;
     union {
         struct {
@@ -43,12 +44,17 @@ typedef struct tk_expr {
             size_t size;
         } data;
         struct {
-            struct tk_expr *expr; /* Expression */
-            long modulo_value;    /* '... % 42' => 42 */
-        } modulo;
+            const char *data;
+            size_t      size;
+            enum ws_frame_opcode opcode;
+        } ws_frame;
         struct {
             struct tk_expr *expr[2];
         } concat;
+        struct {
+            struct tk_expr *expr; /* Expression */
+            long modulo_value;    /* '... % 42' => 42 */
+        } modulo;
     } u;
     size_t estimate_size;
     size_t dynamic;
