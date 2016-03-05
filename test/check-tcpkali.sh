@@ -43,6 +43,8 @@ check 12 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latenc
 check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
 
 check 14 "." ${TCPKALI} -m '\{ws.binary}'
-check 15 "." ${TCPKALI} -m '\{ws.binary /dev/null}'
-check 16 "." ${TCPKALI} -m '\{ws.binary "explicit data"}'
+check 15 "." ${TCPKALI} -m '\{ws.binary "explicit data"}'
+check 16 "." ${TCPKALI} -m '\{ws.binary </dev/null>}'
+check 17 "." ${TCPKALI} -m '\{ws.binary < "/dev/null" >}'
+check 18 "." ${TCPKALI} -m '\{ws.binary < /dev/null >}'
 

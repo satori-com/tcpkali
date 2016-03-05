@@ -10,8 +10,6 @@
 
 int transport_expr_lex(void);
 
-void tcpkali_push_state__file_or_qstring(void);
-
 #define yyterminate()   return END;
 
 %}
@@ -21,7 +19,7 @@ void tcpkali_push_state__file_or_qstring(void);
 %option noyywrap stack
 
 %x in_expression
-%x in_file_or_qstring
+%x in_filename
 
 WSP [\t\r\v\f\n ]
 
@@ -41,33 +39,48 @@ WSP [\t\r\v\f\n ]
 
 <INITIAL><<EOF>>        yyterminate();
 
-<in_file_or_qstring>{
+<in_filename>{
 
     {WSP}+          /* Ignore whitespace */
 
-    [^"} ]+  {
+    /* Any not too brace-y characters within <> brackets parsed as a filename.
+     * Backslashes are OK.
+     */
+    [^]["'{}<>() ]+   {
             yylval.tv_string.buf = strdup(yytext);
-            yylval.tv_string.len = yyleng;
-            yy_pop_state();
+            yylval.tv_string.len = strlen(yytext);
             return filename;
         }
 
-    \"([^\\"]|\\.)*\" {
+    /* A file can be fully enclosed in quotes, if you wish.
+     * Backslashes are OK if not before the quotation mark.
+     */
+    \"([^\\"\r\n]|\\[^"])*\" {
             size_t new_size = yyleng - 2;
             char *new_str = malloc(new_size + 1);
             memcpy(new_str, yytext + 1, new_size);
             new_str[new_size] = '\0';
             yylval.tv_string.buf = new_str;
             yylval.tv_string.len = new_size;
-            yy_pop_state();
-            return quoted_string;
+            return filename;
         }
 
-    .       { yy_pop_state(); yyless(0); }
+    /* "c:\windows" is ok, "c:\windows\" is not. */
+    [^>]+\\\"        {
+            fprintf(stderr, "Unexpected filename format: %s ends with a backslashed quote\n", yytext);
+            return -1;
+        }
 
+    [^> ]+        {
+            fprintf(stderr, "Unexpected filename format: %s\n", yytext);
+            return -1;
+        }
+
+    ">"         yy_pop_state();
 }
 
 <in_expression>{
+    "<"             { yy_push_state(in_filename); }
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
     "ws"            return TOK_ws;
@@ -104,7 +117,7 @@ WSP [\t\r\v\f\n ]
                     return quoted_string;
                 }
 
-    [^"} .]+     {
+    [^"<} .]+     {
                     fprintf(stderr,
                         "Unexpected token in message expression: %s\n",
                         yytext);
@@ -125,8 +138,4 @@ WSP [\t\r\v\f\n ]
 }
 
 %%
-
-void tcpkali_push_state__file_or_qstring(void) {
-    yy_push_state(in_file_or_qstring);
-}
 

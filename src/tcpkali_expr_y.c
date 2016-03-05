@@ -77,14 +77,12 @@
 int yylex(void);
 int yyerror(const char *);
 
-void tcpkali_push_state__file_or_qstring(void);
-
 #define YYPARSE_PARAM   param
 #define YYERROR_VERBOSE
 
 
 /* Line 371 of yacc.c  */
-#line 88 "tcpkali_expr_y.c"
+#line 86 "tcpkali_expr_y.c"
 
 # ifndef YY_NULL
 #  if defined __cplusplus && 201103L <= __cplusplus
@@ -150,7 +148,7 @@ extern int yydebug;
 typedef union YYSTYPE
 {
 /* Line 387 of yacc.c  */
-#line 21 "tcpkali_expr_y.y"
+#line 19 "tcpkali_expr_y.y"
 
     tk_expr_t   *tv_expr;
     long         tv_long;
@@ -163,7 +161,7 @@ typedef union YYSTYPE
 
 
 /* Line 387 of yacc.c  */
-#line 167 "tcpkali_expr_y.c"
+#line 165 "tcpkali_expr_y.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -191,7 +189,7 @@ int yyparse ();
 /* Copy the second part of user declarations.  */
 
 /* Line 390 of yacc.c  */
-#line 195 "tcpkali_expr_y.c"
+#line 193 "tcpkali_expr_y.c"
 
 #ifdef short
 # undef short
@@ -416,11 +414,11 @@ union yyalloc
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  18
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  10
+#define YYNNTS  9
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  19
+#define YYNRULES  18
 /* YYNRULES -- Number of states.  */
-#define YYNSTATES  30
+#define YYNSTATES  29
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
@@ -467,7 +465,7 @@ static const yytype_uint8 yytranslate[] =
 static const yytype_uint8 yyprhs[] =
 {
        0,     0,     3,     5,     8,    10,    13,    15,    18,    20,
-      24,    28,    32,    36,    40,    42,    45,    46,    51,    53
+      24,    28,    32,    36,    40,    42,    45,    49,    51
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS.  */
@@ -477,15 +475,15 @@ static const yytype_int8 yyrhs[] =
       22,    20,    -1,     8,    -1,    21,     8,    -1,    21,    -1,
       14,    23,    15,    -1,    14,    24,    15,    -1,    23,    16,
       11,    -1,     5,    17,     6,    -1,     5,    17,     7,    -1,
-      25,    -1,    25,    27,    -1,    -1,     3,    17,     4,    26,
-      -1,     9,    -1,    10,    -1
+      25,    -1,    25,    26,    -1,     3,    17,     4,    -1,     9,
+      -1,    10,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    53,    53,    59,    65,    68,    73,    74,    85,    94,
-      98,   103,   110,   115,   122,   124,   132,   132,   140,   141
+       0,    51,    51,    57,    63,    66,    71,    72,    83,    92,
+      96,   101,   108,   113,   120,   122,   130,   138,   139
 };
 #endif
 
@@ -500,7 +498,7 @@ static const char *const yytname[] =
   "\"file name\"", "integer", "\"some string or \\\\{expression}\"",
   "\"data and expressions\"", "'{'", "'}'", "'%'", "'.'", "$accept",
   "Grammar", "ByteSequencesAndExpressions", "String", "ByteSequenceOrExpr",
-  "NumericExpr", "DataExpr", "WSFrame", "$@1", "FileOrData", YY_NULL
+  "NumericExpr", "DataExpr", "WSFrame", "FileOrData", YY_NULL
 };
 #endif
 
@@ -518,14 +516,14 @@ static const yytype_uint16 yytoknum[] =
 static const yytype_uint8 yyr1[] =
 {
        0,    18,    19,    19,    20,    20,    21,    21,    22,    22,
-      22,    23,    23,    23,    24,    24,    26,    25,    27,    27
+      22,    23,    23,    23,    24,    24,    25,    26,    26
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
 static const yytype_uint8 yyr2[] =
 {
        0,     2,     1,     2,     1,     2,     1,     2,     1,     3,
-       3,     3,     3,     3,     1,     2,     0,     4,     1,     1
+       3,     3,     3,     3,     1,     2,     3,     1,     1
 };
 
 /* YYDEFACT[STATE-NAME] -- Default reduction number in state STATE-NUM.
@@ -535,13 +533,13 @@ static const yytype_uint8 yydefact[] =
 {
        0,     2,     6,     0,     0,     0,     8,     4,     0,     0,
        0,     0,    14,     1,     3,     7,     5,     0,     0,     9,
-       0,    10,    18,    19,    15,    16,    12,    13,    11,    17
+       0,    10,    17,    18,    15,    16,    12,    13,    11
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-      -1,     4,     5,     6,     7,    10,    11,    12,    29,    24
+      -1,     4,     5,     6,     7,    10,    11,    12,    24
 };
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
@@ -551,13 +549,13 @@ static const yytype_int8 yypact[] =
 {
        0,   -11,   -11,    -1,     3,     9,     7,    -7,     2,     4,
      -10,     5,     1,   -11,   -11,   -11,   -11,    12,     6,   -11,
-      11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11
+      11,   -11,   -11,   -11,   -11,   -11,   -11,   -11,   -11
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -11,   -11,    10,   -11,   -11,   -11,   -11,   -11,   -11,   -11
+     -11,   -11,    10,   -11,   -11,   -11,   -11,   -11,   -11
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -590,7 +588,7 @@ static const yytype_uint8 yystos[] =
 {
        0,     0,     8,    14,    19,    20,    21,    22,     3,     5,
       23,    24,    25,     0,     0,     8,    20,    17,    17,    15,
-      16,    15,     9,    10,    27,     4,     6,     7,    11,    26
+      16,    15,     9,    10,    26,     4,     6,     7,    11
 };
 
 #define yyerrok		(yyerrstatus = 0)
@@ -1392,7 +1390,7 @@ yyreduce:
     {
         case 2:
 /* Line 1792 of yacc.c  */
-#line 53 "tcpkali_expr_y.y"
+#line 51 "tcpkali_expr_y.y"
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -1403,7 +1401,7 @@ yyreduce:
 
   case 3:
 /* Line 1792 of yacc.c  */
-#line 59 "tcpkali_expr_y.y"
+#line 57 "tcpkali_expr_y.y"
     {
         *(tk_expr_t **)param = (yyvsp[(1) - (2)].tv_expr);
         return 0;
@@ -1412,7 +1410,7 @@ yyreduce:
 
   case 4:
 /* Line 1792 of yacc.c  */
-#line 65 "tcpkali_expr_y.y"
+#line 63 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = (yyvsp[(1) - (1)].tv_expr);
     }
@@ -1420,7 +1418,7 @@ yyreduce:
 
   case 5:
 /* Line 1792 of yacc.c  */
-#line 68 "tcpkali_expr_y.y"
+#line 66 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = concat_expressions((yyvsp[(1) - (2)].tv_expr), (yyvsp[(2) - (2)].tv_expr));
     }
@@ -1428,7 +1426,7 @@ yyreduce:
 
   case 7:
 /* Line 1792 of yacc.c  */
-#line 74 "tcpkali_expr_y.y"
+#line 72 "tcpkali_expr_y.y"
     {
         size_t len = (((yyvsp[(1) - (2)].tv_string)).len + ((yyvsp[(2) - (2)].tv_string)).len);
         char *p = malloc(len + 1);
@@ -1442,7 +1440,7 @@ yyreduce:
 
   case 8:
 /* Line 1792 of yacc.c  */
-#line 85 "tcpkali_expr_y.y"
+#line 83 "tcpkali_expr_y.y"
     {
         /* If there's nothing to parse, don't return anything */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
@@ -1456,7 +1454,7 @@ yyreduce:
 
   case 9:
 /* Line 1792 of yacc.c  */
-#line 94 "tcpkali_expr_y.y"
+#line 92 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = (yyvsp[(2) - (3)].tv_expr);
         (yyval.tv_expr)->dynamic = 1;
@@ -1465,7 +1463,7 @@ yyreduce:
 
   case 10:
 /* Line 1792 of yacc.c  */
-#line 98 "tcpkali_expr_y.y"
+#line 96 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = (yyvsp[(2) - (3)].tv_expr);
     }
@@ -1473,7 +1471,7 @@ yyreduce:
 
   case 11:
 /* Line 1792 of yacc.c  */
-#line 103 "tcpkali_expr_y.y"
+#line 101 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_MODULO;
@@ -1485,7 +1483,7 @@ yyreduce:
 
   case 12:
 /* Line 1792 of yacc.c  */
-#line 110 "tcpkali_expr_y.y"
+#line 108 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_PTR;
@@ -1495,7 +1493,7 @@ yyreduce:
 
   case 13:
 /* Line 1792 of yacc.c  */
-#line 115 "tcpkali_expr_y.y"
+#line 113 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_UID;
@@ -1505,7 +1503,7 @@ yyreduce:
 
   case 15:
 /* Line 1792 of yacc.c  */
-#line 124 "tcpkali_expr_y.y"
+#line 122 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = (yyvsp[(1) - (2)].tv_expr);
         (yyval.tv_expr)->u.ws_frame.data = ((yyvsp[(2) - (2)].tv_string)).buf;
@@ -1516,24 +1514,18 @@ yyreduce:
 
   case 16:
 /* Line 1792 of yacc.c  */
-#line 132 "tcpkali_expr_y.y"
-    { tcpkali_push_state__file_or_qstring(); }
-    break;
-
-  case 17:
-/* Line 1792 of yacc.c  */
-#line 132 "tcpkali_expr_y.y"
+#line 130 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_WS_FRAME;
-        (yyval.tv_expr)->u.ws_frame.opcode = (yyvsp[(3) - (4)].tv_opcode);
+        (yyval.tv_expr)->u.ws_frame.opcode = (yyvsp[(3) - (3)].tv_opcode);
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
     break;
 
-  case 19:
+  case 18:
 /* Line 1792 of yacc.c  */
-#line 141 "tcpkali_expr_y.y"
+#line 139 "tcpkali_expr_y.y"
     {
         const char *name = (yyvsp[(1) - (1)].tv_string).buf;
         FILE *fp = fopen(name, "r");
@@ -1556,7 +1548,7 @@ yyreduce:
 
 
 /* Line 1792 of yacc.c  */
-#line 1560 "tcpkali_expr_y.c"
+#line 1552 "tcpkali_expr_y.c"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1788,7 +1780,7 @@ yyreturn:
 
 
 /* Line 2055 of yacc.c  */
-#line 161 "tcpkali_expr_y.y"
+#line 159 "tcpkali_expr_y.y"
 
 
 int

@@ -76,7 +76,7 @@ extern int yydebug;
 typedef union YYSTYPE
 {
 /* Line 2058 of yacc.c  */
-#line 21 "tcpkali_expr_y.y"
+#line 19 "tcpkali_expr_y.y"
 
     tk_expr_t   *tv_expr;
     long         tv_long;

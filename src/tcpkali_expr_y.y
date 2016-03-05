@@ -11,8 +11,6 @@
 int yylex(void);
 int yyerror(const char *);
 
-void tcpkali_push_state__file_or_qstring(void);
-
 #define YYPARSE_PARAM   param
 #define YYERROR_VERBOSE
 
@@ -120,7 +118,7 @@ NumericExpr:
 
 DataExpr:
     WSFrame
-    /* \{ws.ping "Some payload"} */
+    /* \{ws.ping "Ping payload"} or \{ws.binary </dev/null>} */
     | WSFrame FileOrData {
         $$ = $1;
         $$->u.ws_frame.data = ($2).buf;
@@ -129,7 +127,7 @@ DataExpr:
     }
 
 WSFrame:
-    TOK_ws '.' TOK_ws_opcode { tcpkali_push_state__file_or_qstring(); } {
+    TOK_ws '.' TOK_ws_opcode {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_WS_FRAME;
         $$->u.ws_frame.opcode = $3;
