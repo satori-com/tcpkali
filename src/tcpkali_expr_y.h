@@ -48,27 +48,25 @@ extern int yydebug;
    enum yytokentype {
      END = 0,
      TOK_ws = 258,
-     TOK_ping = 259,
-     TOK_pong = 260,
-     TOK_connection = 261,
-     TOK_ptr = 262,
-     TOK_uid = 263,
-     string_token = 264,
-     quoted_string = 265,
-     integer = 266
+     TOK_ws_opcode = 259,
+     TOK_connection = 260,
+     TOK_ptr = 261,
+     TOK_uid = 262,
+     string_token = 263,
+     quoted_string = 264,
+     integer = 265
    };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
-#define TOK_ping 259
-#define TOK_pong 260
-#define TOK_connection 261
-#define TOK_ptr 262
-#define TOK_uid 263
-#define string_token 264
-#define quoted_string 265
-#define integer 266
+#define TOK_ws_opcode 259
+#define TOK_connection 260
+#define TOK_ptr 261
+#define TOK_uid 262
+#define string_token 263
+#define quoted_string 264
+#define integer 265
 
 
 
@@ -84,11 +82,12 @@ typedef union YYSTYPE
         char  *buf;
         size_t len;
     } tv_string;
+    enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
 
 /* Line 2058 of yacc.c  */
-#line 92 "tcpkali_expr_y.h"
+#line 91 "tcpkali_expr_y.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

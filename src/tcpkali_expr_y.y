@@ -22,12 +22,12 @@ int yyerror(const char *);
         char  *buf;
         size_t len;
     } tv_string;
+    enum ws_frame_opcode tv_opcode;
     char  tv_char;
 };
 
 %token              TOK_ws           "ws"
-%token              TOK_ping         "ping"
-%token              TOK_pong         "pong"
+%token <tv_opcode>  TOK_ws_opcode    "text, binary, close, ping, pong, continuation"
 %token              TOK_connection   "connection"
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
@@ -37,9 +37,9 @@ int yyerror(const char *);
 %token  <tv_long>   integer
 
 %type   <tv_string> String
-%type   <tv_expr>   NumericExpr     "numeric expression"
-%type   <tv_expr>   DataExpr        "data expression"
-%type   <tv_expr>   WSPingPong      "ws.ping or ws.pong"
+%type   <tv_expr>   NumericExpr
+%type   <tv_expr>   DataExpr
+%type   <tv_expr>   WSFrame
 %type   <tv_expr>   ByteSequenceOrExpr          "some string or \\{expression}"
 %type   <tv_expr>   ByteSequencesAndExpressions "data and expressions"
 
@@ -115,28 +115,22 @@ NumericExpr:
     }
 
 DataExpr:
-    WSPingPong {
+    WSFrame {
         $$ = $1;
     }
     /* \{ws.ping "Some payload"} */
-    | WSPingPong quoted_string {
+    | WSFrame quoted_string {
         $$ = $1;
-        $$->u.data.data = ($2).buf;
-        $$->u.data.size = ($2).len;
+        $$->u.ws_frame.data = ($2).buf;
+        $$->u.ws_frame.size = ($2).len;
         $$->estimate_size += ($2).len;
     }
 
-WSPingPong:
-    TOK_ws '.' TOK_ping {
+WSFrame:
+    TOK_ws '.' TOK_ws_opcode {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_WS_FRAME;
-        $$->u.ws_frame.opcode = WS_OP_PING;
-        $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
-    }
-    | TOK_ws '.' TOK_pong {
-        $$ = calloc(1, sizeof(*($$)));
-        $$->type = EXPR_WS_FRAME;
-        $$->u.ws_frame.opcode = WS_OP_PONG;
+        $$->u.ws_frame.opcode = $3;
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
 

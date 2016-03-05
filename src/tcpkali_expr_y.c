@@ -119,27 +119,25 @@ extern int yydebug;
    enum yytokentype {
      END = 0,
      TOK_ws = 258,
-     TOK_ping = 259,
-     TOK_pong = 260,
-     TOK_connection = 261,
-     TOK_ptr = 262,
-     TOK_uid = 263,
-     string_token = 264,
-     quoted_string = 265,
-     integer = 266
+     TOK_ws_opcode = 259,
+     TOK_connection = 260,
+     TOK_ptr = 261,
+     TOK_uid = 262,
+     string_token = 263,
+     quoted_string = 264,
+     integer = 265
    };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
-#define TOK_ping 259
-#define TOK_pong 260
-#define TOK_connection 261
-#define TOK_ptr 262
-#define TOK_uid 263
-#define string_token 264
-#define quoted_string 265
-#define integer 266
+#define TOK_ws_opcode 259
+#define TOK_connection 260
+#define TOK_ptr 261
+#define TOK_uid 262
+#define string_token 263
+#define quoted_string 264
+#define integer 265
 
 
 
@@ -155,11 +153,12 @@ typedef union YYSTYPE
         char  *buf;
         size_t len;
     } tv_string;
+    enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
 
 /* Line 387 of yacc.c  */
-#line 163 "tcpkali_expr_y.c"
+#line 162 "tcpkali_expr_y.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -187,7 +186,7 @@ int yyparse ();
 /* Copy the second part of user declarations.  */
 
 /* Line 390 of yacc.c  */
-#line 191 "tcpkali_expr_y.c"
+#line 190 "tcpkali_expr_y.c"
 
 #ifdef short
 # undef short
@@ -407,20 +406,20 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  13
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   22
+#define YYLAST   20
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  21
+#define YYNTOKENS  17
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  8
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  17
+#define YYNRULES  16
 /* YYNRULES -- Number of states.  */
-#define YYNSTATES  28
+#define YYNSTATES  27
 
 /* YYTRANSLATE(YYLEX) -- Bison symbol number corresponding to YYLEX.  */
 #define YYUNDEFTOK  2
-#define YYMAXUTOK   271
+#define YYMAXUTOK   267
 
 #define YYTRANSLATE(YYX)						\
   ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
@@ -431,8 +430,8 @@ static const yytype_uint8 yytranslate[] =
        0,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,    19,     2,     2,
-       2,     2,     2,     2,     2,     2,    20,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,    15,     2,     2,
+       2,     2,     2,     2,     2,     2,    16,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -440,7 +439,7 @@ static const yytype_uint8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,    17,     2,    18,     2,     2,     2,     2,
+       2,     2,     2,    13,     2,    14,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -454,8 +453,7 @@ static const yytype_uint8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
-       5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
-      15,    16
+       5,     6,     7,     8,     9,    10,    11,    12
 };
 
 #if YYDEBUG
@@ -464,25 +462,24 @@ static const yytype_uint8 yytranslate[] =
 static const yytype_uint8 yyprhs[] =
 {
        0,     0,     3,     5,     8,    10,    13,    15,    18,    20,
-      24,    28,    32,    36,    40,    42,    45,    49
+      24,    28,    32,    36,    40,    42,    45
 };
 
 /* YYRHS -- A `-1'-separated list of the rules' RHS.  */
 static const yytype_int8 yyrhs[] =
 {
-      22,     0,    -1,     0,    -1,    23,     0,    -1,    25,    -1,
-      25,    23,    -1,     9,    -1,    24,     9,    -1,    24,    -1,
-      17,    26,    18,    -1,    17,    27,    18,    -1,    26,    19,
-      11,    -1,     6,    20,     7,    -1,     6,    20,     8,    -1,
-      28,    -1,    28,    10,    -1,     3,    20,     4,    -1,     3,
-      20,     5,    -1
+      18,     0,    -1,     0,    -1,    19,     0,    -1,    21,    -1,
+      21,    19,    -1,     8,    -1,    20,     8,    -1,    20,    -1,
+      13,    22,    14,    -1,    13,    23,    14,    -1,    22,    15,
+      10,    -1,     5,    16,     6,    -1,     5,    16,     7,    -1,
+      24,    -1,    24,     9,    -1,     3,    16,     4,    -1
 };
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
        0,    49,    49,    55,    61,    64,    69,    70,    81,    90,
-      94,    99,   106,   111,   118,   122,   130,   136
+      94,    99,   106,   111,   118,   122,   130
 };
 #endif
 
@@ -491,14 +488,13 @@ static const yytype_uint8 yyrline[] =
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of expression\"", "error", "$undefined", "\"ws\"", "\"ping\"",
-  "\"pong\"", "\"connection\"", "\" ptr\"", "\"uid\"",
-  "\"arbitrary string\"", "\"quoted string\"", "integer",
-  "\"numeric expression\"", "\"data expression\"",
-  "\"ws.ping or ws.pong\"", "\"some string or \\\\{expression}\"",
+  "\"end of expression\"", "error", "$undefined", "\"ws\"",
+  "\"text, binary, close, ping, pong, continuation\"", "\"connection\"",
+  "\" ptr\"", "\"uid\"", "\"arbitrary string\"", "\"quoted string\"",
+  "integer", "\"some string or \\\\{expression}\"",
   "\"data and expressions\"", "'{'", "'}'", "'%'", "'.'", "$accept",
   "Grammar", "ByteSequencesAndExpressions", "String", "ByteSequenceOrExpr",
-  "NumericExpr", "DataExpr", "WSPingPong", YY_NULL
+  "NumericExpr", "DataExpr", "WSFrame", YY_NULL
 };
 #endif
 
@@ -508,23 +504,22 @@ static const char *const yytname[] =
 static const yytype_uint16 yytoknum[] =
 {
        0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-     265,   266,   267,   268,   269,   270,   271,   123,   125,    37,
-      46
+     265,   266,   267,   123,   125,    37,    46
 };
 # endif
 
 /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
 static const yytype_uint8 yyr1[] =
 {
-       0,    21,    22,    22,    23,    23,    24,    24,    25,    25,
-      25,    26,    26,    26,    27,    27,    28,    28
+       0,    17,    18,    18,    19,    19,    20,    20,    21,    21,
+      21,    22,    22,    22,    23,    23,    24
 };
 
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN.  */
 static const yytype_uint8 yyr2[] =
 {
        0,     2,     1,     2,     1,     2,     1,     2,     1,     3,
-       3,     3,     3,     3,     1,     2,     3,     3
+       3,     3,     3,     3,     1,     2,     3
 };
 
 /* YYDEFACT[STATE-NAME] -- Default reduction number in state STATE-NUM.
@@ -534,7 +529,7 @@ static const yytype_uint8 yydefact[] =
 {
        0,     2,     6,     0,     0,     0,     8,     4,     0,     0,
        0,     0,    14,     1,     3,     7,     5,     0,     0,     9,
-       0,    10,    15,    16,    17,    12,    13,    11
+       0,    10,    15,    16,    12,    13,    11
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
@@ -545,18 +540,18 @@ static const yytype_int8 yydefgoto[] =
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-#define YYPACT_NINF -14
+#define YYPACT_NINF -8
 static const yytype_int8 yypact[] =
 {
-       0,   -14,   -14,    -2,    13,    14,    -6,    -7,    -5,    -4,
-     -13,     1,     8,   -14,   -14,   -14,   -14,     3,     4,   -14,
-       9,   -14,   -14,   -14,   -14,   -14,   -14,   -14
+       0,    -8,    -8,    -1,     3,     7,    -3,    -7,    -2,     1,
+      -5,     2,     6,    -8,    -8,    -8,    -8,    14,     5,    -8,
+       9,    -8,    -8,    -8,    -8,    -8,    -8
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -14,   -14,    15,   -14,   -14,   -14,   -14,   -14
+      -8,    -8,    13,    -8,    -8,    -8,    -8,    -8
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]].  What to do in state STATE-NUM.  If
@@ -565,31 +560,31 @@ static const yytype_int8 yypgoto[] =
 #define YYTABLE_NINF -1
 static const yytype_uint8 yytable[] =
 {
-       1,     8,     2,    15,     9,    19,    20,    23,    24,     2,
-       3,    25,    26,    13,    14,    17,    18,     3,    22,    21,
-      27,     0,    16
+       1,     2,     8,    13,     9,    15,     3,    14,     2,    19,
+      20,    24,    25,     3,    17,    22,    21,    18,    23,    26,
+      16
 };
 
 #define yypact_value_is_default(Yystate) \
-  (!!((Yystate) == (-14)))
+  (!!((Yystate) == (-8)))
 
 #define yytable_value_is_error(Yytable_value) \
   YYID (0)
 
-static const yytype_int8 yycheck[] =
+static const yytype_uint8 yycheck[] =
 {
-       0,     3,     9,     9,     6,    18,    19,     4,     5,     9,
-      17,     7,     8,     0,     0,    20,    20,    17,    10,    18,
-      11,    -1,     7
+       0,     8,     3,     0,     5,     8,    13,     0,     8,    14,
+      15,     6,     7,    13,    16,     9,    14,    16,     4,    10,
+       7
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
    symbol of state STATE-NUM.  */
 static const yytype_uint8 yystos[] =
 {
-       0,     0,     9,    17,    22,    23,    24,    25,     3,     6,
-      26,    27,    28,     0,     0,     9,    23,    20,    20,    18,
-      19,    18,    10,     4,     5,     7,     8,    11
+       0,     0,     8,    13,    18,    19,    20,    21,     3,     5,
+      22,    23,    24,     0,     0,     8,    19,    16,    16,    14,
+      15,    14,     9,     4,     6,     7,    10
 };
 
 #define yyerrok		(yyerrstatus = 0)
@@ -1515,8 +1510,8 @@ yyreduce:
 #line 122 "tcpkali_expr_y.y"
     {
         (yyval.tv_expr) = (yyvsp[(1) - (2)].tv_expr);
-        (yyval.tv_expr)->u.data.data = ((yyvsp[(2) - (2)].tv_string)).buf;
-        (yyval.tv_expr)->u.data.size = ((yyvsp[(2) - (2)].tv_string)).len;
+        (yyval.tv_expr)->u.ws_frame.data = ((yyvsp[(2) - (2)].tv_string)).buf;
+        (yyval.tv_expr)->u.ws_frame.size = ((yyvsp[(2) - (2)].tv_string)).len;
         (yyval.tv_expr)->estimate_size += ((yyvsp[(2) - (2)].tv_string)).len;
     }
     break;
@@ -1527,25 +1522,14 @@ yyreduce:
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_WS_FRAME;
-        (yyval.tv_expr)->u.ws_frame.opcode = WS_OP_PING;
-        (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
-    }
-    break;
-
-  case 17:
-/* Line 1792 of yacc.c  */
-#line 136 "tcpkali_expr_y.y"
-    {
-        (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
-        (yyval.tv_expr)->type = EXPR_WS_FRAME;
-        (yyval.tv_expr)->u.ws_frame.opcode = WS_OP_PONG;
+        (yyval.tv_expr)->u.ws_frame.opcode = (yyvsp[(3) - (3)].tv_opcode);
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
     break;
 
 
 /* Line 1792 of yacc.c  */
-#line 1549 "tcpkali_expr_y.c"
+#line 1533 "tcpkali_expr_y.c"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1777,7 +1761,7 @@ yyreturn:
 
 
 /* Line 2055 of yacc.c  */
-#line 143 "tcpkali_expr_y.y"
+#line 137 "tcpkali_expr_y.y"
 
 
 int

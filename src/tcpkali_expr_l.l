@@ -43,8 +43,18 @@ WSP [\t\r\v\f\n ]
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
     "ws"            return TOK_ws;
-    "ping"          return TOK_ping;
-    "pong"          return TOK_pong;
+    "cont""inuation"?  { yylval.tv_opcode = WS_OP_CONTINUATION;
+                      return TOK_ws_opcode; }
+    "text"          { yylval.tv_opcode = WS_OP_TEXT_FRAME;
+                      return TOK_ws_opcode; }
+    "binary"        { yylval.tv_opcode = WS_OP_BINARY_FRAME;
+                      return TOK_ws_opcode; }
+    "close"         { yylval.tv_opcode = WS_OP_CLOSE;
+                      return TOK_ws_opcode; }
+    "ping"          { yylval.tv_opcode = WS_OP_PING;
+                      return TOK_ws_opcode; }
+    "pong"          { yylval.tv_opcode = WS_OP_PONG;
+                      return TOK_ws_opcode; }
     "connection"    return TOK_connection;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;

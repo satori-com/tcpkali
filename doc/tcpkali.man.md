@@ -162,7 +162,9 @@ Expression          Description
 
  connection.ptr     Pointer to a connection structure. Don't use.
 
- ws.ping, ws.pong   WebSocket PING or PONG frames.
+ ws.continuation,   Specify WebSocket frame types.
+ ws.ping, ws.pong,  Refer to RFC 6455, section 11.8.
+ ws.text, ws.binary
 
  EXPRESSION % *int* Remainder of the expression value divided by *int*.
 -----------------------------------------------------------------------
