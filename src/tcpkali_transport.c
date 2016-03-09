@@ -133,7 +133,8 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
 }
 
 
-static void message_collection_ensure_space(struct message_collection *mc, size_t need) {
+static void
+message_collection_ensure_space(struct message_collection *mc, size_t need) {
     /* Reallocate snippets array, if needed. */
     while(mc->snippets_count + need > mc->snippets_size) {
         mc->snippets_size = 2 * (mc->snippets_size ? mc->snippets_size : 8);
@@ -153,7 +154,8 @@ static void message_collection_ensure_space(struct message_collection *mc, size_
 
 void
 message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
-                       void *data, size_t size, int unescape, int parse_expressions) {
+                       void *data, size_t size, int unescape,
+                       int parse_expressions) {
     assert(mc->state == MC_EMBRYONIC);
 
     /* Verify that messages are properly kinded. */
@@ -201,7 +203,8 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
             message_collection_add_expr(mc, kind, expr);
             break;
         case EXPR_PARSE_FAILED:
-            /* parse_expression() would have already printed the failure reason */
+            /* parse_expression() would have already printed the failure reason
+             */
             exit(1);
         }
     } else {
@@ -210,8 +213,9 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
     }
 }
 
-void message_collection_add_expr(struct message_collection *mc, enum mc_snippet_kind kind, struct tk_expr *expr) {
-
+void
+message_collection_add_expr(struct message_collection *mc,
+                            enum mc_snippet_kind kind, struct tk_expr *expr) {
     while(expr) {
         message_collection_ensure_space(mc, 2);
 
@@ -327,10 +331,9 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
             char *tptr = (char *)data_spec->ptr + data_spec->total_size;
             assert(estimate_size
                    >= data_spec->total_size + snip->expr->estimate_size);
-            reified_size =
-                eval_expression(&tptr, estimate_size - data_spec->total_size,
-                                snip->expr, optional_cb, expr_cb_key, 0,
-                                (tws_side == TWS_SIDE_CLIENT));
+            reified_size = eval_expression(
+                &tptr, estimate_size - data_spec->total_size, snip->expr,
+                optional_cb, expr_cb_key, 0, (tws_side == TWS_SIDE_CLIENT));
             assert(reified_size >= 0);
             data = 0;
             size = reified_size;
@@ -347,8 +350,9 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                 if(snip->flags & MSK_EXPRESSION_FOUND) {
                     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
                     /* Save the websocket frame elsewhere temporarily */
-                    ws_frame_size = websocket_frame_header(
-                        tmpbuf, sizeof(tmpbuf), ws_side, WS_OP_TEXT_FRAME, size);
+                    ws_frame_size =
+                        websocket_frame_header(tmpbuf, sizeof(tmpbuf), ws_side,
+                                               WS_OP_TEXT_FRAME, size);
                     /* Move the data to the right to make space for framing */
                     memmove((char *)data_spec->ptr + data_spec->total_size
                                 + ws_frame_size,
@@ -360,7 +364,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                 } else {
                     ws_frame_size = websocket_frame_header(
                         (uint8_t *)data_spec->ptr + data_spec->total_size,
-                        estimate_size - data_spec->total_size, ws_side, WS_OP_TEXT_FRAME, size);
+                        estimate_size - data_spec->total_size, ws_side,
+                        WS_OP_TEXT_FRAME, size);
                 }
             }
         }

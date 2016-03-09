@@ -80,14 +80,15 @@ struct message_collection {
  * The function copies data.
  */
 void message_collection_add(struct message_collection *mc, enum mc_snippet_kind,
-                            void *data, size_t size, int unescape, int parse_expressions);
+                            void *data, size_t size, int unescape,
+                            int parse_expressions);
 
 /*
  * Add a new expression to the message collection.
  * The function takes over the expression pointer.
  */
-void message_collection_add_expr(struct message_collection *mc, enum mc_snippet_kind,
-                            struct tk_expr *);
+void message_collection_add_expr(struct message_collection *mc,
+                                 enum mc_snippet_kind, struct tk_expr *);
 
 /*
  * Finalize the collection, preventing new data to be added,

@@ -47,8 +47,8 @@
  * Write out a frame header to prefix a payload of given size.
  */
 size_t
-websocket_frame_header(uint8_t *buf, size_t size,
-                       enum websocket_side side, enum ws_frame_opcode opcode, size_t payload_size) {
+websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side side,
+                       enum ws_frame_opcode opcode, size_t payload_size) {
     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
     uint8_t *orig_buf_ptr;
 

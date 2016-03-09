@@ -55,7 +55,8 @@ enum websocket_side {
     WS_SIDE_CLIENT,
     WS_SIDE_SERVER,
 };
-size_t websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side, enum ws_frame_opcode, size_t payload_size);
+size_t websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side,
+                              enum ws_frame_opcode, size_t payload_size);
 
 
 /*

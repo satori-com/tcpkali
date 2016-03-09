@@ -32,7 +32,7 @@
 typedef struct tk_expr {
     enum {
         EXPR_DATA,
-        EXPR_WS_FRAME,       /* 'ws.ping', 'ws.pong', etc */
+        EXPR_WS_FRAME, /* 'ws.ping', 'ws.pong', etc */
         EXPR_CONCAT,
         EXPR_MODULO,         /* '%' */
         EXPR_CONNECTION_PTR, /* 'connection.ptr' */
@@ -45,7 +45,7 @@ typedef struct tk_expr {
         } data;
         struct {
             const char *data;
-            size_t      size;
+            size_t size;
             enum ws_frame_opcode opcode;
         } ws_frame;
         struct {
@@ -71,13 +71,13 @@ typedef struct tk_expr {
  * Parse the expression string of a given length into an expression.
  */
 enum parse_expression_result {
-    NO_EXPRESSION_FOUND,        /* Returns a trivial EXPR_DATA node, returned. */
-    EXPRESSIONS_FOUND,          /* One or more expressions found, returned. */
-    EXPR_PARSE_FAILED    /* Expressions parsing failed; expression not returned */
+    NO_EXPRESSION_FOUND, /* Returns a trivial EXPR_DATA node, returned. */
+    EXPRESSIONS_FOUND,   /* One or more expressions found, returned. */
+    EXPR_PARSE_FAILED /* Expressions parsing failed; expression not returned */
 };
-enum parse_expression_result
-parse_expression(tk_expr_t **, const char *expr_string, size_t size,
-                     int debug);
+enum parse_expression_result parse_expression(tk_expr_t **,
+                                              const char *expr_string,
+                                              size_t size, int debug);
 
 void free_expression(tk_expr_t *expr);
 
@@ -94,8 +94,10 @@ tk_expr_t *concat_expressions(tk_expr_t *, tk_expr_t *);
 
 
 /*
- * Split expression into three parts: prefix, predefined websocket frame, and the remainder.
- * Expression "foo\{ws.ping}bar" will be split to "foo", \{ws.ping} and "bar" expressions.
+ * Split expression into three parts: prefix, predefined websocket frame, and
+ * the remainder.
+ * Expression "foo\{ws.ping}bar" will be split to "foo", \{ws.ping} and "bar"
+ * expressions.
  * This function destroys the original expression.
  */
 struct esw_result {

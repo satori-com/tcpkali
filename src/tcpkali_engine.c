@@ -1265,7 +1265,7 @@ explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr,
                           struct connection *conn) {
     *buf_p = 0;
     ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0,
-                    conn->conn_type == CONN_OUTGOING);
+                                conn->conn_type == CONN_OUTGOING);
     assert(s >= 0);
     *size = s;
 }

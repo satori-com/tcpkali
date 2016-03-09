@@ -64,7 +64,7 @@ printable_data(char *buffer, size_t buf_size, const void *data,
         case 32 ... 33:
             *b++ = *p;
             break;
-        case '\\':  /* ascii 92 */
+        case '\\': /* ascii 92 */
             *b++ = '\\';
             *b++ = '\\';
             break;
@@ -94,8 +94,7 @@ unescape_data(void *data, size_t *initial_data_size) {
     char *w = data;
 
     /* Avoid unescaping non-existing string. */
-    if(data == NULL || (initial_data_size && !*initial_data_size))
-        return;
+    if(data == NULL || (initial_data_size && !*initial_data_size)) return;
 
     size_t data_size = initial_data_size ? *initial_data_size : strlen(data);
     char *end = data + data_size;

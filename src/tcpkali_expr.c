@@ -139,13 +139,18 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         if(size < expr->estimate_size) {
             return -1;
         } else {
-            size_t hdr_size = websocket_frame_header((uint8_t *)buf, size, client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER, expr->u.ws_frame.opcode, expr->u.ws_frame.size);
-            memcpy(buf + hdr_size, expr->u.ws_frame.data, expr->u.ws_frame.size);
+            size_t hdr_size = websocket_frame_header(
+                (uint8_t *)buf, size,
+                client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER,
+                expr->u.ws_frame.opcode, expr->u.ws_frame.size);
+            memcpy(buf + hdr_size, expr->u.ws_frame.data,
+                   expr->u.ws_frame.size);
             return (hdr_size + expr->u.ws_frame.size);
         }
     case EXPR_MODULO: {
         long v = 0;
-        (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v, client_mode);
+        (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v,
+                              client_mode);
         v %= expr->u.modulo.modulo_value;
         ssize_t s = snprintf(buf, size, "%ld", v);
         if(s < 0 || s > (ssize_t)size) return -1;
@@ -156,12 +161,13 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         assert((expr->u.concat.expr[0]->estimate_size
                 + expr->u.concat.expr[1]->estimate_size)
                <= size);
-        ssize_t size1 =
-            eval_expression(&buf, size, expr->u.concat.expr[0], cb, key, value, client_mode);
+        ssize_t size1 = eval_expression(&buf, size, expr->u.concat.expr[0], cb,
+                                        key, value, client_mode);
         if(size1 < 0) return -1;
         char *buf2 = buf + size1;
-        ssize_t size2 = eval_expression(&buf2, size - size1,
-                                        expr->u.concat.expr[1], cb, key, value, client_mode);
+        ssize_t size2 =
+            eval_expression(&buf2, size - size1, expr->u.concat.expr[1], cb,
+                            key, value, client_mode);
         if(size1 < 0) return -1;
         return size1 + size2;
     }
@@ -173,7 +179,8 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
     return -1;
 }
 
-tk_expr_t *concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
+tk_expr_t *
+concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
     if(expr1 && expr2) {
         tk_expr_t *expr = calloc(1, sizeof(*expr));
         expr->type = EXPR_CONCAT;
@@ -195,8 +202,9 @@ tk_expr_t *concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
  * Split result into parts that may be WS-framed, the WS frame itself,
  * and a remainder.
  */
-struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr) {
-    struct esw_result result = { 0, 0, 0 };
+struct esw_result
+expression_split_by_websocket_frame(tk_expr_t *expr) {
+    struct esw_result result = {0, 0, 0};
 
     if(!expr) return result;
 
@@ -211,32 +219,34 @@ struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr) {
         result.esw_websocket_frame = expr;
         return result;
     case EXPR_CONCAT: {
-            struct esw_result result0 = expression_split_by_websocket_frame(expr->u.concat.expr[0]);
-            struct esw_result result1 = expression_split_by_websocket_frame(expr->u.concat.expr[1]);
-            /* No websocket frames in both branches of concatenation */
-            if(result0.esw_websocket_frame == NULL
-                && result1.esw_websocket_frame == NULL) {
-                result.esw_prefix = expr;
-                return result;
-            }
-            expr->u.concat.expr[0] = NULL;
-            expr->u.concat.expr[1] = NULL;
-            free_expression(expr);
-            expr = NULL;
-            if(result0.esw_websocket_frame) {
-                result0.esw_remainder = concat_expressions(
-                        concat_expressions(result0.esw_remainder,
-                            result1.esw_prefix),
-                        concat_expressions(result1.esw_websocket_frame,
-                            result1.esw_remainder));
-                return result0;
-            }
-            assert(result0.esw_prefix != NULL);
-            assert(result0.esw_websocket_frame == NULL);
-            assert(result0.esw_remainder == NULL);
-            result1.esw_prefix = concat_expressions(result0.esw_prefix, result1.esw_prefix);
-            return result1;
+        struct esw_result result0 =
+            expression_split_by_websocket_frame(expr->u.concat.expr[0]);
+        struct esw_result result1 =
+            expression_split_by_websocket_frame(expr->u.concat.expr[1]);
+        /* No websocket frames in both branches of concatenation */
+        if(result0.esw_websocket_frame == NULL
+           && result1.esw_websocket_frame == NULL) {
+            result.esw_prefix = expr;
+            return result;
         }
+        expr->u.concat.expr[0] = NULL;
+        expr->u.concat.expr[1] = NULL;
+        free_expression(expr);
+        expr = NULL;
+        if(result0.esw_websocket_frame) {
+            result0.esw_remainder = concat_expressions(
+                concat_expressions(result0.esw_remainder, result1.esw_prefix),
+                concat_expressions(result1.esw_websocket_frame,
+                                   result1.esw_remainder));
+            return result0;
+        }
+        assert(result0.esw_prefix != NULL);
+        assert(result0.esw_websocket_frame == NULL);
+        assert(result0.esw_remainder == NULL);
+        result1.esw_prefix =
+            concat_expressions(result0.esw_prefix, result1.esw_prefix);
+        return result1;
+    }
     }
 
     return result;
@@ -253,7 +263,7 @@ unescape_expression(tk_expr_t *expr) {
         unescape_expression(expr->u.concat.expr[0]);
         unescape_expression(expr->u.concat.expr[1]);
         expr->estimate_size = expr->u.concat.expr[0]->estimate_size
-                            + expr->u.concat.expr[1]->estimate_size;
+                              + expr->u.concat.expr[1]->estimate_size;
         return;
     case EXPR_MODULO:
     case EXPR_CONNECTION_PTR:
@@ -264,6 +274,6 @@ unescape_expression(tk_expr_t *expr) {
         unescape_data((char *)expr->u.ws_frame.data, &expr->u.ws_frame.size);
         expr->estimate_size = expr->u.ws_frame.size + overhead;
         return;
-        }
+    }
     }
 }
