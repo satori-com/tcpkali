@@ -56,7 +56,8 @@ enum websocket_side {
     WS_SIDE_SERVER,
 };
 size_t websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side,
-                              enum ws_frame_opcode, int fin, size_t payload_size);
+                              enum ws_frame_opcode, int fin,
+                              size_t payload_size);
 
 /*
  * Detect the Websocket handshake in the stream and accept the handshake.

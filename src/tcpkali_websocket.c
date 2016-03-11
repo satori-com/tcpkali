@@ -48,7 +48,8 @@
  */
 size_t
 websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side side,
-                       enum ws_frame_opcode opcode, int fin, size_t payload_size) {
+                       enum ws_frame_opcode opcode, int fin,
+                       size_t payload_size) {
     uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
     uint8_t *orig_buf_ptr;
 
@@ -66,7 +67,7 @@ websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side side,
         enum ws_frame_opcode opcode : 4;
         unsigned int rsvs : 3;
         unsigned int fin : 1;
-    } first_byte = {.opcode = opcode, .fin = (fin != 0) };
+    } first_byte = {.opcode = opcode, .fin = (fin != 0)};
 
     *buf++ = *(uint8_t *)&first_byte;
 
