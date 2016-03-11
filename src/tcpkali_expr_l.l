@@ -104,6 +104,7 @@ WSP [\t\r\v\f\n ]
             return integer;
         }
     "."             return '.';
+    "..."           return TOK_ellipsis;
     "%"             return '%';
 
 

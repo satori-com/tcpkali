@@ -47,6 +47,7 @@ typedef struct tk_expr {
             const char *data;
             size_t size;
             enum ws_frame_opcode opcode;
+            int fin;
         } ws_frame;
         struct {
             struct tk_expr *expr[2];

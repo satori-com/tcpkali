@@ -352,7 +352,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     /* Save the websocket frame elsewhere temporarily */
                     ws_frame_size =
                         websocket_frame_header(tmpbuf, sizeof(tmpbuf), ws_side,
-                                               WS_OP_TEXT_FRAME, size);
+                                               WS_OP_TEXT_FRAME, 1, size);
                     /* Move the data to the right to make space for framing */
                     memmove((char *)data_spec->ptr + data_spec->total_size
                                 + ws_frame_size,
@@ -365,7 +365,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     ws_frame_size = websocket_frame_header(
                         (uint8_t *)data_spec->ptr + data_spec->total_size,
                         estimate_size - data_spec->total_size, ws_side,
-                        WS_OP_TEXT_FRAME, size);
+                        WS_OP_TEXT_FRAME, 1, size);
                 }
             }
         }

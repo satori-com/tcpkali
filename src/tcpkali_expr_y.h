@@ -52,10 +52,11 @@ extern int yydebug;
      TOK_connection = 260,
      TOK_ptr = 261,
      TOK_uid = 262,
-     string_token = 263,
-     quoted_string = 264,
-     filename = 265,
-     integer = 266
+     TOK_ellipsis = 263,
+     string_token = 264,
+     quoted_string = 265,
+     filename = 266,
+     integer = 267
    };
 #endif
 /* Tokens.  */
@@ -65,10 +66,11 @@ extern int yydebug;
 #define TOK_connection 260
 #define TOK_ptr 261
 #define TOK_uid 262
-#define string_token 263
-#define quoted_string 264
-#define filename 265
-#define integer 266
+#define TOK_ellipsis 263
+#define string_token 264
+#define quoted_string 265
+#define filename 266
+#define integer 267
 
 
 
@@ -89,7 +91,7 @@ typedef union YYSTYPE
 
 
 /* Line 2058 of yacc.c  */
-#line 93 "tcpkali_expr_y.h"
+#line 95 "tcpkali_expr_y.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

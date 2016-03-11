@@ -32,6 +32,7 @@ int yyerror(const char *);
 %token              TOK_connection   "connection"
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
+%token              TOK_ellipsis     "..."
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
 %token  <tv_string> quoted_string    "quoted string"
@@ -40,8 +41,7 @@ int yyerror(const char *);
 
 %type   <tv_string> String FileOrData
 %type   <tv_expr>   NumericExpr
-%type   <tv_expr>   DataExpr
-%type   <tv_expr>   WSFrame
+%type   <tv_expr>   WSBasicFrame WSFrameWithData WSFrameFinalized
 %type   <tv_expr>   ByteSequenceOrExpr          "some string or \\{expression}"
 %type   <tv_expr>   ByteSequencesAndExpressions "data and expressions"
 
@@ -93,7 +93,7 @@ ByteSequenceOrExpr:
         $$ = $2;
         $$->dynamic = 1;
     }
-    | '{' DataExpr '}' {
+    | '{' WSFrameFinalized '}' {
         $$ = $2;
     }
 
@@ -116,21 +116,38 @@ NumericExpr:
         $$->estimate_size = sizeof("100000000000000");
     }
 
-DataExpr:
-    WSFrame
-    /* \{ws.ping "Ping payload"} or \{ws.binary </dev/null>} */
-    | WSFrame FileOrData {
+WSFrameFinalized:
+    WSFrameWithData
+    /* \{ws.ping ...} (yes, tree dots!) */
+    | WSFrameWithData TOK_ellipsis {
         $$ = $1;
-        $$->u.ws_frame.data = ($2).buf;
-        $$->u.ws_frame.size = ($2).len;
+        $$->u.ws_frame.fin = 0; /* Expect continuation. */
+    }
+
+WSFrameWithData:
+    WSBasicFrame
+    /* \{ws.ping "Ping payload"} or \{ws.binary </dev/null>} */
+    | WSFrameWithData FileOrData {
+        $$ = $1;
+        /* Combine old data with new data. */
+        size_t total_size = $$->u.ws_frame.size + ($2).len;
+        char *p = malloc(total_size + 1);
+        assert(p);
+        memcpy(p, $$->u.ws_frame.data, $$->u.ws_frame.size);
+        memcpy(p + $$->u.ws_frame.size, ($2).buf, ($2).len);
+        p[total_size] = '\0';
+        free((void *)$$->u.ws_frame.data);
+        $$->u.ws_frame.data = p;
+        $$->u.ws_frame.size = total_size;
         $$->estimate_size += ($2).len;
     }
 
-WSFrame:
+WSBasicFrame:
     TOK_ws '.' TOK_ws_opcode {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_WS_FRAME;
         $$->u.ws_frame.opcode = $3;
+        $$->u.ws_frame.fin = 1; /* Complete frame */
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
 
