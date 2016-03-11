@@ -2,6 +2,7 @@
     * Added -r@<Latency> form to measure message rate at a given latency.
     * Websocket frame types in expressions: \{ws.ping}, \{ws.pong}, etc.
     * Websocket frames accept files: \{ws.binary <image.png>}.
+    * Websocket frames can be non-final: \{ws.binary ...}.
 
 0.8:    2016-Jan-15
     * Added --latency-connect to measure connect latency.
