@@ -117,9 +117,9 @@ Open connection to the local WebSocket server, send hello, and wait:
 
 Open connection to the local server and send tons of empty JSON frames:
 
-    tcpkali --websocket --message "{}" 127.1:80
+    tcpkali --websocket --message "\{ws.text}" 127.1:80
 
-Open connection to the local server and send a JSON frame every second:
+Send a binary frame with a picture every second (angle brackets are literal):
 
-    tcpkali --ws -m "{}" -r1 127.1:80
+    tcpkali --ws -m "\{ws.binary <image.png>}" -r1 127.1:80
 
