@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014  Machine Zone, Inc.
+ * Copyright (c) 2014, 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -33,7 +33,7 @@
 
 #include "tcpkali_terminfo.h"
 
-static int *flagvar;
+static sig_atomic_t *flagvar;
 static void
 signal_handler(int __attribute__((unused)) sig) {
     fprintf(stderr, "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
@@ -49,7 +49,7 @@ block_term_signals() {
 }
 
 void
-flagify_term_signals(int *flag) {
+flagify_term_signals(sig_atomic_t *flag) {
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);

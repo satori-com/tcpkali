@@ -232,7 +232,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                                  int max_connections, double epoch_end,
                                  struct stats_checkpoint *checkpoint,
                                  mavg traffic_mavgs[2], Statsd *statsd,
-                                 int *term_flag, enum work_phase phase,
+                                 sig_atomic_t *term_flag, enum work_phase phase,
                                  struct rate_modulator *rate_modulator,
                                  int print_stats) {
     tk_now_update(TK_DEFAULT);

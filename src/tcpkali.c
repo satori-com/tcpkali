@@ -785,7 +785,7 @@ main(int argc, char **argv) {
      * Has to be run after all other threads are run, otherwise
      * a signal can be delivered to a wrong thread.
      */
-    int term_flag = 0;
+    sig_atomic_t term_flag = 0;
     flagify_term_signals(&term_flag);
 
     /*
