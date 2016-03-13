@@ -28,6 +28,10 @@
 #define TCPKALI_IFACE_H
 
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 /*
  * A list of IPv4/IPv6 addresses.
