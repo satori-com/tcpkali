@@ -32,6 +32,7 @@
 #include "tcpkali_atomic.h"
 #include "tcpkali_engine.h"
 #include "tcpkali_statsd.h"
+#include "tcpkali_signals.h"
 
 enum work_phase { PHASE_ESTABLISHING_CONNECTIONS, PHASE_STEADY_STATE };
 
@@ -77,7 +78,7 @@ enum oc_return_value {
 enum oc_return_value open_connections_until_maxed_out(
     struct engine *eng, double connect_rate, int max_connections,
     double epoch_end, struct stats_checkpoint *checkpoint,
-    mavg traffic_mavgs[2], Statsd *statsd, int *term_flag,
+    mavg traffic_mavgs[2], Statsd *statsd, sig_atomic_t *term_flag,
     enum work_phase phase, struct rate_modulator *, int print_stats);
 
 #endif /* TCPKALI_RUN_H */

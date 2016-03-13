@@ -27,6 +27,8 @@
 #ifndef TCPKALI_SIGNAL_H
 #define TCPKALI_SIGNAL_H
 
+#include <signal.h>
+
 /*
  * Protect this thread from receiving term (SIGINT) signals.
  */
