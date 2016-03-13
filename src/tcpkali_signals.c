@@ -28,54 +28,27 @@
 #define _POSIX_C_SOURCE 200112
 #define _XOPEN_SOURCE 600
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <signal.h>
-#include <pthread.h>
 
 #include "tcpkali_terminfo.h"
-
-/* Condition on which a printer thread waits to print a "Ctrl+C" line. */
-static pthread_cond_t printer_cond;
-static pthread_cond_t printer_ack_cond;
-static pthread_mutex_t printer_lock;
-
-/*
- * When Ctrl+C is pressed, sometimes we linger and do not terminate
- * fast enough. Therefore we need to print something on the screen.
- * We can't do it in a signal handler (not async-signal-safe),
- * and we don't do it several times. So there's a function that report
- * that we've seen the termination signal (Ctrl+C).
- */
-static void *
-courtesy_ctrlc_printer(void *fp) {
-    pthread_mutex_lock(&printer_lock);
-    pthread_cond_wait(&printer_cond, &printer_lock);
-    fprintf(fp, "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
-    fflush(fp);
-    pthread_cond_signal(&printer_ack_cond);
-    pthread_mutex_unlock(&printer_lock);
-
-    return NULL;
-}
-
-static void
-spawn_courtesy_ctrlc_printer() {
-    pthread_cond_init(&printer_cond, NULL);
-    pthread_cond_init(&printer_ack_cond, NULL);
-    pthread_mutex_init(&printer_lock, NULL);
-    pthread_t thr;
-    (void)pthread_create(&thr, NULL, courtesy_ctrlc_printer,
-                         fdopen(fileno(stderr), "w"));
-}
 
 static sig_atomic_t *flagvar;
 static void
 signal_handler(int __attribute__((unused)) sig) {
     /* Wait until another thread output Ctrl+C notice to standard error. */
-    pthread_mutex_lock(&printer_lock);
-    pthread_cond_signal(&printer_cond);
-    pthread_cond_wait(&printer_ack_cond, &printer_lock);
-    pthread_mutex_unlock(&printer_lock);
+
+    char buf[128];
+    int len = snprintf(buf, sizeof(buf), "%sCtrl+C pressed, finishing up...\n",
+                       tcpkali_clear_eol());
+    if(len > 0 && (size_t)len < sizeof(buf)) {
+        /* If we can't write to stderr atomically when the user is
+         * interrupting the program, we have a bigger mess;
+         * don't attempt to rectify it here. Partial write is ok.
+         */
+        (void)write(STDERR_FILENO, buf, len);
+    }
 
     *flagvar = 1;
 }
@@ -91,8 +64,6 @@ block_term_signals() {
 void
 flagify_term_signals(sig_atomic_t *flag) {
     sigset_t set;
-
-    spawn_courtesy_ctrlc_printer();
 
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
