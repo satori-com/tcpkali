@@ -810,6 +810,8 @@ engine_initiate_new_connections(struct engine *eng, size_t n_req) {
                          % eng->n_workers;
             int fd = eng->loops[worker].private_control_pipe_wr;
             int wrote = write(fd, buf, 1);
+            if(wrote == -1 && errno == EINTR) /* Ctrl+C? */
+                return n;
             assert(wrote == 1);
             n++;
         }
@@ -822,6 +824,7 @@ engine_initiate_new_connections(struct engine *eng, size_t n_req) {
             int wrote = write(fd, buf, current_batch);
             if(wrote == -1) {
                 if(errno == EAGAIN) break;
+                if(errno == EINTR) return n; /* Ctrl+C? */
                 assert(wrote != -1);
             }
             if(wrote > 0) n += wrote;
