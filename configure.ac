@@ -14,6 +14,13 @@ AC_PROG_CPP
 AC_PROG_INSTALL
 AM_PROG_LEX
 
+AX_PTHREAD([])
+dnl Global CFLAGS, for tcpkali and its third-party dependencies.
+
+CC="${PTHREAD_CC}"
+LIBS="${PTHREAD_LIBS} ${LIBS}"
+CFLAGS="${CFLAGS} ${PTHREAD_CFLAGS}"
+
 AC_CHECK_PROGS([YACC], ['bison -y' byacc])
 AS_IF([test "x${YACC}" == "x"], [AC_MSG_ERROR([
     ${PACKAGE_NAME} requires bison or byacc, plain yacc doesn't count.
@@ -28,9 +35,6 @@ m4_include([m4/ax_check_compile_flag.m4])
 m4_include([m4/ax_make_optional_include.m4])
 
 AX_CHECK_GNU_STYLE_OPTIONAL_INCLUDE()
-
-dnl Global CFLAGS, for tcpkali and its third-party dependencies.
-AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS="$CFLAGS -pthread"])
 
 dnl tcpkali-specific CFLAGS.
 AX_CHECK_COMPILE_FLAG([-W], [TK_CFLAGS="$TK_CFLAGS -W"])
