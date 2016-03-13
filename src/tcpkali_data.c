@@ -181,6 +181,10 @@ read_in_file(const char *filename, char **data, size_t *size) {
     }
 
     *data = malloc(off + 1);
+    if(*data == NULL) {
+        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+        return -1;
+    }
     size_t r = fread(*data, 1, off, fp);
     assert((long)r == off);
     (*data)[off] = '\0'; /* Just in case. */

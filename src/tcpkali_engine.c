@@ -357,7 +357,11 @@ engine_start(struct engine_params params) {
     eng->n_workers = n_workers;
     eng->global_control_pipe_wr = gctl_pipe_wr;
     eng->global_feedback_pipe_rd = gfbk_pipe_rd;
-    pthread_mutex_init(&eng->serialize_output_lock, 0);
+    if(pthread_mutex_init(&eng->serialize_output_lock, 0) != 0) {
+        /* At this stage in the program, no point to continue. */
+        assert(!"Should really be unreachable");
+        return NULL;
+    }
 
     /*
      * Initialize the Boyer-Moore-Horspool occurrences table once,
@@ -406,7 +410,10 @@ engine_start(struct engine_params params) {
             DEBUG(DBG_DETAIL, "Initialized HdrHistogram with size %ld\n",
                   (long)hdr_get_memory_size(largs->marker_histogram_local));
         }
-        pthread_mutex_init(&largs->shared_histograms_lock, 0);
+        if(pthread_mutex_init(&largs->shared_histograms_lock, 0) != 0) {
+            /* At this stage in the program, no point to continue. */
+            assert(!"Should really be unreachable");
+        }
 
         int private_pipe[2];
         int rc = pipe(private_pipe);
