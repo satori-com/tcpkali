@@ -1,4 +1,4 @@
-AC_INIT(tcpkali, 0.8.x, lwalkin@machinezone.com)
+AC_INIT([tcpkali],[0.8.x],[lwalkin@machinezone.com])
 
 AC_CONFIG_SRCDIR([src/tcpkali.c])
 AC_CONFIG_AUX_DIR(config)
@@ -7,7 +7,7 @@ AC_CONFIG_MACRO_DIR(m4)
 
 AC_CONFIG_HEADER([config.h])
 
-AM_PROG_LIBTOOL
+LT_INIT
 
 AC_PROG_CC
 AC_PROG_CPP
