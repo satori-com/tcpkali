@@ -34,21 +34,21 @@
 
 #include "tcpkali_terminfo.h"
 
+static struct {
+    size_t len;
+    char buf[64];
+} ctrlc_message;
+
 static sig_atomic_t *flagvar;
 static void
 signal_handler(int __attribute__((unused)) sig) {
     /* Wait until another thread output Ctrl+C notice to standard error. */
 
-    char buf[128];
-    int len = snprintf(buf, sizeof(buf), "%sCtrl+C pressed, finishing up...\n",
-                       tcpkali_clear_eol());
-    if(len > 0 && (size_t)len < sizeof(buf)) {
-        /* If we can't write to stderr atomically when the user is
-         * interrupting the program, we have a bigger mess;
-         * don't attempt to rectify it here. Partial write is ok.
-         */
-        (void)write(STDERR_FILENO, buf, len);
-    }
+    /* If we can't write to stderr atomically when the user is
+     * interrupting the program, we have a bigger mess;
+     * don't attempt to rectify it here. Partial write is ok.
+     */
+    (void)write(STDERR_FILENO, ctrlc_message.buf, ctrlc_message.len);
 
     *flagvar = 1;
 }
@@ -64,6 +64,14 @@ block_term_signals() {
 void
 flagify_term_signals(sig_atomic_t *flag) {
     sigset_t set;
+
+    /* Pre-create the Ctrl+C message to be async-signal-safe. */
+    int len = snprintf(ctrlc_message.buf, sizeof(ctrlc_message.buf),
+                                 "%sCtrl+C pressed, finishing up...\n",
+                                 tcpkali_clear_eol());
+    if(len > 0 && (size_t)len < sizeof(ctrlc_message.buf)) {
+        ctrlc_message.len = len;
+    }
 
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
