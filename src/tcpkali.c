@@ -959,7 +959,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --dump-{all,all-in,all-out}  Dump i/o data for all connections\n"
     "  --nagle {on|off}             Control Nagle algorithm (set TCP_NODELAY)\n"
     "  --rcvbuf <SizeBytes>         Set TCP receive buffers (set SO_RCVBUF)\n"
-    "  --sndbuf <SizeBytes>         Set TCP rend buffers (set SO_SNDBUF)\n"
+    "  --sndbuf <SizeBytes>         Set TCP send buffers (set SO_SNDBUF)\n"
     "  --source-ip <IP>             Use the specified IP address to connect\n"
     "  --write-combine off          Disable batching adjacent writes\n"
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
