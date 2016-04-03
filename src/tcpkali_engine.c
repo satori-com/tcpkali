@@ -1258,12 +1258,6 @@ explode_data_template(struct message_collection *mc,
             out_data, mc, expr_callback, conn, tws_side);
         assert(new_data_ptr == out_data);
 
-        char tmpbuf[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(out_data->total_size)];
-
-        DEBUG(DBG_DATA, "Connection data: %s\n",
-              printable_data(tmpbuf, sizeof(tmpbuf), out_data->ptr,
-                             out_data->total_size, 1));
-
         replicate_payload(out_data, REPLICATE_MAX_SIZE);
         assert(out_data->ptr);
     }
