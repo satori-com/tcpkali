@@ -1735,14 +1735,27 @@ accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  */
 static void
 debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
-    char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
+    char stack_buffer[4000];
+    char *buffer = stack_buffer;
+    size_t buf_size = PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size);
+    if(buf_size > sizeof(stack_buffer)) {
+        /* This is used only for debugging of an otherwise expensive dataset.
+         * We could have cached the malloc result, but that'd be a non-local
+         * complication, yielding negligible performance benefit
+         * (after all, we're here to print a multi-kilobyte message dump).
+         */
+        buffer = malloc(buf_size);
+        assert(buffer);
+    }
     fprintf(stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n", tcpkali_clear_eol(),
             prefix, fd, (long)size,
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL),
-            printable_data(buffer, sizeof(buffer), data, size, 0),
+            printable_data(buffer, buf_size, data, size, 0),
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL));
+    if(buffer != stack_buffer)
+        free(buffer);
 }
 
 static enum lb_return_value {
