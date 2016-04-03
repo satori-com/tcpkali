@@ -1968,7 +1968,7 @@ latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
                 "Sending messages too fast, "
                 "not receiving them back fast enough.\n"
                 "Check that the --latency-marker data is being received back.\n"
-                "Use --verbose 3 to dump received message data.\n");
+                "Use -d option to dump received message data.\n");
             exit(1);
         }
     }
@@ -2031,7 +2031,7 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
             fprintf(stderr,
                     "More messages received than sent. "
                     "Choose a different --latency-marker.\n"
-                    "Use --verbose 3 to dump received message data.\n");
+                    "Use -d option to dump received message data.\n");
             exit(1);
         }
     }
