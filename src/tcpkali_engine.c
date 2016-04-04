@@ -1747,15 +1747,13 @@ debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
         buffer = malloc(buf_size);
         assert(buffer);
     }
-    fprintf(stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n", tcpkali_clear_eol(),
-            prefix, fd, (long)size,
-            tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
-            tk_attr(TKA_NORMAL),
-            printable_data(buffer, buf_size, data, size, 0),
-            tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
-            tk_attr(TKA_NORMAL));
-    if(buffer != stack_buffer)
-        free(buffer);
+    fprintf(
+        stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n", tcpkali_clear_eol(), prefix,
+        fd, (long)size, tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
+        tk_attr(TKA_NORMAL), printable_data(buffer, buf_size, data, size, 0),
+        tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
+        tk_attr(TKA_NORMAL));
+    if(buffer != stack_buffer) free(buffer);
 }
 
 static enum lb_return_value {

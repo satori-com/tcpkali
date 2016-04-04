@@ -66,9 +66,9 @@ flagify_term_signals(sig_atomic_t *flag) {
     sigset_t set;
 
     /* Pre-create the Ctrl+C message to be async-signal-safe. */
-    int len = snprintf(ctrlc_message.buf, sizeof(ctrlc_message.buf),
-                                 "%sCtrl+C pressed, finishing up...\n",
-                                 tcpkali_clear_eol());
+    int len =
+        snprintf(ctrlc_message.buf, sizeof(ctrlc_message.buf),
+                 "%sCtrl+C pressed, finishing up...\n", tcpkali_clear_eol());
     if(len > 0 && (size_t)len < sizeof(ctrlc_message.buf)) {
         ctrlc_message.len = len;
     }
