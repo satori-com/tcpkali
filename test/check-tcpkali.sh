@@ -48,3 +48,5 @@ check 16 "." ${TCPKALI} -m '\{ws.binary </dev/null>}'
 check 17 "." ${TCPKALI} -m '\{ws.binary < "/dev/null" >}'
 check 18 "." ${TCPKALI} -m '\{ws.binary < /dev/null >}'
 
+check 19 "." ${TCPKALI} -m '\{connection.uid%10}'
+

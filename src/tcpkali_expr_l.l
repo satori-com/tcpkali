@@ -118,7 +118,7 @@ WSP [\t\r\v\f\n ]
                     return quoted_string;
                 }
 
-    [^"<} .]+     {
+    [^"<} .%]+     {
                     fprintf(stderr,
                         "Unexpected token in message expression: %s\n",
                         yytext);
