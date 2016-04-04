@@ -232,7 +232,8 @@ message_collection_add_expr(struct message_collection *mc,
         if(result.esw_prefix) {
             snip->expr = result.esw_prefix;
             snip->flags = kind;
-            snip->flags |= MSK_FRAMING_ALLOWED;
+            if(!(snip->flags & MSK_PURPOSE_HTTP_HEADER))
+                snip->flags |= MSK_FRAMING_ALLOWED;
             snip->flags |= MSK_EXPRESSION_FOUND;
             mc->dynamic_expressions_found += snip->expr->dynamic;
             mc->snippets_count++;
