@@ -3,6 +3,7 @@
     * Websocket frame types in expressions: \{ws.ping}, \{ws.pong}, etc.
     * Websocket frames accept files: \{ws.binary <image.png>}.
     * Websocket frames can be non-final: \{ws.binary ...}.
+    * Display last received bytes with --verbose 2.
 
 0.8:    2016-Jan-15
     * Added --latency-connect to measure connect latency.

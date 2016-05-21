@@ -154,6 +154,10 @@ struct loop_arguments {
     struct hdr_histogram *firstbyte_histogram_local; /* --latency-first-byte */
     struct hdr_histogram *marker_histogram_local;    /* --latency-marker */
 
+    /* Per-worker scratch buffer allows debugging the last received data */
+    char scratch_recv_buf[16384];
+    size_t scratch_recv_last_size;
+
     /*******************************************
      * WORKER DATA SHARED WITH OTHER PROCESSES *
      *******************************************/
@@ -264,6 +268,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs,
                                      const void **position,
                                      size_t *available_header,
                                      size_t *available_body);
+static void debug_dump_data(const char *prefix, int fd, const void *data, size_t size, ssize_t limit);
 
 #ifdef USE_LIBUV
 static void
@@ -1064,6 +1069,14 @@ single_engine_loop_thread(void *argp) {
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
 
+    /*
+     * Print the scratch buffer to highlight the last thing received.
+     */
+    if(largs->params.verbosity_level >= DBG_DETAIL) {
+        debug_dump_data("Last received bytes ", -1,
+            largs->scratch_recv_buf, largs->scratch_recv_last_size, -1500);
+    }
+
     pthread_mutex_unlock(largs->serialize_output_lock);
 
     return 0;
@@ -1172,7 +1185,7 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
         return;
     }
     switch(c) {
-    case 'c':
+    case 'c':   /* Initiate a new connection */
         start_new_connection(TK_A);
         break;
     case 'r': /* Recompute message rate on live connections */
@@ -1193,11 +1206,11 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
             }
         }
         break;
-    case 'T':
+    case 'T':   /* Terminate */
         worker_update_shared_histograms(largs);
         tk_stop(TK_A);
         break;
-    case 'h':
+    case 'h':   /* Update historgrams */
         worker_update_shared_histograms(largs);
         int wrote = write(largs->global_feedback_pipe_wr, ".", 1);
         assert(wrote == 1);
@@ -1734,10 +1747,29 @@ accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
  * characters.
  */
 static void
-debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
+debug_dump_data(const char *prefix, int fd, const void *data, size_t size, ssize_t limit) {
+
+    /*
+     * Do not show more than (limit) first bytes,
+     * or more than (-limit) last bytes of the buffer.
+     */
+    size_t preceding = 0;
+    size_t following = 0;
+    if(limit) {
+        if(limit > 0 && (size_t)limit < size) {
+            following = size - limit;
+            size = limit;
+        } else if((size_t)-limit < size) {
+            preceding = size + limit;
+            size = -limit;
+            data += preceding;
+        }
+    }
+
     char stack_buffer[4000];
     char *buffer = stack_buffer;
     size_t buf_size = PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size);
+
     if(buf_size > sizeof(stack_buffer)) {
         /* This is used only for debugging of an otherwise expensive dataset.
          * We could have cached the malloc result, but that'd be a non-local
@@ -1747,12 +1779,21 @@ debug_dump_data(const char *prefix, int fd, const void *data, size_t size) {
         buffer = malloc(buf_size);
         assert(buffer);
     }
+
+    char fdnumbuf[16];
+    if(fd >= 0) {
+        snprintf(fdnumbuf, sizeof(fdnumbuf), "%d, ", fd);
+    } else {
+        fdnumbuf[0] = '\0';
+    }
     fprintf(
-        stderr, "%s%s(%d, %ld): %s[%s%s%s]%s\n", tcpkali_clear_eol(), prefix,
-        fd, (long)size, tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
+        stderr, "%s%s(%s%ld): %s%s[%s%s%s]%s%s\n", tcpkali_clear_eol(), prefix,
+        fdnumbuf, (long)size,
+        preceding ? "..." : "",
+        tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
         tk_attr(TKA_NORMAL), printable_data(buffer, buf_size, data, size, 0),
         tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
-        tk_attr(TKA_NORMAL));
+        tk_attr(TKA_NORMAL), following ? "..." : "");
     if(buffer != stack_buffer) free(buffer);
 }
 
@@ -1851,9 +1892,8 @@ passive_websocket_cb(TK_P_ tk_io *w, int revents) {
         (struct connection *)((char *)w - offsetof(struct connection, watcher));
 
     if(revents & TK_READ) {
-        char buf[16384];
         for(;;) {
-            ssize_t rd = read(tk_fd(w), buf, sizeof(buf));
+            ssize_t rd = read(tk_fd(w), largs->scratch_recv_buf, sizeof(largs->scratch_recv_buf));
             switch(rd) {
             case -1:
                 switch(errno) {
@@ -1868,18 +1908,20 @@ passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
             default:
+                largs->scratch_recv_last_size = rd; /* Only update on >0 data */
                 conn->traffic_ongoing.num_reads++;
                 conn->traffic_ongoing.bytes_rcvd += rd;
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                        && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Rcv", tk_fd(w), buf, rd);
+                    debug_dump_data("Rcv", tk_fd(w),
+                        largs->scratch_recv_buf, rd, 0);
                 }
 
                 /*
                  * Attempt to detect websocket key in HTTP and respond.
                  */
-                switch(http_detect_websocket(tk_fd(w), buf, rd)) {
+                switch(http_detect_websocket(tk_fd(w), largs->scratch_recv_buf, rd)) {
                 case HDW_NOT_ENOUGH_DATA:
                     return;
                 case HDW_WEBSOCKET_DETECTED:
@@ -2126,10 +2168,9 @@ connection_cb(TK_P_ tk_io *w, int revents) {
     }
 
     if(revents & TK_READ) {
-        char buf[16384];
         int record_moved_data = 0;
         do {
-            size_t read_size = sizeof(buf);
+            size_t read_size = sizeof(largs->scratch_recv_buf);
             if(largs->params.websocket_enable == 0
                || conn->ws_state == WSTATE_WS_ESTABLISHED) {
                 switch(
@@ -2151,27 +2192,32 @@ connection_cb(TK_P_ tk_io *w, int revents) {
             }
 
             assert(read_size > 0);
-            ssize_t rd = read(tk_fd(w), buf, read_size);
+            ssize_t rd = read(tk_fd(w), largs->scratch_recv_buf, read_size);
             switch(rd) {
             case -1:
                 switch(errno) {
                 case EINTR:
                 case EAGAIN:
                     break;
-                default:
+                default: {
+                    char buf[INET6_ADDRSTRLEN + 64];
                     DEBUG(DBG_NORMAL, "Closing %s: %s\n",
                           format_sockaddr(remote, buf, sizeof(buf)),
                           strerror(errno));
                     close_connection(TK_A_ conn, CCR_REMOTE);
                     return;
+                    }
                 }
                 break;
-            case 0:
+            case 0: {
+                char buf[INET6_ADDRSTRLEN + 64];
                 DEBUG(DBG_DETAIL, "Connection half-closed by %s\n",
                       format_sockaddr(remote, buf, sizeof(buf)));
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
+                }
             default:
+                largs->scratch_recv_last_size = rd; /* Only update on >0 data */
                 /*
                  * If this is a first packet from the remote server,
                  * and we're in a WebSocket mode where we should wait for
@@ -2198,9 +2244,9 @@ connection_cb(TK_P_ tk_io *w, int revents) {
                 if(largs->params.dump_setting & DS_DUMP_ALL_IN
                    || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
                        && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Rcv", tk_fd(w), buf, rd);
+                    debug_dump_data("Rcv", tk_fd(w), largs->scratch_recv_buf, rd, 0);
                 }
-                latency_record_incoming_ts(TK_A_ conn, buf, rd);
+                latency_record_incoming_ts(TK_A_ conn, largs->scratch_recv_buf, rd);
 
                 if(record_moved_data) {
                     pacefier_moved(&conn->recv_pace,
@@ -2288,7 +2334,7 @@ process_WRITE:
                 if(largs->params.dump_setting & DS_DUMP_ALL_OUT
                    || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
                        && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Snd", tk_fd(w), position, wrote);
+                    debug_dump_data("Snd", tk_fd(w), position, wrote, 0);
                 }
                 if((size_t)wrote > available_header) {
                     position += wrote;
