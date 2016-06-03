@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <assert.h>
 
+
 #include <statsd.h>
 
 #include "tcpkali.h"
@@ -66,6 +67,7 @@
 #define CLI_SOCKET_OPT (1 << 12)
 #define CLI_LATENCY (1 << 13)
 #define CLI_DUMP (1 << 14)
+
 static struct option cli_long_options[] = {
     {"channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't'},
     {"channel-bandwidth-upstream", 1, 0, 'U'},
@@ -108,6 +110,9 @@ static struct option cli_long_options[] = {
     {"write-combine", 1, 0, 'C'},
     {"websocket", 0, 0, 'W'},
     {"ws", 0, 0, 'W'},
+	{"randomizeInitMsgLength", 1, 0, 'x'},
+	{"randomizeMsgContent", 1, 0, 'y'},
+	{"randomiseMsgLength", 1, 0, 'z'},
     {0, 0, 0, 0}};
 
 static struct tcpkali_config {
@@ -134,6 +139,7 @@ static struct tcpkali_config {
  */
 static void usage_short(char *argv0);
 static void usage_long(char *argv0, struct tcpkali_config *);
+char** str_split(char* a_str, const char a_delim);
 struct multiplier {
     char *prefix;
     double mult;
@@ -178,7 +184,8 @@ main(int argc, char **argv) {
                                           .connect_timeout = 1.0,
                                           .channel_lifetime = INFINITY,
                                           .nagle_setting = NSET_UNSET,
-                                          .write_combine = WRCOMB_ON};
+                                          .write_combine = WRCOMB_ON,
+    									.randomMessageParams={false,false,false,70,80,300,380}};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
 
@@ -547,6 +554,53 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
         } break;
+        case 'x':{
+        	engine_params.randomMessageParams.isRandomiseInitMsgLength = true;
+        	char** tokens;
+        	tokens = str_split(optarg, ':');
+        	  if (tokens)
+        	    {
+        		engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + 0));
+
+				engine_params.randomMessageParams.randomMaxInitSize = atoi(*(tokens + 1));
+				if(engine_params.randomMessageParams.randomMaxInitSize < engine_params.randomMessageParams.randomMinInitSize){
+					engine_params.randomMessageParams.randomMinInitSize = engine_params.randomMessageParams.randomMaxInitSize;
+					engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + 0));
+
+				}
+				free(*(tokens + 0));
+				free(*(tokens + 1));
+        	    free(tokens);
+        	    }
+
+        }break;
+        case 'z':{
+        	engine_params.randomMessageParams.isRandomiseMsgLength = true;
+        	char** tokens;
+        	tokens = str_split(optarg, ':');
+        	  if (tokens)
+        	    {
+        		engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + 0));
+
+				engine_params.randomMessageParams.randomMaxSize = atoi(*(tokens + 1));
+				if(engine_params.randomMessageParams.randomMaxSize < engine_params.randomMessageParams.randomMinSize){
+					engine_params.randomMessageParams.randomMinSize = engine_params.randomMessageParams.randomMaxSize;
+					engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + 0));
+
+				}
+				free(*(tokens + 0));
+				free(*(tokens + 1));
+        	    free(tokens);
+        	    }
+
+        }break;
+        case 'y':{
+
+        	if(atoi(optarg) > 0){
+        	engine_params.randomMessageParams.randomizeMsgContent = true ;
+        	}
+
+        }break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -1040,4 +1094,52 @@ usage_short(char *argv0) {
     "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
     basename(argv0));
     /* clang-format on */
+}
+
+char** str_split(char* a_str, const char a_delim)
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+            assert(idx < count);
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        assert(idx == count - 1);
+        *(result + idx) = 0;
+    }
+
+    return result;
 }
