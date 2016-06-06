@@ -1050,7 +1050,12 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "\n"
-    "Variable units and recognized multipliers:\n"
+    "Randomiztion Opions with Message Rate\n"
+    "  --randomizeInitMsgLength  	Randomizes The Initial message Length sent to the server\n"
+    "  --randomiseMsgLength		Randomizes The Message Length\n"
+    "  --randomizeMsgContent		Randomize The Message content\n"
+
+    "\nVariable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <SizeBytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
     "  <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
