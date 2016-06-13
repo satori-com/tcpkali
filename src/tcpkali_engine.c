@@ -2309,18 +2309,29 @@ process_WRITE:
                              : conn->send_limit.minimal_move_size);
 
 
-            if(largs->params.randomMessageParams.isRandomiseMsgLength || largs->params.randomMessageParams.isRandomiseInitMsgLength){
-
             	if(available_header ){
-            		if( largs->params.randomMessageParams.isRandomiseInitMsgLength)
-            		available_body = available_write =  largs->params.randomMessageParams.randomMinInitSize +(random()%(largs->params.randomMessageParams.randomMaxInitSize - largs->params.randomMessageParams.randomMinInitSize) );
-            	}else
-            		available_body = available_write =  largs->params.randomMessageParams.randomMinSize +(random()%(largs->params.randomMessageParams.randomMaxSize - largs->params.randomMessageParams.randomMinSize) );
+            		if( largs->params.randomMessageParams.isRandomiseInitMsgLength){
+            			if(largs->params.randomMessageParams.randomMaxInitSize != largs->params.randomMessageParams.randomMinInitSize)
+            				available_body = available_write =  largs->params.randomMessageParams.randomMinInitSize +(random()%(largs->params.randomMessageParams.randomMaxInitSize - largs->params.randomMessageParams.randomMinInitSize) );
+            			else
+            				available_body = available_write = largs->params.randomMessageParams.randomMaxInitSize;
+            		}
 
-            }
+            		if(largs->params.randomMessageParams.randomizeInitMsgContent)
+            			rand_str(position, available_write);
 
-            if(largs->params.randomMessageParams.randomizeMsgContent)
-            	rand_str(position, available_write);
+            	}else{
+            		if(largs->params.randomMessageParams.isRandomiseMsgLength){
+            			if(largs->params.randomMessageParams.randomMaxSize != largs->params.randomMessageParams.randomMinSize)
+            				available_body = available_write =  largs->params.randomMessageParams.randomMinSize +(random()%(largs->params.randomMessageParams.randomMaxSize - largs->params.randomMessageParams.randomMinSize) );
+            			else
+            				available_body = available_write = largs->params.randomMessageParams.randomMinSize;
+            		}
+                	if(largs->params.randomMessageParams.randomizeMsgContent)
+                      	rand_str(position, available_write);
+
+            	}
+
 
             ssize_t wrote = write(tk_fd(w), position, available_write);
             if(wrote == -1) {

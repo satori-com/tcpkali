@@ -43,12 +43,11 @@ struct randomMessage_t {
 	bool isRandomiseMsgLength;
 	bool isRandomiseInitMsgLength;
 	bool randomizeMsgContent;
+	bool randomizeInitMsgContent;
 	int randomMinSize;
 	int randomMaxSize;
 	int randomMinInitSize;
 	int randomMaxInitSize;
-
-
 };
 
 struct engine;

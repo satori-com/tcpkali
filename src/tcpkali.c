@@ -110,9 +110,12 @@ static struct option cli_long_options[] = {
     {"write-combine", 1, 0, 'C'},
     {"websocket", 0, 0, 'W'},
     {"ws", 0, 0, 'W'},
-	{"randomizeInitMsgLength", 1, 0, 'x'},
-	{"randomizeMsgContent", 1, 0, 'y'},
-	{"randomiseMsgLength", 1, 0, 'z'},
+//	{"randomizeInitMsgLength", 1, 0, 'x'},
+//	{"randomizeMsgContent", 1, 0, 'y'},
+//	{"randomizeInitMsgContent", 1, 0, 'u'},
+//	{"randomiseMsgLength", 1, 0, 'z'},
+	{"randomInitMsgParams", 1, 0, 'x'},
+	{"randomMsgParams", 1, 0, 'y'},
     {0, 0, 0, 0}};
 
 static struct tcpkali_config {
@@ -185,7 +188,7 @@ main(int argc, char **argv) {
                                           .channel_lifetime = INFINITY,
                                           .nagle_setting = NSET_UNSET,
                                           .write_combine = WRCOMB_ON,
-    									.randomMessageParams={false,false,false,70,80,300,380}};
+    									.randomMessageParams={false,false,false,false,70,80,300,380}};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
 
@@ -555,52 +558,133 @@ main(int argc, char **argv) {
             }
         } break;
         case 'x':{
-        	engine_params.randomMessageParams.isRandomiseInitMsgLength = true;
+
+        	engine_params.randomMessageParams.isRandomiseInitMsgLength = 1;
         	char** tokens;
+        	char * newMsg;
+        	char * msg;
         	tokens = str_split(optarg, ':');
-        	  if (tokens)
-        	    {
-        		engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + 0));
+            if (tokens)
+            {
+                int i;
+                for (i = 0; *(tokens + i); i++)
+                {
+                    switch(i){
+						case 0:
+							engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + i));
+							break;
+						case 1:
+							engine_params.randomMessageParams.randomMaxInitSize = atoi(*(tokens + i));
+							break;
+						case 2:
+							msg = *(tokens + i);
+							break;
+						case 3:
+							engine_params.randomMessageParams.randomizeInitMsgContent = atoi(*(tokens + i));;
+						   break;
 
-				engine_params.randomMessageParams.randomMaxInitSize = atoi(*(tokens + 1));
-				if(engine_params.randomMessageParams.randomMaxInitSize < engine_params.randomMessageParams.randomMinInitSize){
-					engine_params.randomMessageParams.randomMinInitSize = engine_params.randomMessageParams.randomMaxInitSize;
-					engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + 0));
+                	}
+                    if(i!=2)
+                    	free(*(tokens + i));
+                }
+                free(tokens);
+            }
 
-				}
-				free(*(tokens + 0));
-				free(*(tokens + 1));
-        	    free(tokens);
-        	    }
+            //swap
+			if(engine_params.randomMessageParams.randomMaxInitSize < engine_params.randomMessageParams.randomMinInitSize){
+				int tmp = engine_params.randomMessageParams.randomMinInitSize;
+				engine_params.randomMessageParams.randomMinInitSize = engine_params.randomMessageParams.randomMaxInitSize;
+				engine_params.randomMessageParams.randomMaxInitSize = tmp;
 
-        }break;
-        case 'z':{
-        	engine_params.randomMessageParams.isRandomiseMsgLength = true;
-        	char** tokens;
-        	tokens = str_split(optarg, ':');
-        	  if (tokens)
-        	    {
-        		engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + 0));
+			}
 
-				engine_params.randomMessageParams.randomMaxSize = atoi(*(tokens + 1));
-				if(engine_params.randomMessageParams.randomMaxSize < engine_params.randomMessageParams.randomMinSize){
-					engine_params.randomMessageParams.randomMinSize = engine_params.randomMessageParams.randomMaxSize;
-					engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + 0));
+			if(strlen(msg) < engine_params.randomMessageParams.randomMinInitSize){
+				newMsg = malloc(engine_params.randomMessageParams.randomMinInitSize+1);
+				memset(newMsg,' ',engine_params.randomMessageParams.randomMinInitSize+1);
+				newMsg[engine_params.randomMessageParams.randomMinInitSize]='\0';
+				strncpy(newMsg,msg,strlen(msg));
+				int a = strlen(msg);
+				int b = strlen(newMsg);
+				free(msg);
 
-				}
-				free(*(tokens + 0));
-				free(*(tokens + 1));
-        	    free(tokens);
-        	    }
+			}
 
-        }break;
+			//Lets add this as first message to collection
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_FIRST_MSG, newMsg,
+                                   strlen(newMsg), 0, 1);
+
+        }
+        break;
         case 'y':{
+        	char** tokens;
+			char * newMsg;
+			char * msg;
+			engine_params.randomMessageParams.isRandomiseMsgLength = 1;
+			tokens = str_split(optarg, ':');
+			if (tokens)
+			{
+				int i;
+				for (i = 0; *(tokens + i); i++)
+				{
+					switch(i){
+						case 0:
+							engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + i));
+							break;
+						case 1:
+							engine_params.randomMessageParams.randomMaxSize = atoi(*(tokens + i));
+							break;
+						case 2:
+							msg = *(tokens + i);
+							break;
+						case 3:
+							engine_params.randomMessageParams.randomizeMsgContent = atoi(*(tokens + i));
 
-        	if(atoi(optarg) > 0){
-        	engine_params.randomMessageParams.randomizeMsgContent = true ;
-        	}
+						   break;
 
+					}
+					if(i!=2)
+						free(*(tokens + i));
+				}
+				free(tokens);
+			}
+
+			//swap
+			if(engine_params.randomMessageParams.randomMaxSize < engine_params.randomMessageParams.randomMinSize){
+				int tmp = engine_params.randomMessageParams.randomMinSize;
+				engine_params.randomMessageParams.randomMinSize = engine_params.randomMessageParams.randomMaxSize;
+				engine_params.randomMessageParams.randomMaxSize = tmp;
+
+			}
+
+			if(strlen(msg) < engine_params.randomMessageParams.randomMaxSize){
+				newMsg = malloc(engine_params.randomMessageParams.randomMaxSize+1);
+				memset(newMsg,' ',engine_params.randomMessageParams.randomMaxSize+1);
+				newMsg[engine_params.randomMessageParams.randomMaxSize]='\0';
+				strncpy(newMsg,msg,strlen(msg));
+				free(msg);
+
+			}
+
+			//Lets add this  message to collection
+			message_collection_add(&engine_params.message_collection,
+								   MSK_PURPOSE_MESSAGE, newMsg, strlen(newMsg),
+								   0, 1);
         }break;
+//        case 'u':{
+//
+//            	if(atoi(optarg) > 0){
+//            	engine_params.randomMessageParams.randomizeInitMsgContent = true ;
+//            	}
+//
+//            }break;
+//        case 'y':{
+//
+//        	if(atoi(optarg) > 0){
+//        	engine_params.randomMessageParams.randomizeMsgContent = true ;
+//        	}
+//
+//        }break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -1051,10 +1135,10 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "\n"
     "Randomiztion Opions with Message Rate\n"
-    "  --randomizeInitMsgLength  	Randomizes The Initial message Length sent to the server\n"
-    "  --randomiseMsgLength		Randomizes The Message Length\n"
-    "  --randomizeMsgContent		Randomize The Message content\n"
-
+    "  --randomizeInitMsgLength  		Randomizes The Initial message Length sent to the server(First Message)\n"
+    "  --randomiseMsgLength				Randomizes The Message Length\n"
+    "  --randomizeMsgContent			Randomize The Message content\n"
+    "  --randomizeInitMsgContent		Randomize The Initial Message content(First Message)\n"
     "\nVariable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <SizeBytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
