@@ -110,10 +110,6 @@ static struct option cli_long_options[] = {
     {"write-combine", 1, 0, 'C'},
     {"websocket", 0, 0, 'W'},
     {"ws", 0, 0, 'W'},
-//	{"randomizeInitMsgLength", 1, 0, 'x'},
-//	{"randomizeMsgContent", 1, 0, 'y'},
-//	{"randomizeInitMsgContent", 1, 0, 'u'},
-//	{"randomiseMsgLength", 1, 0, 'z'},
 	{"randomInitMsgParams", 1, 0, 'x'},
 	{"randomMsgParams", 1, 0, 'y'},
     {0, 0, 0, 0}};
@@ -607,7 +603,8 @@ main(int argc, char **argv) {
 				int b = strlen(newMsg);
 				free(msg);
 
-			}
+			}else
+				newMsg = msg;
 
 			//Lets add this as first message to collection
             message_collection_add(&engine_params.message_collection,
@@ -664,27 +661,14 @@ main(int argc, char **argv) {
 				strncpy(newMsg,msg,strlen(msg));
 				free(msg);
 
-			}
+			}else
+				newMsg = msg;
 
 			//Lets add this  message to collection
 			message_collection_add(&engine_params.message_collection,
 								   MSK_PURPOSE_MESSAGE, newMsg, strlen(newMsg),
 								   0, 1);
         }break;
-//        case 'u':{
-//
-//            	if(atoi(optarg) > 0){
-//            	engine_params.randomMessageParams.randomizeInitMsgContent = true ;
-//            	}
-//
-//            }break;
-//        case 'y':{
-//
-//        	if(atoi(optarg) > 0){
-//        	engine_params.randomMessageParams.randomizeMsgContent = true ;
-//        	}
-//
-//        }break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -1134,11 +1118,9 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "\n"
-    "Randomiztion Opions with Message Rate\n"
-    "  --randomizeInitMsgLength  		Randomizes The Initial message Length sent to the server(First Message)\n"
-    "  --randomiseMsgLength				Randomizes The Message Length\n"
-    "  --randomizeMsgContent			Randomize The Message content\n"
-    "  --randomizeInitMsgContent		Randomize The Initial Message content(First Message)\n"
+    "Randomization Options with Message Rate\n"
+    "randomInitMsgParams			{firstMessageMinLength}:{firstMessageMaxLength}:{FirstMessage}:{Randomize firstMessage Content}"
+	"randomMsgParams				{MessageMinLength}:{MessageMaxLength}:{Message}:{Randomize Message Content}"
     "\nVariable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <SizeBytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"

@@ -2367,7 +2367,7 @@ process_WRITE:
                        && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Snd", tk_fd(w), position, wrote, 0);
                 }
-                if((size_t)wrote > available_header) {
+                if(conn->traffic_ongoing.bytes_sent > available_header) {
                     position += wrote;
                     wrote -= available_header;
                     available_header = 0;
