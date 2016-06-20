@@ -65,7 +65,7 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     SBATCH(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
     SBATCH(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
 
-    if(sf->latency->marker_histogram || sf == &empty_feedback) {
+    if((sf->latency && sf->latency->marker_histogram) || sf == &empty_feedback) {
         struct {
             unsigned p50;
             unsigned p95;
@@ -75,7 +75,7 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
             unsigned max;
         } lat;
 
-        if(sf->latency->marker_histogram) {
+        if(sf->latency && sf->latency->marker_histogram) {
             struct hdr_histogram *hist = sf->latency->marker_histogram;
             lat.p50 = hdr_value_at_percentile(hist, 50.0) / 10.0;
             lat.p95 = hdr_value_at_percentile(hist, 95.0) / 10.0;
