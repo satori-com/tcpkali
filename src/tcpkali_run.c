@@ -120,6 +120,19 @@ format_latencies(char *buf, size_t size, struct latency_snapshot *latency) {
     }
 }
 
+static void
+format_message_rate(char *buf, size_t size, const struct oc_args *args, double now) {
+    if(engine_params(args->eng)->message_marker) {
+        double count_rcvd = mavg_per_second(&args->count_mavgs[0], now);
+        double count_sent = mavg_per_second(&args->count_mavgs[1], now);
+
+        snprintf(buf, size, " (%.0f↓ %.0f↑ mps)",
+            round(count_rcvd), round(count_sent));
+    } else {
+        buf[0] = '\0';
+    }
+}
+
 /*
  * Return non-zero value every time we're more than (delta_time)
  * away from the checkpoint time; updates the checkpoint time.
@@ -301,6 +314,10 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
                  (double)traffic_delta.bytes_rcvd);
         mavg_add(&args->traffic_mavgs[1], now,
                  (double)traffic_delta.bytes_sent);
+        mavg_add(&args->count_mavgs[0], now,
+                (double)traffic_delta.msgs_rcvd);
+        mavg_add(&args->count_mavgs[1], now,
+                (double)traffic_delta.msgs_sent);
 
         double bps_in = 8 * mavg_per_second(&args->traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&args->traffic_mavgs[1], now);
@@ -350,10 +367,12 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
             } else {
                 char latency_buf[256];
                 format_latencies(latency_buf, sizeof(latency_buf), latency);
+                char mps_buf[256];
+                format_message_rate(mps_buf, sizeof(mps_buf), args, now);
 
                 fprintf(stderr,
                         "%sTraffic %.3f↓, %.3f↑ Mbps "
-                        "(%s%ld↓ %ld↑ %ld⇡; %s%ld)%s%s\r",
+                        "(%s%ld↓ %ld↑ %ld⇡; %s%ld)%s%s%s\r",
                         time_progress(args->checkpoint.epoch_start, now, args->epoch_end),
                         bps_in / 1000000.0, bps_out / 1000000.0,
                         requested_latency_types ? "" : "conns ",
@@ -361,7 +380,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
                         (long)conns_out, (long)connecting,
                         requested_latency_types ? "" : "seen ",
                         (long)conns_counter,
-                        latency_buf, tcpkali_clear_eol());
+                        mps_buf, latency_buf, tcpkali_clear_eol());
             }
         }
 

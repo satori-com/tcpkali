@@ -71,6 +71,7 @@ free_expression(tk_expr_t *expr) {
             break;
         case EXPR_CONNECTION_PTR:
         case EXPR_CONNECTION_UID:
+        case EXPR_MESSAGE_MARKER:
             break;
         case EXPR_REGEX:
             tregex_free(expr->u.regex.re);
@@ -173,6 +174,7 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
     }
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
+    case EXPR_MESSAGE_MARKER:
         return cb(buf, size, expr, key, value);
     case EXPR_REGEX:
         return tregex_eval(expr->u.regex.re, buf, size);
@@ -218,6 +220,7 @@ expression_split_by_websocket_frame(tk_expr_t *expr) {
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
     case EXPR_REGEX:
+    case EXPR_MESSAGE_MARKER:
         result.esw_prefix = expr;
         return result;
     case EXPR_WS_FRAME:
@@ -258,6 +261,25 @@ expression_split_by_websocket_frame(tk_expr_t *expr) {
     return result;
 }
 
+int has_subexpression(const tk_expr_t *expr, enum tk_expr_type t) {
+    if(!expr) return 0;
+
+    if(expr->type == t)
+        return 1;
+
+    switch(expr->type) {
+    case EXPR_RAW:
+        return has_subexpression(expr->u.raw.expr, t);
+    case EXPR_CONCAT:
+        return has_subexpression(expr->u.concat.expr[0], t)
+                || has_subexpression(expr->u.concat.expr[1], t);
+    case EXPR_MODULO:
+        return has_subexpression(expr->u.modulo.expr, t);
+    default:
+        return 0;
+    }
+}
+
 void
 unescape_expression(tk_expr_t *expr) {
     switch(expr->type) {
@@ -278,6 +300,7 @@ unescape_expression(tk_expr_t *expr) {
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
     case EXPR_REGEX:
+    case EXPR_MESSAGE_MARKER:
         return;
     case EXPR_WS_FRAME: {
         size_t overhead = expr->estimate_size - expr->u.ws_frame.size;

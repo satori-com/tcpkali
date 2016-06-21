@@ -44,9 +44,11 @@ int yyerror(tk_expr_t **, const char *);
 %token <tv_long>    TOK_ws_reserved_flag "rsv1, rsv2, rsv3"
 %token              TOK_global       "global"
 %token              TOK_connection   "connection"
+%token              TOK_message      "message"
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
 %token              TOK_regex        "re"
+%token              TOK_marker       "marker"
 %token              TOK_ellipsis     "..."
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
@@ -196,6 +198,11 @@ NumericExpr:
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_UID;
         $$->estimate_size = sizeof("100000000000000");
+    }
+    | TOK_message '.' TOK_marker {
+        $$ = calloc(1, sizeof(*($$)));
+        $$->type = EXPR_MESSAGE_MARKER;
+        $$->estimate_size = sizeof("100000000000000" "1000000000000000" "!");
     }
 
 WSFrameFinalized:

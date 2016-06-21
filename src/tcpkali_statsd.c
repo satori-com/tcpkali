@@ -119,6 +119,8 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf, statsd_report_latency_type
     SBATCH_INT(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
     SBATCH_INT(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
     SBATCH_INT(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
+    SBATCH_INT(STATSD_COUNT, "traffic.msgs.rcvd", sf->traffic_delta.msgs_rcvd);
+    SBATCH_INT(STATSD_COUNT, "traffic.msgs.sent", sf->traffic_delta.msgs_sent);
 
     if(latency_types) {
         if(latency_types & SLT_CONNECT)

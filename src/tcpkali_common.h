@@ -43,6 +43,8 @@ typedef enum {
     SLT_MARKER = (1 << 2)
 } statsd_report_latency_types;
 
+#define MESSAGE_MARKER_TOKEN "TCPKaliM$gMARKR"
+
 /*
  * Snapshot of the current latency.
  */

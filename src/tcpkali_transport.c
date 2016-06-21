@@ -314,6 +314,20 @@ message_collection_estimate_size(struct message_collection *mc,
     return total_size;
 }
 
+int
+message_collection_has(const struct message_collection *mc, enum tk_expr_type t) {
+
+    for(size_t i = 0; i < mc->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc->snippets[i];
+        if(has_subexpression(snip->expr, t)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
 struct transport_data_spec *
 transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                                        struct message_collection *mc,

@@ -92,7 +92,7 @@ static struct option cli_long_options[] = {
     {"latency-marker-skip", 1, 0, CLI_LATENCY + 's'},
     {"latency-percentiles", 1, 0, CLI_LATENCY + 'p'},
     {"listen-port", 1, 0, 'l'},
-    {"listen-mode", 1, 0, 'M'},
+    {"listen-mode", 1, 0, 'L'},
     {"message", 1, 0, 'm'},
     {"message-file", 1, 0, 'f'},
     {"message-rate", 1, 0, 'r'},
@@ -113,6 +113,7 @@ static struct option cli_long_options[] = {
     {"write-combine", 1, 0, 'C'},
     {"websocket", 0, 0, 'W'},
     {"ws", 0, 0, 'W'},
+    {"message-marker", 0, 0, 'M'},
     {0, 0, 0, 0}};
 
 static struct tcpkali_config {
@@ -346,6 +347,15 @@ main(int argc, char **argv) {
         case 'e':
             unescape_message_data = 1;
             break;
+        case 'M': /* --message-marker */
+            if(!engine_params.message_marker
+                && (engine_params.latency_setting & SLT_MARKER)) {
+                fprintf(stderr,
+                        "--message-marker: --latency-marker is already specified, use one or the other\n");
+                exit(EX_USAGE);
+            }
+            engine_params.message_marker = 1;
+            break;
         case 'm': /* --message */
             message_collection_add(&engine_params.message_collection,
                                    MSK_PURPOSE_MESSAGE, optarg, strlen(optarg),
@@ -575,7 +585,7 @@ main(int argc, char **argv) {
             }
             }
             break;
-        case 'M': /* --listen-mode={silent|active} */
+        case 'L': /* --listen-mode={silent|active} */
             if(strcmp(optarg, "silent") == 0) {
                 engine_params.listen_mode = LMODE_DEFAULT;
             }
@@ -619,6 +629,11 @@ main(int argc, char **argv) {
             engine_params.latency_setting |= SLT_FIRSTBYTE;
             break;
         case CLI_LATENCY + 'm': { /* --latency-marker */
+            if(engine_params.message_marker) {
+                fprintf(stderr,
+                        "--latency-marker: --message-marker is already specified, use one or the other\n");
+                exit(EX_USAGE);
+            }
             engine_params.latency_setting |= SLT_MARKER;
             char *data = strdup(optarg);
             size_t size = strlen(optarg);
@@ -811,19 +826,34 @@ main(int argc, char **argv) {
                   MSK_PURPOSE_MESSAGE, MCE_MINIMUM_SIZE));
 
     /*
+     * Message marker mode can be explicitly enabled via --message-marker,
+     * or implicitly via \{message.marker} in the messages to sent.
+     */
+    engine_params.message_marker |= message_collection_has(&engine_params.message_collection, EXPR_MESSAGE_MARKER);
+    if(engine_params.message_marker) {
+        engine_params.latency_setting |= SLT_MARKER;
+        int res = parse_expression(&engine_params.latency_marker_expr, MESSAGE_MARKER_TOKEN, sizeof(MESSAGE_MARKER_TOKEN) - 1, 0);
+        assert(res != -1);
+        assert(EXPR_IS_TRIVIAL(engine_params.latency_marker_expr));
+    }
+
+    /*
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
-    if(engine_params.latency_marker_expr) {
+    if(engine_params.latency_marker_expr && !engine_params.message_marker) {
+        const char *optname = engine_params.message_marker ?
+                            "--message-marker" : "--latency-marker";
         if(no_message_to_send) {
             fprintf(stderr,
-                    "--latency-marker is given, but no messages "
-                    "are supposed to be sent. Specify --message?\n");
+                    "%s is given, but no messages "
+                    "are supposed to be sent. Specify --message?\n", optname);
             exit(EX_USAGE);
         } else if(argc - optind == 0) {
             fprintf(stderr,
-                    "--latency-marker is given, but no connections "
-                    "are supposed to be initiated. Specify <host:port>?\n");
+                    "%s is given, but no connections "
+                    "are supposed to be initiated. Specify <host:port>?\n",
+                    optname);
             exit(EX_USAGE);
         }
     } else if(rate_modulator.mode != RM_UNMODULATED) {
@@ -959,6 +989,8 @@ main(int argc, char **argv) {
     };
     mavg_init(&oc_args.traffic_mavgs[0], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
     mavg_init(&oc_args.traffic_mavgs[1], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
+    mavg_init(&oc_args.count_mavgs[0], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
+    mavg_init(&oc_args.count_mavgs[1], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
 
     /*
      * Convert SIGINT into change of a flag.
@@ -1193,6 +1225,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --latency-marker <string>    Measure latency using a per-message marker\n"
     "  --latency-marker-skip <N>    Ignore the first N occurrences of a marker\n"
     "  --latency-percentiles <list> Report latency at specified percentiles\n"
+    "  --message-marker             Parse markers to calculate latency\n"
     "\n"
     "  --statsd                     Enable StatsD output (default %s)\n"
     "  --statsd-host <host>         StatsD host to send data (default is localhost)\n"

@@ -37,6 +37,8 @@ typedef struct {
     non_atomic_wide_t num_writes; /* Number of write(2) calls */
     non_atomic_wide_t bytes_rcvd;
     non_atomic_wide_t num_reads; /* Number of read(2) calls */
+    non_atomic_wide_t msgs_sent;
+    non_atomic_wide_t msgs_rcvd;
 } non_atomic_traffic_stats;
 
 /*
@@ -47,6 +49,8 @@ typedef struct {
     atomic_wide_t num_writes; /* Number of write(2) calls */
     atomic_wide_t bytes_rcvd;
     atomic_wide_t num_reads; /* Number of read(2) calls */
+    atomic_wide_t msgs_sent;
+    atomic_wide_t msgs_rcvd;
 } atomic_traffic_stats;
 
 /*
@@ -59,6 +63,8 @@ add_traffic_numbers_AtoN(const atomic_traffic_stats *src,
     dst->num_writes += atomic_wide_get(&src->num_writes);
     dst->bytes_rcvd += atomic_wide_get(&src->bytes_rcvd);
     dst->num_reads += atomic_wide_get(&src->num_reads);
+    dst->msgs_sent += atomic_wide_get(&src->msgs_sent);
+    dst->msgs_rcvd += atomic_wide_get(&src->msgs_rcvd);
 }
 
 static UNUSED void
@@ -68,6 +74,8 @@ add_traffic_numbers_NtoA(const non_atomic_traffic_stats *src,
     atomic_add(&dst->num_writes, src->num_writes);
     atomic_add(&dst->bytes_rcvd, src->bytes_rcvd);
     atomic_add(&dst->num_reads, src->num_reads);
+    atomic_add(&dst->msgs_sent, src->msgs_sent);
+    atomic_add(&dst->msgs_rcvd, src->msgs_rcvd);
 }
 
 /*
@@ -81,6 +89,8 @@ subtract_traffic_stats(const non_atomic_traffic_stats a,
     result.num_writes = a.num_writes - b.num_writes;
     result.bytes_rcvd = a.bytes_rcvd - b.bytes_rcvd;
     result.num_reads = a.num_reads - b.num_reads;
+    result.msgs_sent = a.msgs_sent - b.msgs_sent;
+    result.msgs_rcvd = a.msgs_rcvd - b.msgs_rcvd;
     return result;
 }
 

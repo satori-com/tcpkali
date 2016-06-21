@@ -41,6 +41,7 @@
 #include <sys/queue.h>
 #include <sysexits.h>
 #include <math.h>
+#include <sys/time.h>
 
 #include <config.h>
 
@@ -581,6 +582,11 @@ engine_terminate(struct engine *eng, double epoch,
     printf("Aggregate bandwidth: %.3f↓, %.3f↑ Mbps\n",
            8 * (epoch_traffic.bytes_rcvd / test_duration) / 1000000.0,
            8 * (epoch_traffic.bytes_sent / test_duration) / 1000000.0);
+    if(eng->params.message_marker) {
+        printf("Aggregate message rate: %.3f↓, %.3f↑ mps\n",
+               (epoch_traffic.msgs_rcvd / test_duration),
+               (epoch_traffic.msgs_sent / test_duration));
+    }
     printf("Packet rate estimate: %.1f↓, %.1f↑ (%u↓, %u↑ TCP MSS/op)\n",
            estimate_pps(test_duration, epoch_traffic.num_reads,
                         epoch_traffic.bytes_rcvd),
@@ -775,7 +781,7 @@ engine_diff_latency_snapshot(struct latency_snapshot *base, struct latency_snaps
 
 non_atomic_traffic_stats
 engine_traffic(struct engine *eng) {
-    non_atomic_traffic_stats traffic = {0, 0, 0, 0};
+    non_atomic_traffic_stats traffic = {0, 0, 0, 0, 0, 0};
     for(int n = 0; n < eng->n_workers; n++) {
         add_traffic_numbers_AtoN(&eng->loops[n].worker_traffic_stats, &traffic);
     }
@@ -1266,6 +1272,13 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
         s = snprintf(buf, size, "%" PRIan, conn->connection_unique_id);
         if(v) *v = (long)conn->connection_unique_id;
         break;
+    case EXPR_MESSAGE_MARKER: {
+        struct timeval tp;
+        gettimeofday(&tp, NULL);
+        s = snprintf(buf, size, MESSAGE_MARKER_TOKEN "%016llx!", (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec);
+        if(v) *v = (long)0;
+        break;
+    }
     default:
         s = snprintf(buf, size, "?");
         if(v) *v = 0;
@@ -1281,7 +1294,7 @@ explode_data_template(struct message_collection *mc,
                       struct transport_data_spec *const data_templates[2],
                       enum transport_websocket_side tws_side,
                       struct transport_data_spec *out_data,
-                      struct loop_arguments *largs UNUSED,
+                      struct loop_arguments *largs,
                       struct connection *conn) {
     if(data_templates[tws_side]) {
         assert(mc->most_dynamic_expression == DS_GLOBAL_FIXED);
@@ -1307,7 +1320,9 @@ explode_data_template(struct message_collection *mc,
         case DS_GLOBAL_FIXED:
             assert(!"Unreachable");
         case DS_PER_CONNECTION:
-            replicate_payload(out_data, REPLICATE_MAX_SIZE);
+            if(largs->params.message_marker == 0) {
+                replicate_payload(out_data, REPLICATE_MAX_SIZE);
+            }
             break;
         case DS_PER_MESSAGE:
             break;
@@ -1613,7 +1628,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
 
     int active_socket = conn_type == CONN_OUTGOING
                         || (largs->params.listen_mode & _LMODE_SND_MASK);
-    if(active_socket) {
+    if(active_socket || largs->params.message_marker) {
         pacefier_init(&conn->send_pace, now);
 
         enum transport_websocket_side tws_side =
@@ -1624,14 +1639,15 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
         conn->send_limit = compute_bandwidth_limit_by_message_size(
             largs->params.channel_send_rate, conn->data.single_message_size);
         if(largs->params.message_stop_expr) {
-            conn->sbmh_stop_ctx = malloc(sizeof(*conn->sbmh_stop_ctx));
+            conn->sbmh_stop_ctx = malloc(SBMH_SIZE(largs->params.message_stop_expr->estimate_size));
             assert(conn->sbmh_stop_ctx);
             sbmh_init(conn->sbmh_stop_ctx, NULL, 0, 0);
         }
-        if(largs->params.latency_marker_expr
-           && conn->data.single_message_size) {
-            conn->latency.message_bytes_credit /* See (EXPL:1) below. */
-                = conn->data.single_message_size - 1;
+        if(largs->params.latency_marker_expr && (conn->data.single_message_size || largs->params.message_marker)) {
+            if(conn->data.single_message_size) {
+                conn->latency.message_bytes_credit /* See (EXPL:1) below. */
+                    = conn->data.single_message_size - 1;
+            }
             /*
              * Figure out how many latency markers to skip
              * before starting to measure latency with them.
@@ -2041,9 +2057,14 @@ update_io_interest(TK_P_ struct connection *conn) {
 
 static void
 latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
-    if(!conn->latency.sent_timestamps) return;
-
     struct loop_arguments *largs = tk_userdata(TK_A);
+
+    if(largs->params.message_marker) {
+        conn->traffic_ongoing.msgs_sent++;
+        return;
+    }
+
+    if(!conn->latency.sent_timestamps) return;
 
     /*
      * (EXPL:1)
@@ -2088,7 +2109,9 @@ latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
 static void
 latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
                            size_t size) {
-    if(!conn->latency.sent_timestamps) return;
+    struct loop_arguments *largs = tk_userdata(TK_A);
+
+    if(!conn->latency.sent_timestamps && !largs->params.message_marker) return;
 
     const uint8_t *lm = conn->latency.sbmh_data;
     size_t lm_size = conn->latency.sbmh_size;
@@ -2101,12 +2124,32 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         if(conn->latency.sbmh_marker_ctx->found == sbmh_true) {
             buf += analyzed;
             size -= analyzed;
-            num_markers_found++;
+            if(largs->params.message_marker) {
+                conn->traffic_ongoing.msgs_rcvd++;
+                if(size >= 16+1) { // otherwise ignore
+                    unsigned long long ts = (unsigned long long) strtoll(buf, NULL, 16);
+                    struct timeval tp;
+                    gettimeofday(&tp, NULL);
+                    int64_t latency = (int64_t) tp.tv_sec * 1000000 + tp.tv_usec - (int64_t) ts;
+                    latency /= 100; // 1/10 ms
+                    if(hdr_record_value(conn->latency.marker_histogram, latency)
+                            == false) {
+                        fprintf(stderr,
+                                "Latency value %g is too large, "
+                                "can't record.\n",
+                                (double) (latency / 10000));
+                    }
+                }
+            } else {
+                num_markers_found++;
+            }
             sbmh_reset(conn->latency.sbmh_marker_ctx);
         } else {
             break;
         }
     }
+
+    if(largs->params.message_marker) return;
 
     /*
      * Skip the necessary numbers of markers.
@@ -2178,6 +2221,20 @@ scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
 }
 
 
+void update_timestamps(char *ptr, size_t size) {
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    unsigned long long ts = (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec;
+    char *end = ptr + size;
+    while((ptr = memmem(ptr, end - ptr, MESSAGE_MARKER_TOKEN, sizeof(MESSAGE_MARKER_TOKEN) - 1))) {
+        if(end - ptr < 15 + 16 + 1) break;
+        ptr += sizeof(MESSAGE_MARKER_TOKEN) - 1;
+        sprintf(ptr, "%016llx", ts);
+        ptr += 16;
+        *ptr++ = '!';
+    }
+}
+
 /*
  * Compute the largest amount of data we can send to the channel
  * using a single write() call.
@@ -2237,6 +2294,9 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *available_body = accessible_size - off;
         *current_offset = off;
     }
+
+    if(largs->params.message_marker)
+        update_timestamps((char*) *position, *available_body);
 }
 
 static void

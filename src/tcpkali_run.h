@@ -85,6 +85,7 @@ struct oc_args {
     } checkpoint;
     struct latency_snapshot *previous_window_latency;
     mavg traffic_mavgs[2];
+    mavg count_mavgs[2];    /* --message-marker */
     size_t connections_opened_tally;
     Statsd *statsd;
     struct rate_modulator *rate_modulator;

@@ -31,7 +31,7 @@
 #include "tcpkali_regex.h"
 
 typedef struct tk_expr {
-    enum {
+    enum tk_expr_type {
         EXPR_DATA,
         EXPR_RAW,      /* 'raw' */
         EXPR_WS_FRAME, /* 'ws.ping', 'ws.pong', etc */
@@ -40,6 +40,7 @@ typedef struct tk_expr {
         EXPR_CONNECTION_PTR, /* 'connection.ptr' */
         EXPR_CONNECTION_UID, /* 'connection.uid' */
         EXPR_REGEX,
+        EXPR_MESSAGE_MARKER, /* 'messager.marker' */
     } type;
     union {
         struct {
@@ -106,6 +107,12 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
  * Concatenate expressions. One or both expressions can be NULL.
  */
 tk_expr_t *concat_expressions(tk_expr_t *, tk_expr_t *);
+
+/*
+ * Recursively check whether the given expression has a subexpression
+ * of a given type.
+ */
+int has_subexpression(const tk_expr_t *expr, enum tk_expr_type);
 
 /*
  * Split expression into three parts: prefix, predefined websocket frame, and

@@ -102,6 +102,13 @@ void message_collection_finalize(struct message_collection *, int as_websocket,
                                  const char *headers);
 
 /*
+ * Recursively figure out if message collection contains the
+ * expression of a given type.
+ * Returns 0 if the expression type is not found. Otherwise, returns 1.
+ */
+int message_collection_has(const struct message_collection *, enum tk_expr_type);
+
+/*
  * Estimate the size of the snippets of the specified kind (and mask).
  * Works on a finalized message collection.
  */

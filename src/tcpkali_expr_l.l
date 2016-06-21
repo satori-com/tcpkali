@@ -100,10 +100,12 @@ WSP [\t\r\v\f\n ]
     "pong"          { yylval.tv_opcode = WS_OP_PONG;
                       return TOK_ws_opcode; }
     "connection"    return TOK_connection;
+    "message"       return TOK_message;
     "global"        return TOK_global;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;
     "re"            { yy_push_state(in_regex); return TOK_regex; }
+    "marker"        return TOK_marker;
     [0-9]+  {
             yylval.tv_long = atol(yytext);
             return integer;
