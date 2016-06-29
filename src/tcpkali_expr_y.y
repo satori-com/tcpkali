@@ -9,20 +9,31 @@
 #include "tcpkali_expr.h"
 
 int yylex(void);
-int yyerror(const char *);
+int yyerror(tk_expr_t **, const char *);
 
 #define YYPARSE_PARAM   param
 #define YYERROR_VERBOSE
 
 %}
 
+%parse-param {tk_expr_t **param}
+
 %union  {
     tk_expr_t   *tv_expr;
+    tregex      *tv_regex;
     long         tv_long;
     struct {
         char  *buf;
         size_t len;
     } tv_string;
+    struct {
+        unsigned char from;
+        unsigned char to;
+    } tv_class_range;
+    struct {
+        unsigned char from;
+        unsigned char to;
+    } tv_repeat_range;
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 };
@@ -32,15 +43,19 @@ int yyerror(const char *);
 %token              TOK_connection   "connection"
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
+%token              TOK_regex        "re"
 %token              TOK_ellipsis     "..."
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
+%token  <tv_class_range>  class_range_token      "regex character class range"
+%token  <tv_repeat_range>  repeat_range_token      "regex repeat spec"
 %token  <tv_string> quoted_string    "quoted string"
 %token  <tv_string> filename         "file name"
 %token  <tv_long>   integer
 
 %type   <tv_string> String FileOrData
 %type   <tv_expr>   NumericExpr
+%type   <tv_regex>  CompleteRegex RepeatedRegex RegexPiece RegexClasses RegexClass RegexAlternatives RegexSequence
 %type   <tv_expr>   WSBasicFrame WSFrameWithData WSFrameFinalized
 %type   <tv_expr>   ByteSequenceOrExpr          "some string or \\{expression}"
 %type   <tv_expr>   ByteSequencesAndExpressions "data and expressions"
@@ -95,6 +110,13 @@ ByteSequenceOrExpr:
     }
     | '{' WSFrameFinalized '}' {
         $$ = $2;
+    }
+    | '{' TOK_regex CompleteRegex '}' {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_REGEX;
+        expr->u.regex.re = $3;
+        expr->estimate_size = tregex_max_size($3);
+        $$ = expr;
     }
 
 NumericExpr:
@@ -172,11 +194,59 @@ FileOrData:
         $$.buf[$$.len] = '\0';
     }
     
+CompleteRegex:
+    RegexAlternatives
+
+RegexAlternatives:
+    RegexSequence {
+        $$ = tregex_alternative($1);
+    }
+    | RegexAlternatives '|' RegexSequence {
+        $$ = tregex_alternative($1);
+        $$ = tregex_alternative_add($1, $3);
+    }
+
+RegexSequence:
+    RepeatedRegex
+    | RegexSequence RepeatedRegex {
+        $$ = tregex_join($1, $2);
+    }
+
+RepeatedRegex:
+    RegexPiece
+    | RegexPiece '?' { $$ = tregex_repeat($1, 0, 1); }
+    | RegexPiece '+' { $$ = tregex_repeat($1, 1, 16); }
+    | RegexPiece '*' { $$ = tregex_repeat($1, 0, 16); }
+    | RegexPiece '{' integer '}' { $$ = tregex_repeat($1, $3, $3); }
+    | RegexPiece '{' integer ',' integer '}' { printf("parse %ld %ld\n", $3, $5); $$ = tregex_repeat($1, $3, $5); }
+
+RegexPiece:
+    String {
+        $$ = tregex_string($1.buf, $1.len);
+    }
+    | '[' RegexClasses ']' {
+        $$ = $2;
+    }
+
+RegexClasses:
+    RegexClass
+    | RegexClasses RegexClass {
+        $$ = tregex_union_ranges($1, $2);
+    }
+
+RegexClass:
+    String {
+        $$ = tregex_range_from_string($1.buf, $1.len);
+    }
+    | class_range_token {
+        $$ = tregex_range($1.from, $1.to);
+    }
 
 %%
 
 int
-yyerror(const char *msg) {
+yyerror(tk_expr_t **param, const char *msg) {
+    (void)param;
     extern char *yytext;
     fprintf(stderr, "Parse error near token \"%s\": %s\n", yytext, msg);
     return -1;

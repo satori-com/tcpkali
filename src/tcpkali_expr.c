@@ -69,6 +69,9 @@ free_expression(tk_expr_t *expr) {
         case EXPR_CONNECTION_PTR:
         case EXPR_CONNECTION_UID:
             break;
+        case EXPR_REGEX:
+            tregex_free(expr->u.regex.re);
+            break;
         }
     }
 }
@@ -175,6 +178,8 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
         return cb(buf, size, expr, key, value);
+    case EXPR_REGEX:
+        return tregex_eval(expr->u.regex.re, buf, size);
     }
 
     return -1;
@@ -214,6 +219,7 @@ expression_split_by_websocket_frame(tk_expr_t *expr) {
     case EXPR_MODULO:
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
+    case EXPR_REGEX:
         result.esw_prefix = expr;
         return result;
     case EXPR_WS_FRAME:
@@ -269,6 +275,7 @@ unescape_expression(tk_expr_t *expr) {
     case EXPR_MODULO:
     case EXPR_CONNECTION_PTR:
     case EXPR_CONNECTION_UID:
+    case EXPR_REGEX:
         return;
     case EXPR_WS_FRAME: {
         size_t overhead = expr->estimate_size - expr->u.ws_frame.size;

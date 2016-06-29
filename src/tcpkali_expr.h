@@ -28,6 +28,7 @@
 #define TCPKALI_EXPR_H
 
 #include "tcpkali_websocket.h"
+#include "tcpkali_regex.h"
 
 typedef struct tk_expr {
     enum {
@@ -37,6 +38,7 @@ typedef struct tk_expr {
         EXPR_MODULO,         /* '%' */
         EXPR_CONNECTION_PTR, /* 'connection.ptr' */
         EXPR_CONNECTION_UID, /* 'connection.uid' */
+        EXPR_REGEX,
     } type;
     union {
         struct {
@@ -56,6 +58,9 @@ typedef struct tk_expr {
             struct tk_expr *expr; /* Expression */
             long modulo_value;    /* '... % 42' => 42 */
         } modulo;
+        struct {
+            tregex *re;
+        } regex;
     } u;
     size_t estimate_size;
     size_t dynamic;

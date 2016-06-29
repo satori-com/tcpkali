@@ -32,16 +32,29 @@ typedef struct tregex tregex;
 /* [a-z] = ('a', 'z') */
 tregex *tregex_range(unsigned char from, unsigned char to);
 
+/* [abcdef] = ("abcdef") */
+tregex *tregex_range_from_string(const char *str, ssize_t);
+
+/* "abc" = ("abc") */
+tregex *tregex_string(const char *str, ssize_t len);
+
 /* [a-zA-Z] = ([a-z], [A-Z]) */
 tregex *tregex_union_ranges(tregex *, tregex *);
 
 /* "abcde" = ("ab", "cde") */
 tregex *tregex_join(tregex *, tregex *);
 
-/* "(ab|cde)" = ("ab", "cde") */
-tregex *tregex_alternative(tregex *, tregex *);
+/* (ab|cde) = ("ab", "cde") */
+tregex *tregex_alternative(tregex *rhs);
+tregex *tregex_alternative_add(tregex *base, tregex *rhs);
 
 /* "a?" = ("a", 0, 1) */
 tregex *tregex_repeat(tregex *, unsigned from, unsigned to);
 
-#endif  /* TCPKALI_REGEX_H */
+size_t tregex_max_size(tregex *);
+
+ssize_t tregex_eval(tregex *, char *buf, size_t size);
+
+void tregex_free(tregex *);
+
+#endif /* TCPKALI_REGEX_H */
