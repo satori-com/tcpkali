@@ -41,6 +41,7 @@
 #include <err.h>
 #include <errno.h>
 #include <assert.h>
+#include <time.h>
 
 #include <statsd.h>
 
@@ -181,6 +182,12 @@ main(int argc, char **argv) {
                                           .write_combine = WRCOMB_ON};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
+
+#ifdef HAVE_SRANDOMDEV
+    srandomdev();
+#else
+    srandom(time(NULL));
+#endif
 
     struct array_of_doubles latency_percentiles = {
         .size = 0, .doubles = NULL,

@@ -1,19 +1,19 @@
-/* A Bison parser, made by GNU Bison 2.7.  */
+/* A Bison parser, made by GNU Bison 3.0.4.  */
 
 /* Bison interface for Yacc-like parsers in C
-   
-      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
-   
+
+   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
@@ -26,13 +26,13 @@
    special exception, which will cause the skeleton and the resulting
    Bison output files to be licensed under the GNU General Public
    License without this special exception.
-   
+
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
 #ifndef YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
 # define YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
-/* Enabling traces.  */
+/* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
 #endif
@@ -40,78 +40,81 @@
 extern int yydebug;
 #endif
 
-/* Tokens.  */
+/* Token type.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
-   /* Put the tokens into the symbol table, so that GDB and other debuggers
-      know about them.  */
-   enum yytokentype {
-     END = 0,
-     TOK_ws = 258,
-     TOK_ws_opcode = 259,
-     TOK_connection = 260,
-     TOK_ptr = 261,
-     TOK_uid = 262,
-     TOK_ellipsis = 263,
-     string_token = 264,
-     quoted_string = 265,
-     filename = 266,
-     integer = 267
-   };
+  enum yytokentype
+  {
+    END = 0,
+    TOK_ws = 258,
+    TOK_ws_opcode = 259,
+    TOK_global = 260,
+    TOK_connection = 261,
+    TOK_ptr = 262,
+    TOK_uid = 263,
+    TOK_regex = 264,
+    TOK_ellipsis = 265,
+    string_token = 266,
+    class_range_token = 267,
+    repeat_range_token = 268,
+    quoted_string = 269,
+    filename = 270,
+    integer = 271
+  };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
 #define TOK_ws_opcode 259
-#define TOK_connection 260
-#define TOK_ptr 261
-#define TOK_uid 262
-#define TOK_ellipsis 263
-#define string_token 264
-#define quoted_string 265
-#define filename 266
-#define integer 267
+#define TOK_global 260
+#define TOK_connection 261
+#define TOK_ptr 262
+#define TOK_uid 263
+#define TOK_regex 264
+#define TOK_ellipsis 265
+#define string_token 266
+#define class_range_token 267
+#define repeat_range_token 268
+#define quoted_string 269
+#define filename 270
+#define integer 271
 
-
-
+/* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-typedef union YYSTYPE
+
+union YYSTYPE
 {
-/* Line 2058 of yacc.c  */
-#line 19 "tcpkali_expr_y.y"
+#line 21 "tcpkali_expr_y.y" /* yacc.c:1909  */
 
     tk_expr_t   *tv_expr;
+    tregex      *tv_regex;
     long         tv_long;
     struct {
         char  *buf;
         size_t len;
     } tv_string;
+    struct {
+        unsigned char from;
+        unsigned char to;
+    } tv_class_range;
+    struct {
+        unsigned char from;
+        unsigned char to;
+    } tv_repeat_range;
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
+#line 108 "tcpkali_expr_y.h" /* yacc.c:1909  */
+};
 
-/* Line 2058 of yacc.c  */
-#line 95 "tcpkali_expr_y.h"
-} YYSTYPE;
+typedef union YYSTYPE YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
-# define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 #endif
 
+
 extern YYSTYPE yylval;
 
-#ifdef YYPARSE_PARAM
-#if defined __STDC__ || defined __cplusplus
-int yyparse (void *YYPARSE_PARAM);
-#else
-int yyparse ();
-#endif
-#else /* ! YYPARSE_PARAM */
-#if defined __STDC__ || defined __cplusplus
-int yyparse (void);
-#else
-int yyparse ();
-#endif
-#endif /* ! YYPARSE_PARAM */
+int yyparse (tk_expr_t **param);
 
 #endif /* !YY_YY_TCPKALI_EXPR_Y_H_INCLUDED  */

@@ -20,6 +20,7 @@ int transport_expr_lex(void);
 
 %x in_expression
 %x in_filename
+%x in_regex in_regex_class in_regex_range
 
 WSP [\t\r\v\f\n ]
 
@@ -97,8 +98,10 @@ WSP [\t\r\v\f\n ]
     "pong"          { yylval.tv_opcode = WS_OP_PONG;
                       return TOK_ws_opcode; }
     "connection"    return TOK_connection;
+    "global"        return TOK_global;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;
+    "re"            { yy_push_state(in_regex); return TOK_regex; }
     [0-9]+  {
             yylval.tv_long = atol(yytext);
             return integer;
@@ -123,7 +126,6 @@ WSP [\t\r\v\f\n ]
                         "Unexpected token in message expression: %s\n",
                         yytext);
                     yy_top_state(); /* Just to use this function */
-                    (void)yyunput;  /* Just to use this symbol */
                     return -1;
                 }
 
@@ -132,10 +134,87 @@ WSP [\t\r\v\f\n ]
                         "Unexpected token in message expression: %s\n",
                         yytext);
                     yy_top_state(); /* Just to use this function */
-                    (void)yyunput;  /* Just to use this symbol */
                     return -1;
                 }
 
+}
+
+<in_regex>{
+    {WSP}+          /* Ignore whitespace */
+    [^][{}+?|* ][^][{}+?|*]*   {
+                yylval.tv_string.buf = malloc(yyleng + 1);
+                yylval.tv_string.len = yyleng;
+                memcpy(yylval.tv_string.buf, yytext, yyleng);
+                yylval.tv_string.buf[yyleng] = '\0';
+                return string_token;
+            }
+    "|"     { return '|'; }
+    "["     { yy_push_state(in_regex_class); return '['; }
+    "]"     { return ']'; }
+    "{"     { yy_push_state(in_regex_range); return '{'; }
+    "}"     { yy_pop_state(); unput('}'); }
+    "?"     { return '?'; }
+    "+"     { return '+'; }
+    "*"     { return '*'; }
+}
+
+<in_regex_class>{
+
+    [^]-]+   {
+                yylval.tv_string.buf = malloc(yyleng + 1);
+                yylval.tv_string.len = yyleng;
+                memcpy(yylval.tv_string.buf, yytext, yyleng);
+                yylval.tv_string.buf[yyleng] = '\0';
+                printf("accept string [%s]\n", yylval.tv_string.buf);
+                return string_token;
+            }
+
+    [^]-]+/[^]-]-  {
+                yylval.tv_string.buf = malloc(yyleng + 1);
+                yylval.tv_string.len = yyleng;
+                memcpy(yylval.tv_string.buf, yytext, yyleng);
+                yylval.tv_string.buf[yyleng] = '\0';
+                printf("accept string [%s]\n", yylval.tv_string.buf);
+                return string_token;
+            }
+
+    [^]-]-[^]-] {
+                assert(yyleng == 3);
+                yylval.tv_class_range.from = yytext[0];
+                yylval.tv_class_range.to = yytext[2];
+                return class_range_token;
+            }
+
+    -[^]-]|[^]-]- {
+                assert(yyleng == 2);
+                yylval.tv_string.buf = malloc(yyleng + 1);
+                yylval.tv_string.len = yyleng;
+                memcpy(yylval.tv_string.buf, yytext, yyleng);
+                yylval.tv_string.buf[yyleng] = '\0';
+                return string_token;
+            }
+
+    "]"     { yy_pop_state(); unput(']'); }
+
+    [^]"<} .%-]+     {
+                    fprintf(stderr,
+                        "Unexpected token in regular expression: %s\n",
+                        yytext);
+                    yy_top_state(); /* Just to use this function */
+                    return -1;
+                }
+}
+
+<in_regex_range>{
+    {WSP}+          /* Ignore whitespace */
+    [0-9]+  {
+            yylval.tv_long = atol(yytext);
+            return integer;
+        }
+
+    ","     { return ','; }
+
+    "}"     { yy_pop_state(); return '}'; }
 }
 
 %%
