@@ -235,7 +235,8 @@ message_collection_add_expr(struct message_collection *mc,
             if(!(snip->flags & MSK_PURPOSE_HTTP_HEADER))
                 snip->flags |= MSK_FRAMING_ALLOWED;
             snip->flags |= MSK_EXPRESSION_FOUND;
-            mc->dynamic_expressions_found += snip->expr->dynamic;
+            mc->dynamic_expressions_found +=
+                snip->expr->dynamic_scope != DS_GLOBAL_FIXED;
             mc->snippets_count++;
 
             snip = &mc->snippets[mc->snippets_count];

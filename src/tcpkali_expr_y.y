@@ -40,6 +40,7 @@ int yyerror(tk_expr_t **, const char *);
 
 %token              TOK_ws           "ws"
 %token <tv_opcode>  TOK_ws_opcode    "text, binary, close, ping, pong, continuation"
+%token              TOK_global       "global"
 %token              TOK_connection   "connection"
 %token              TOK_ptr          " ptr"
 %token              TOK_uid          "uid"
@@ -52,6 +53,8 @@ int yyerror(tk_expr_t **, const char *);
 %token  <tv_string> quoted_string    "quoted string"
 %token  <tv_string> filename         "file name"
 %token  <tv_long>   integer
+
+%left   '|'
 
 %type   <tv_string> String FileOrData
 %type   <tv_expr>   NumericExpr
@@ -106,16 +109,33 @@ ByteSequenceOrExpr:
     }
     | '{' NumericExpr '}' {
         $$ = $2;
-        $$->dynamic = 1;
+        $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | '{' WSFrameFinalized '}' {
         $$ = $2;
+    }
+    | '{' TOK_global '.' TOK_regex CompleteRegex '}' {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_REGEX;
+        expr->u.regex.re = $5;
+        expr->estimate_size = tregex_max_size($5);
+        expr->dynamic_scope = DS_GLOBAL_FIXED;
+        $$ = expr;
+    }
+    | '{' TOK_connection '.' TOK_regex CompleteRegex '}' {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_REGEX;
+        expr->u.regex.re = $5;
+        expr->estimate_size = tregex_max_size($5);
+        expr->dynamic_scope = DS_PER_CONNECTION;
+        $$ = expr;
     }
     | '{' TOK_regex CompleteRegex '}' {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
         expr->u.regex.re = $3;
         expr->estimate_size = tregex_max_size($3);
+        expr->dynamic_scope = DS_PER_MESSAGE;
         $$ = expr;
     }
 
@@ -218,7 +238,7 @@ RepeatedRegex:
     | RegexPiece '+' { $$ = tregex_repeat($1, 1, 16); }
     | RegexPiece '*' { $$ = tregex_repeat($1, 0, 16); }
     | RegexPiece '{' integer '}' { $$ = tregex_repeat($1, $3, $3); }
-    | RegexPiece '{' integer ',' integer '}' { printf("parse %ld %ld\n", $3, $5); $$ = tregex_repeat($1, $3, $5); }
+    | RegexPiece '{' integer ',' integer '}' { $$ = tregex_repeat($1, $3, $5); }
 
 RegexPiece:
     String {

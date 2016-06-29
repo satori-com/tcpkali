@@ -98,6 +98,7 @@ WSP [\t\r\v\f\n ]
     "pong"          { yylval.tv_opcode = WS_OP_PONG;
                       return TOK_ws_opcode; }
     "connection"    return TOK_connection;
+    "global"        return TOK_global;
     "ptr"           return TOK_ptr;
     "uid"           return TOK_uid;
     "re"            { yy_push_state(in_regex); return TOK_regex; }

@@ -193,7 +193,9 @@ concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
         expr->u.concat.expr[0] = expr1;
         expr->u.concat.expr[1] = expr2;
         expr->estimate_size = expr1->estimate_size + expr2->estimate_size;
-        expr->dynamic = (expr1->dynamic || expr2->dynamic);
+        expr->dynamic_scope = expr1->dynamic_scope > expr2->dynamic_scope
+                                  ? expr1->dynamic_scope
+                                  : expr2->dynamic_scope;
         return expr;
     } else if(expr1) {
         return expr1;

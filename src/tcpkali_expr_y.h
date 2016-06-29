@@ -48,34 +48,36 @@ extern int yydebug;
     END = 0,
     TOK_ws = 258,
     TOK_ws_opcode = 259,
-    TOK_connection = 260,
-    TOK_ptr = 261,
-    TOK_uid = 262,
-    TOK_regex = 263,
-    TOK_ellipsis = 264,
-    string_token = 265,
-    class_range_token = 266,
-    repeat_range_token = 267,
-    quoted_string = 268,
-    filename = 269,
-    integer = 270
+    TOK_global = 260,
+    TOK_connection = 261,
+    TOK_ptr = 262,
+    TOK_uid = 263,
+    TOK_regex = 264,
+    TOK_ellipsis = 265,
+    string_token = 266,
+    class_range_token = 267,
+    repeat_range_token = 268,
+    quoted_string = 269,
+    filename = 270,
+    integer = 271
   };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
 #define TOK_ws_opcode 259
-#define TOK_connection 260
-#define TOK_ptr 261
-#define TOK_uid 262
-#define TOK_regex 263
-#define TOK_ellipsis 264
-#define string_token 265
-#define class_range_token 266
-#define repeat_range_token 267
-#define quoted_string 268
-#define filename 269
-#define integer 270
+#define TOK_global 260
+#define TOK_connection 261
+#define TOK_ptr 262
+#define TOK_uid 263
+#define TOK_regex 264
+#define TOK_ellipsis 265
+#define string_token 266
+#define class_range_token 267
+#define repeat_range_token 268
+#define quoted_string 269
+#define filename 270
+#define integer 271
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -102,7 +104,7 @@ union YYSTYPE
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
-#line 106 "tcpkali_expr_y.h" /* yacc.c:1909  */
+#line 108 "tcpkali_expr_y.h" /* yacc.c:1909  */
 };
 
 typedef union YYSTYPE YYSTYPE;

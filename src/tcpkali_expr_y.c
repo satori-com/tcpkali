@@ -98,7 +98,10 @@ int yyerror(tk_expr_t **, const char *);
 # define YYERROR_VERBOSE 0
 #endif
 
-
+/* In a future release of Bison, this section will be replaced
+   by #include "y.tab.h".  */
+#ifndef YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
+# define YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -115,34 +118,36 @@ extern int yydebug;
     END = 0,
     TOK_ws = 258,
     TOK_ws_opcode = 259,
-    TOK_connection = 260,
-    TOK_ptr = 261,
-    TOK_uid = 262,
-    TOK_regex = 263,
-    TOK_ellipsis = 264,
-    string_token = 265,
-    class_range_token = 266,
-    repeat_range_token = 267,
-    quoted_string = 268,
-    filename = 269,
-    integer = 270
+    TOK_global = 260,
+    TOK_connection = 261,
+    TOK_ptr = 262,
+    TOK_uid = 263,
+    TOK_regex = 264,
+    TOK_ellipsis = 265,
+    string_token = 266,
+    class_range_token = 267,
+    repeat_range_token = 268,
+    quoted_string = 269,
+    filename = 270,
+    integer = 271
   };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
 #define TOK_ws_opcode 259
-#define TOK_connection 260
-#define TOK_ptr 261
-#define TOK_uid 262
-#define TOK_regex 263
-#define TOK_ellipsis 264
-#define string_token 265
-#define class_range_token 266
-#define repeat_range_token 267
-#define quoted_string 268
-#define filename 269
-#define integer 270
+#define TOK_global 260
+#define TOK_connection 261
+#define TOK_ptr 262
+#define TOK_uid 263
+#define TOK_regex 264
+#define TOK_ellipsis 265
+#define string_token 266
+#define class_range_token 267
+#define repeat_range_token 268
+#define quoted_string 269
+#define filename 270
+#define integer 271
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -169,7 +174,7 @@ union YYSTYPE
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
-#line 173 "tcpkali_expr_y.c" /* yacc.c:355  */
+#line 178 "tcpkali_expr_y.c" /* yacc.c:355  */
 };
 
 typedef union YYSTYPE YYSTYPE;
@@ -182,11 +187,11 @@ extern YYSTYPE yylval;
 
 int yyparse (tk_expr_t **param);
 
-
+#endif /* !YY_YY_TCPKALI_EXPR_Y_H_INCLUDED  */
 
 /* Copy the second part of user declarations.  */
 
-#line 190 "tcpkali_expr_y.c" /* yacc.c:358  */
+#line 195 "tcpkali_expr_y.c" /* yacc.c:358  */
 
 #ifdef short
 # undef short
@@ -426,23 +431,23 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  15
+#define YYFINAL  16
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   50
+#define YYLAST   59
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  29
+#define YYNTOKENS  30
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  17
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  38
+#define YYNRULES  40
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  58
+#define YYNSTATES  66
 
 /* YYTRANSLATE[YYX] -- Symbol number corresponding to YYX as returned
    by yylex, with out-of-bounds checking.  */
 #define YYUNDEFTOK  2
-#define YYMAXUTOK   272
+#define YYMAXUTOK   273
 
 #define YYTRANSLATE(YYX)                                                \
   ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
@@ -454,16 +459,16 @@ static const yytype_uint8 yytranslate[] =
        0,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,    20,     2,     2,
-       2,     2,    25,    24,    26,     2,    21,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,    23,     2,     2,
+       2,     2,    26,    25,    27,     2,    22,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,    23,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,    27,     2,    28,     2,     2,     2,     2,     2,     2,
+       2,     2,     2,    24,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,    18,    22,    19,     2,     2,     2,     2,
+       2,    28,     2,    29,     2,     2,     2,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
+       2,     2,     2,    20,    17,    21,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -478,17 +483,18 @@ static const yytype_uint8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
-      15,    16,    17
+      15,    16,    18,    19
 };
 
 #if YYDEBUG
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_uint8 yyrline[] =
+static const yytype_uint16 yyrline[] =
 {
-       0,    66,    66,    72,    78,    81,    86,    87,    98,   107,
-     111,   114,   123,   130,   135,   142,   144,   150,   152,   168,
-     177,   178,   198,   201,   204,   210,   211,   216,   217,   218,
-     219,   220,   221,   224,   227,   232,   233,   238,   241
+       0,    69,    69,    75,    81,    84,    89,    90,   101,   110,
+     114,   117,   125,   133,   143,   150,   155,   162,   164,   170,
+     172,   188,   197,   198,   218,   221,   224,   230,   231,   236,
+     237,   238,   239,   240,   241,   244,   247,   252,   253,   258,
+     261
 };
 #endif
 
@@ -498,12 +504,12 @@ static const yytype_uint8 yyrline[] =
 static const char *const yytname[] =
 {
   "\"end of expression\"", "error", "$undefined", "\"ws\"",
-  "\"text, binary, close, ping, pong, continuation\"", "\"connection\"",
-  "\" ptr\"", "\"uid\"", "\"re\"", "\"...\"", "\"arbitrary string\"",
-  "\"regex character class range\"", "\"regex repeat spec\"",
-  "\"quoted string\"", "\"file name\"", "integer",
-  "\"some string or \\\\{expression}\"", "\"data and expressions\"", "'{'",
-  "'}'", "'%'", "'.'", "'|'", "'?'", "'+'", "'*'", "','", "'['", "']'",
+  "\"text, binary, close, ping, pong, continuation\"", "\"global\"",
+  "\"connection\"", "\" ptr\"", "\"uid\"", "\"re\"", "\"...\"",
+  "\"arbitrary string\"", "\"regex character class range\"",
+  "\"regex repeat spec\"", "\"quoted string\"", "\"file name\"", "integer",
+  "'|'", "\"some string or \\\\{expression}\"", "\"data and expressions\"",
+  "'{'", "'}'", "'.'", "'%'", "'?'", "'+'", "'*'", "','", "'['", "']'",
   "$accept", "Grammar", "ByteSequencesAndExpressions", "String",
   "ByteSequenceOrExpr", "NumericExpr", "WSFrameFinalized",
   "WSFrameWithData", "WSBasicFrame", "FileOrData", "CompleteRegex",
@@ -518,15 +524,15 @@ static const char *const yytname[] =
 static const yytype_uint16 yytoknum[] =
 {
        0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-     265,   266,   267,   268,   269,   270,   271,   272,   123,   125,
-      37,    46,   124,    63,    43,    42,    44,    91,    93
+     265,   266,   267,   268,   269,   270,   271,   124,   272,   273,
+     123,   125,    46,    37,    63,    43,    42,    44,    91,    93
 };
 # endif
 
-#define YYPACT_NINF -25
+#define YYPACT_NINF -27
 
 #define yypact_value_is_default(Yystate) \
-  (!!((Yystate) == (-25)))
+  (!!((Yystate) == (-27)))
 
 #define YYTABLE_NINF -1
 
@@ -537,12 +543,13 @@ static const yytype_uint16 yytoknum[] =
      STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       2,   -25,   -25,    21,     9,    16,    15,    -7,    17,    20,
-      -4,    -1,    11,    18,   -25,   -25,   -25,   -25,   -25,    33,
-      27,    25,    15,    23,    22,    -4,   -25,   -10,   -25,    24,
-     -25,   -25,   -25,   -25,   -25,   -25,   -25,   -25,   -25,    15,
-      -6,   -25,   -25,    -4,   -25,    28,   -25,   -25,   -25,   -25,
-     -25,   -25,    -4,    -9,   -25,    30,    29,   -25
+       2,   -27,   -27,     6,    26,    27,    -5,    -6,    11,    12,
+      23,    -3,    19,    20,    21,   -27,   -27,   -27,   -27,   -27,
+      39,    37,    30,     7,    -5,    28,    31,    -3,   -27,     4,
+     -27,    34,   -27,   -27,   -27,   -27,   -27,   -27,    -3,   -27,
+     -27,    -3,   -27,    -5,    -8,   -27,   -27,    -3,   -27,    35,
+     -27,   -27,   -27,   -27,    32,    33,   -27,   -27,    -3,   -11,
+     -27,   -27,   -27,    36,    38,   -27
 };
 
   /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -551,25 +558,26 @@ static const yytype_int8 yypact[] =
 static const yytype_uint8 yydefact[] =
 {
        0,     2,     6,     0,     0,     0,     8,     4,     0,     0,
-       0,     0,     0,    15,    17,     1,     3,     7,     5,     0,
-       0,     0,    33,     0,    22,    23,    25,    27,     9,     0,
-      10,    16,    20,    21,    18,    19,    13,    14,    38,    37,
-       0,    35,    11,     0,    26,     0,    28,    29,    30,    12,
-      34,    36,    24,     0,    31,     0,     0,    32
+       0,     0,     0,     0,    17,    19,     1,     3,     7,     5,
+       0,     0,     0,     0,    35,     0,    24,    25,    27,    29,
+       9,     0,    10,    18,    22,    23,    20,    21,     0,    15,
+      16,     0,    40,    39,     0,    37,    13,     0,    28,     0,
+      30,    31,    32,    14,     0,     0,    36,    38,    26,     0,
+      11,    12,    33,     0,     0,    34
 };
 
   /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -25,   -25,    39,     0,   -25,   -25,   -25,   -25,   -25,   -25,
-     -25,   -25,     4,   -24,   -25,   -25,    10
+     -27,   -27,    40,     0,   -27,   -27,   -27,   -27,   -27,   -27,
+     -21,   -27,     8,   -26,   -27,   -27,    13
 };
 
   /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-      -1,     4,     5,    22,     7,    11,    12,    13,    14,    34,
-      23,    24,    25,    26,    27,    40,    41
+      -1,     4,     5,    24,     7,    12,    13,    14,    15,    36,
+      25,    26,    27,    28,    29,    44,    45
 };
 
   /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -577,52 +585,55 @@ static const yytype_int8 yydefgoto[] =
      number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_uint8 yytable[] =
 {
-       6,    44,     1,     2,     2,    38,     2,     6,    45,    15,
-      54,     3,     2,    46,    47,    48,    16,    55,    28,    29,
-       3,    39,    50,    21,     8,    17,     9,    31,    44,    10,
-      30,    32,    33,    36,    37,     2,    38,    35,    19,    49,
-      39,    20,    42,    53,    43,    56,    18,    52,    57,     0,
-      51
+       6,    48,     1,     2,    42,     2,    18,     6,     2,     8,
+      62,     9,    10,     2,     3,    11,    63,    54,     2,    42,
+      55,    56,     3,    43,    49,    23,    16,    17,    50,    51,
+      52,    33,    48,    20,    21,    34,    35,    39,    40,    41,
+      30,    32,    31,    37,    43,    22,    38,    19,    47,    46,
+      53,    59,    64,    60,    61,    58,     0,    57,     0,    65
 };
 
 static const yytype_int8 yycheck[] =
 {
-       0,    25,     0,    10,    10,    11,    10,     7,    18,     0,
-      19,    18,    10,    23,    24,    25,     0,    26,    19,    20,
-      18,    21,    28,    27,     3,    10,     5,     9,    52,     8,
-      19,    13,    14,     6,     7,    10,    11,     4,    21,    15,
-      40,    21,    19,    15,    22,    15,     7,    43,    19,    -1,
-      40
+       0,    27,     0,    11,    12,    11,    11,     7,    11,     3,
+      21,     5,     6,    11,    20,     9,    27,    38,    11,    12,
+      41,    29,    20,    23,    20,    28,     0,     0,    24,    25,
+      26,    10,    58,    22,    22,    14,    15,     7,     8,     9,
+      21,    21,    23,     4,    44,    22,     9,     7,    17,    21,
+      16,    16,    16,    21,    21,    47,    -1,    44,    -1,    21
 };
 
   /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
      symbol of state STATE-NUM.  */
 static const yytype_uint8 yystos[] =
 {
-       0,     0,    10,    18,    30,    31,    32,    33,     3,     5,
-       8,    34,    35,    36,    37,     0,     0,    10,    31,    21,
-      21,    27,    32,    39,    40,    41,    42,    43,    19,    20,
-      19,     9,    13,    14,    38,     4,     6,     7,    11,    32,
-      44,    45,    19,    22,    42,    18,    23,    24,    25,    15,
-      28,    45,    41,    15,    19,    26,    15,    19
+       0,     0,    11,    20,    31,    32,    33,    34,     3,     5,
+       6,     9,    35,    36,    37,    38,     0,     0,    11,    32,
+      22,    22,    22,    28,    33,    40,    41,    42,    43,    44,
+      21,    23,    21,    10,    14,    15,    39,     4,     9,     7,
+       8,     9,    12,    33,    45,    46,    21,    17,    43,    20,
+      24,    25,    26,    16,    40,    40,    29,    46,    42,    16,
+      21,    21,    21,    27,    16,    21
 };
 
   /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
 static const yytype_uint8 yyr1[] =
 {
-       0,    29,    30,    30,    31,    31,    32,    32,    33,    33,
-      33,    33,    34,    34,    34,    35,    35,    36,    36,    37,
-      38,    38,    39,    40,    40,    41,    41,    42,    42,    42,
-      42,    42,    42,    43,    43,    44,    44,    45,    45
+       0,    30,    31,    31,    32,    32,    33,    33,    34,    34,
+      34,    34,    34,    34,    35,    35,    35,    36,    36,    37,
+      37,    38,    39,    39,    40,    41,    41,    42,    42,    43,
+      43,    43,    43,    43,    43,    44,    44,    45,    45,    46,
+      46
 };
 
   /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
 static const yytype_uint8 yyr2[] =
 {
        0,     2,     1,     2,     1,     2,     1,     2,     1,     3,
-       3,     4,     3,     3,     3,     1,     2,     1,     2,     3,
-       1,     1,     1,     1,     3,     1,     2,     1,     2,     2,
-       2,     4,     6,     1,     3,     1,     2,     1,     1
+       3,     6,     6,     4,     3,     3,     3,     1,     2,     1,
+       2,     3,     1,     1,     1,     1,     3,     1,     2,     1,
+       2,     2,     2,     4,     6,     1,     3,     1,     2,     1,
+       1
 };
 
 
@@ -1301,43 +1312,43 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-#line 66 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 69 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
         *(tk_expr_t **)param = expr;
         return 0;
     }
-#line 1312 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1323 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 3:
-#line 72 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 75 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         *(tk_expr_t **)param = (yyvsp[-1].tv_expr);
         return 0;
     }
-#line 1321 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1332 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 4:
-#line 78 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 81 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = (yyvsp[0].tv_expr);
     }
-#line 1329 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1340 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 5:
-#line 81 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 84 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = concat_expressions((yyvsp[-1].tv_expr), (yyvsp[0].tv_expr));
     }
-#line 1337 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1348 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 7:
-#line 87 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 90 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         size_t len = (((yyvsp[-1].tv_string)).len + ((yyvsp[0].tv_string)).len);
         char *p = malloc(len + 1);
@@ -1347,11 +1358,11 @@ yyreduce:
         (yyval.tv_string).buf = p;
         (yyval.tv_string).len = len;
     }
-#line 1351 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1362 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 8:
-#line 98 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 101 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         /* If there's nothing to parse, don't return anything */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
@@ -1361,40 +1372,67 @@ yyreduce:
         expr->estimate_size = ((yyvsp[0].tv_string)).len;
         (yyval.tv_expr) = expr;
     }
-#line 1365 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1376 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 9:
-#line 107 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 110 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
-        (yyval.tv_expr)->dynamic = 1;
+        (yyval.tv_expr)->dynamic_scope = DS_PER_CONNECTION;
     }
-#line 1374 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1385 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 10:
-#line 111 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 114 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
     }
-#line 1382 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1393 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 11:
-#line 114 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 117 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
         expr->u.regex.re = (yyvsp[-1].tv_regex);
         expr->estimate_size = tregex_max_size((yyvsp[-1].tv_regex));
+        expr->dynamic_scope = DS_GLOBAL_FIXED;
         (yyval.tv_expr) = expr;
     }
-#line 1394 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1406 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
   case 12:
-#line 123 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 125 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_REGEX;
+        expr->u.regex.re = (yyvsp[-1].tv_regex);
+        expr->estimate_size = tregex_max_size((yyvsp[-1].tv_regex));
+        expr->dynamic_scope = DS_PER_CONNECTION;
+        (yyval.tv_expr) = expr;
+    }
+#line 1419 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 13:
+#line 133 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_REGEX;
+        expr->u.regex.re = (yyvsp[-1].tv_regex);
+        expr->estimate_size = tregex_max_size((yyvsp[-1].tv_regex));
+        expr->dynamic_scope = DS_PER_MESSAGE;
+        (yyval.tv_expr) = expr;
+    }
+#line 1432 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 14:
+#line 143 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_MODULO;
@@ -1402,40 +1440,40 @@ yyreduce:
         (yyval.tv_expr)->u.modulo.modulo_value = (yyvsp[0].tv_long);
         (yyval.tv_expr)->estimate_size = (yyvsp[-2].tv_expr)->estimate_size;
     }
-#line 1406 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1444 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 13:
-#line 130 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 15:
+#line 150 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_PTR;
         (yyval.tv_expr)->estimate_size = sizeof("100000000000000");
     }
-#line 1416 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1454 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 14:
-#line 135 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 16:
+#line 155 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_UID;
         (yyval.tv_expr)->estimate_size = sizeof("100000000000000");
     }
-#line 1426 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1464 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 16:
-#line 144 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 18:
+#line 164 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
         (yyval.tv_expr)->u.ws_frame.fin = 0; /* Expect continuation. */
     }
-#line 1435 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1473 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 18:
-#line 152 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 20:
+#line 172 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
         /* Combine old data with new data. */
@@ -1450,11 +1488,11 @@ yyreduce:
         (yyval.tv_expr)->u.ws_frame.size = total_size;
         (yyval.tv_expr)->estimate_size += ((yyvsp[0].tv_string)).len;
     }
-#line 1454 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1492 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 19:
-#line 168 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 21:
+#line 188 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_WS_FRAME;
@@ -1462,11 +1500,11 @@ yyreduce:
         (yyval.tv_expr)->u.ws_frame.fin = 1; /* Complete frame */
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
-#line 1466 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1504 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 21:
-#line 178 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 23:
+#line 198 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         const char *name = (yyvsp[0].tv_string).buf;
         FILE *fp = fopen(name, "r");
@@ -1485,106 +1523,106 @@ yyreduce:
         fclose(fp);
         (yyval.tv_string).buf[(yyval.tv_string).len] = '\0';
     }
-#line 1489 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1527 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 23:
-#line 201 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 25:
+#line 221 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_regex) = tregex_alternative((yyvsp[0].tv_regex));
     }
-#line 1497 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1535 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 24:
-#line 204 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 26:
+#line 224 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_regex) = tregex_alternative((yyvsp[-2].tv_regex));
         (yyval.tv_regex) = tregex_alternative_add((yyvsp[-2].tv_regex), (yyvsp[0].tv_regex));
     }
-#line 1506 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 26:
-#line 211 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    {
-        (yyval.tv_regex) = tregex_join((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
-    }
-#line 1514 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 28:
-#line 217 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 1); }
-#line 1520 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 29:
-#line 218 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 1, 16); }
-#line 1526 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 30:
-#line 219 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 16); }
-#line 1532 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 31:
-#line 220 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    { (yyval.tv_regex) = tregex_repeat((yyvsp[-3].tv_regex), (yyvsp[-1].tv_long), (yyvsp[-1].tv_long)); }
-#line 1538 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 32:
-#line 221 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    { printf("parse %ld %ld\n", (yyvsp[-3].tv_long), (yyvsp[-1].tv_long)); (yyval.tv_regex) = tregex_repeat((yyvsp[-5].tv_regex), (yyvsp[-3].tv_long), (yyvsp[-1].tv_long)); }
 #line 1544 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 33:
-#line 224 "tcpkali_expr_y.y" /* yacc.c:1646  */
+  case 28:
+#line 231 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
-        (yyval.tv_regex) = tregex_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
+        (yyval.tv_regex) = tregex_join((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
     }
 #line 1552 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 34:
-#line 227 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    {
-        (yyval.tv_regex) = (yyvsp[-1].tv_regex);
-    }
-#line 1560 "tcpkali_expr_y.c" /* yacc.c:1646  */
+  case 30:
+#line 237 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 1); }
+#line 1558 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 36:
-#line 233 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    {
-        (yyval.tv_regex) = tregex_union_ranges((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
-    }
-#line 1568 "tcpkali_expr_y.c" /* yacc.c:1646  */
-    break;
-
-  case 37:
+  case 31:
 #line 238 "tcpkali_expr_y.y" /* yacc.c:1646  */
-    {
-        (yyval.tv_regex) = tregex_range_from_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
-    }
+    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 1, 16); }
+#line 1564 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 32:
+#line 239 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 16); }
+#line 1570 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 33:
+#line 240 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    { (yyval.tv_regex) = tregex_repeat((yyvsp[-3].tv_regex), (yyvsp[-1].tv_long), (yyvsp[-1].tv_long)); }
 #line 1576 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
-  case 38:
+  case 34:
 #line 241 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    { (yyval.tv_regex) = tregex_repeat((yyvsp[-5].tv_regex), (yyvsp[-3].tv_long), (yyvsp[-1].tv_long)); }
+#line 1582 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 35:
+#line 244 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        (yyval.tv_regex) = tregex_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
+    }
+#line 1590 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 36:
+#line 247 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        (yyval.tv_regex) = (yyvsp[-1].tv_regex);
+    }
+#line 1598 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 38:
+#line 253 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        (yyval.tv_regex) = tregex_union_ranges((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
+    }
+#line 1606 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 39:
+#line 258 "tcpkali_expr_y.y" /* yacc.c:1646  */
+    {
+        (yyval.tv_regex) = tregex_range_from_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
+    }
+#line 1614 "tcpkali_expr_y.c" /* yacc.c:1646  */
+    break;
+
+  case 40:
+#line 261 "tcpkali_expr_y.y" /* yacc.c:1646  */
     {
         (yyval.tv_regex) = tregex_range((yyvsp[0].tv_class_range).from, (yyvsp[0].tv_class_range).to);
     }
-#line 1584 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1622 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
 
 
-#line 1588 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1626 "tcpkali_expr_y.c" /* yacc.c:1646  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1812,7 +1850,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 245 "tcpkali_expr_y.y" /* yacc.c:1906  */
+#line 265 "tcpkali_expr_y.y" /* yacc.c:1906  */
 
 
 int

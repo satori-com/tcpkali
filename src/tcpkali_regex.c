@@ -8,7 +8,13 @@
 
 struct tregex {
 #define TREGEX_ELEMENTS 16
-    enum { TRegexChars, TRegexClass, TRegexSequence, TRegexAlternative, TRegexRepeat } kind;
+    enum {
+        TRegexChars,
+        TRegexClass,
+        TRegexSequence,
+        TRegexAlternative,
+        TRegexRepeat
+    } kind;
     size_t max_size;
     union {
         struct {
@@ -62,7 +68,8 @@ tregex_debug_print(tregex *re) {
         if(re->repeat.minimum == 0 && re->repeat.range == 1) {
             printf("?");
         } else {
-            printf("{%u,%u}", re->repeat.minimum, re->repeat.minimum + re->repeat.range);
+            printf("{%u,%u}", re->repeat.minimum,
+                   re->repeat.minimum + re->repeat.range);
         }
         break;
     }
@@ -85,8 +92,9 @@ tregex *
 tregex_join(tregex *re, tregex *rhs) {
     if(re->kind == TRegexSequence && rhs->kind == TRegexSequence) {
         if(re->sequence.pieces + rhs->sequence.pieces < TREGEX_ELEMENTS) {
-            memcpy(&re->sequence.piece[re->sequence.pieces], &rhs->sequence.piece[0],
-                rhs->sequence.pieces * sizeof(re->sequence.piece[0]));
+            memcpy(&re->sequence.piece[re->sequence.pieces],
+                   &rhs->sequence.piece[0],
+                   rhs->sequence.pieces * sizeof(re->sequence.piece[0]));
             re->sequence.pieces += rhs->sequence.pieces;
             rhs->sequence.pieces = 0;
             re->max_size += rhs->max_size;
@@ -186,8 +194,7 @@ tregex_alternative_add(tregex *re, tregex *rhs) {
         assert(!"FIXME: Too many alternatives");
         return NULL;
     }
-    if(re->max_size < rhs->max_size)
-        re->max_size = rhs->max_size;
+    if(re->max_size < rhs->max_size) re->max_size = rhs->max_size;
     return re;
 }
 
@@ -252,9 +259,8 @@ tregex_eval(tregex *re, char *buf, size_t size) {
         }
         break;
     case TRegexRepeat: {
-        size_t cycles =
-            re->repeat.minimum
-            + (re->repeat.range ? random() % re->repeat.range : 0);
+        size_t cycles = re->repeat.minimum
+                        + (re->repeat.range ? random() % re->repeat.range : 0);
         for(unsigned i = 0; i < cycles; i++) {
             ssize_t written = tregex_eval(re->repeat.what, buf, bend - buf);
             if(written < 0 || (bend - buf) < written)
@@ -265,7 +271,8 @@ tregex_eval(tregex *re, char *buf, size_t size) {
     } break;
     case TRegexSequence:
         for(size_t i = 0; i < re->sequence.pieces; i++) {
-            ssize_t written = tregex_eval(re->sequence.piece[i], buf, bend - buf);
+            ssize_t written =
+                tregex_eval(re->sequence.piece[i], buf, bend - buf);
             if(written < 0 || (bend - buf) < written)
                 return -1;
             else
@@ -274,8 +281,8 @@ tregex_eval(tregex *re, char *buf, size_t size) {
         break;
     case TRegexAlternative: {
         ssize_t written = tregex_eval(
-            re->alternative.branch[random() % re->alternative.branches],
-            buf, bend - buf);
+            re->alternative.branch[random() % re->alternative.branches], buf,
+            bend - buf);
         if(written < 0 || (bend - buf) < written)
             return -1;
         else
@@ -283,8 +290,7 @@ tregex_eval(tregex *re, char *buf, size_t size) {
     } break;
     }
 
-    if(bold > buf)
-        *buf = '\0';
+    if(bold > buf) *buf = '\0';
 
     return (buf - bold);
 }
@@ -340,7 +346,6 @@ main() {
     assert(n == 1);
     assert(buf[0] == 'a' || buf[0] == 'b');
     tregex_free(re);
-
 }
 
 #endif /* TCPKALI_REGEX_UNIT_TEST */
