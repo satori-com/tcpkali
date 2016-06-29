@@ -19,6 +19,7 @@ tcpkali_SOURCES = \
                 tcpkali_pacefier.h tcpkali_atomic.h       \
                 tcpkali_websocket.c tcpkali_websocket.h   \
                 tcpkali_transport.c tcpkali_transport.h   \
+                tcpkali_regex.c tcpkali_regex.h           \
                 tcpkali_mavg.h tcpkali_events.h           \
                 tcpkali_ring.c tcpkali_ring.h             \
                 tcpkali_terminfo.c tcpkali_terminfo.h     \
@@ -38,17 +39,20 @@ tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
                 $(top_builddir)/deps/libstatsd/src/libstatsd.la \
                 $(top_builddir)/deps/HdrHistogram/libhdr_histogram.la
 
+check_platform_SOURCES = check_platform.c
+check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
+
 check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
 check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
+
+check_tcpkali_regex_SOURCES = tcpkali_regex.c tcpkali_regex.h
+check_tcpkali_regex_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_REGEX_UNIT_TEST
 
 check_tcpkali_iface_SOURCES = tcpkali_iface.c tcpkali_iface.h tcpkali_logging.c tcpkali_logging.h tcpkali_terminfo.c tcpkali_terminfo.h
 check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST
 
-check_platform_SOURCES = check_platform.c
-check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
-
 TESTS = $(check_PROGRAMS) ${dist_check_SCRIPTS}
-check_PROGRAMS = check_tcpkali_ring check_platform check_tcpkali_iface
+check_PROGRAMS = check_platform check_tcpkali_ring check_tcpkali_regex check_tcpkali_iface 
 
 dist_check_SCRIPTS = check_code_format.sh
 
