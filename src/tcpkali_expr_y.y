@@ -116,10 +116,13 @@ ByteSequenceOrExpr:
     }
     | '{' TOK_global '.' TOK_regex CompleteRegex '}' {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
-        expr->type = EXPR_REGEX;
-        expr->u.regex.re = $5;
-        expr->estimate_size = tregex_max_size($5);
-        expr->dynamic_scope = DS_GLOBAL_FIXED;
+        expr->type = EXPR_DATA;
+        char *data = malloc(tregex_max_size($5) + 1);
+        assert(data);
+        expr->u.data.data = data;
+        expr->u.data.size = tregex_eval($5, data, tregex_max_size($5)+ 1);
+        expr->estimate_size = expr->u.data.size;
+        tregex_free($5);
         $$ = expr;
     }
     | '{' TOK_connection '.' TOK_regex CompleteRegex '}' {

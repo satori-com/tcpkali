@@ -162,6 +162,12 @@ Expression          Description
 
  connection.ptr     Pointer to a connection structure. Don't use.
 
+ connection.re      Randomized expression, unique per connection.
+
+ global.re          Randomized expression, same across all connections.
+
+ re                 Randomized expression, for each message.
+
  ws.continuation,   Specify WebSocket frame types.
  ws.ping, ws.pong,  Refer to RFC 6455, section 11.8.
  ws.text, ws.binary
@@ -175,6 +181,10 @@ outgoing data stream. For example, the following command line might be used to
 load 10 different resources from an HTTP server:
 
 tcpkali **-em** `'GET /image-\{connection.uid%10}.jpg\r\n\r\n'` ...
+
+The following command is used to come up with random alphanumeric identifiers:
+
+tcpkali **-em** `'GET /image-\{re [a-z0-9]+}.jpg\r\n\r\n'` ...
 
 Expressions are evaluated even if the **-e** option is not given.
 
