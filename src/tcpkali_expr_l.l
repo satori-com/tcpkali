@@ -77,11 +77,11 @@ WSP [\t\r\v\f\n ]
             return -1;
         }
 
-    ">"         yy_pop_state();
+    ">"         { yy_pop_state(); return '>'; }
 }
 
 <in_expression>{
-    "<"             { yy_push_state(in_filename); }
+    "<"             { yy_push_state(in_filename); return TOK_filename_start; }
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
     "ws"            return TOK_ws;

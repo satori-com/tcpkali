@@ -46,6 +46,7 @@ int yyerror(tk_expr_t **, const char *);
 %token              TOK_uid          "uid"
 %token              TOK_regex        "re"
 %token              TOK_ellipsis     "..."
+%token              TOK_filename_start "<filename.ext>"
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
 %token  <tv_class_range>  class_range_token      "regex character class range"
@@ -207,8 +208,8 @@ WSBasicFrame:
 FileOrQuoted: quoted_string | File
 
 File:
-    filename {
-        const char *name = $1.buf;
+    TOK_filename_start filename '>' {
+        const char *name = $2.buf;
         FILE *fp = fopen(name, "r");
         if(!fp) {
             fprintf(stderr, "Can't open \"%s\": %s\n", name, strerror(errno));

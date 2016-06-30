@@ -1045,14 +1045,14 @@ YY_RULE_SETUP
 case 8:
 YY_RULE_SETUP
 #line 80 "tcpkali_expr_l.l"
-yy_pop_state();
+{ yy_pop_state(); return '>'; }
 	YY_BREAK
 
 
 case 9:
 YY_RULE_SETUP
 #line 84 "tcpkali_expr_l.l"
-{ yy_push_state(in_filename); }
+{ yy_push_state(in_filename); return TOK_filename_start; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
