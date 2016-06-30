@@ -79,15 +79,11 @@ typedef struct tk_expr {
 
 /*
  * Parse the expression string of a given length into an expression.
+ * Returns -1 on parse error.
  */
-enum parse_expression_result {
-    NO_EXPRESSION_FOUND, /* Returns a trivial EXPR_DATA node, returned. */
-    EXPRESSIONS_FOUND,   /* One or more expressions found, returned. */
-    EXPR_PARSE_FAILED /* Expressions parsing failed; expression not returned */
-};
-enum parse_expression_result parse_expression(tk_expr_t **,
-                                              const char *expr_string,
-                                              size_t size, int debug);
+int parse_expression(tk_expr_t **,
+                     const char *expr_string,
+                     size_t size, int debug);
 
 void free_expression(tk_expr_t *expr);
 

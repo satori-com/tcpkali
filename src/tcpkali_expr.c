@@ -76,13 +76,13 @@ free_expression(tk_expr_t *expr) {
     }
 }
 
-enum parse_expression_result
+int
 parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
     void *ybuf;
     ybuf = yy_scan_bytes(buf, size);
     if(!ybuf) {
         assert(ybuf);
-        return EXPR_PARSE_FAILED;
+        return -1;
     }
 
     if(expr_p) *expr_p = 0;
@@ -95,28 +95,17 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
 
     if(ret == 0) {
         assert(expr);
-        if(expr->type == EXPR_DATA) {
-            /* Trivial expression found, should exactly match input. */
-            assert(expr->u.data.size == size);
-            assert(memcmp(expr->u.data.data, buf, size) == 0);
-            if(expr_p)
-                *expr_p = expr;
-            else
-                free_expression(expr);
-            return NO_EXPRESSION_FOUND; /* No expression found */
-        } else {
-            if(expr_p)
-                *expr_p = expr;
-            else
-                free_expression(expr);
-            return EXPRESSIONS_FOUND;
-        }
+        if(expr_p)
+            *expr_p = expr;
+        else
+            free_expression(expr);
+        return 0;
     } else {
         char tmp[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size)];
         DEBUG("Failed to parse \"%s\"\n",
               printable_data(tmp, sizeof(tmp), buf, size, 1));
         free_expression(expr);
-        return EXPR_PARSE_FAILED;
+        return -1;
     }
 }
 

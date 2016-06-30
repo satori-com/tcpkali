@@ -56,7 +56,7 @@ int yyerror(tk_expr_t **, const char *);
 
 %left   '|'
 
-%type   <tv_string> String FileOrData
+%type   <tv_string> String File FileOrQuoted
 %type   <tv_expr>   NumericExpr
 %type   <tv_regex>  CompleteRegex RepeatedRegex RegexPiece RegexClasses RegexClass RegexAlternatives RegexSequence
 %type   <tv_expr>   WSBasicFrame WSFrameWithData WSFrameFinalized
@@ -105,6 +105,14 @@ ByteSequenceOrExpr:
         expr->u.data.data = ($1).buf;
         expr->u.data.size = ($1).len;
         expr->estimate_size = ($1).len;
+        $$ = expr;
+    }
+    | '{' File '}' {    /* \{<filename.txt>} */
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_DATA;
+        expr->u.data.data = ($2).buf;
+        expr->u.data.size = ($2).len;
+        expr->estimate_size = ($2).len;
         $$ = expr;
     }
     | '{' NumericExpr '}' {
@@ -172,7 +180,7 @@ WSFrameFinalized:
 WSFrameWithData:
     WSBasicFrame
     /* \{ws.ping "Ping payload"} or \{ws.binary </dev/null>} */
-    | WSFrameWithData FileOrData {
+    | WSFrameWithData FileOrQuoted {
         $$ = $1;
         /* Combine old data with new data. */
         size_t total_size = $$->u.ws_frame.size + ($2).len;
@@ -196,9 +204,10 @@ WSBasicFrame:
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
 
-FileOrData:
-    quoted_string
-    | filename {
+FileOrQuoted: quoted_string | File
+
+File:
+    filename {
         const char *name = $1.buf;
         FILE *fp = fopen(name, "r");
         if(!fp) {

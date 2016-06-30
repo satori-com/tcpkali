@@ -516,7 +516,7 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             if(parse_expression(&engine_params.latency_marker, data, size, 0)
-               == EXPR_PARSE_FAILED) {
+               == -1) {
                 fprintf(stderr,
                         "--latency-marker: Failed to parse expression\n");
                 exit(EX_USAGE);

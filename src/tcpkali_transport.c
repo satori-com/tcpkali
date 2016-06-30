@@ -192,22 +192,25 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
     if(parse_expressions) {
         const int ENABLE_DEBUG = 1;
         tk_expr_t *expr = 0;
-        switch(parse_expression(&expr, p, size, ENABLE_DEBUG)) {
-        case NO_EXPRESSION_FOUND:
-            /* Trivial expression, does not change wrt. environment. */
+        if(parse_expression(&expr, snip->data, snip->size, ENABLE_DEBUG) == -1) {
+            /* parse_expression() has already printed the failure reason */
+            exit(1);
+        }
+        if(unescape) unescape_expression(expr);
+        if(expr->type == EXPR_DATA) {
+            /*
+             * Trivial expression which does not change.
+             * Absorbing it into collection element body.
+             */
+            free(snip->data);
+            snip->data = (char *)expr->u.data.data;
+            snip->size = expr->u.data.size;
+            expr->u.data.data = 0;
             free_expression(expr);
-            if(unescape) unescape_data(snip->data, &snip->size);
             /* Just use the snip->data instead. */
             mc->snippets_count++;
-            break;
-        case EXPRESSIONS_FOUND:
-            if(unescape) unescape_expression(expr);
+        } else {
             message_collection_add_expr(mc, kind, expr);
-            break;
-        case EXPR_PARSE_FAILED:
-            /* parse_expression() would have already printed the failure reason
-             */
-            exit(1);
         }
     } else {
         if(unescape) unescape_data(snip->data, &snip->size);
