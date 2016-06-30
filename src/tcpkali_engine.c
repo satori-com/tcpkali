@@ -270,6 +270,7 @@ static void largest_contiguous_chunk(struct loop_arguments *largs,
                                      size_t *available_body);
 static void debug_dump_data(const char *prefix, int fd, const void *data,
                             size_t size, ssize_t limit);
+void rand_str(char *dest, size_t length);
 
 #ifdef USE_LIBUV
 static void
@@ -2140,6 +2141,7 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *available_header = 0; /* Sending body */
     }
 
+
     if(available) {
         *position = conn->data.ptr + *current_offset;
         *available_body = available - *available_header;
@@ -2340,6 +2342,31 @@ process_WRITE:
                              ? available_body
                              : conn->send_limit.minimal_move_size);
 
+
+            	if(available_header ){
+            		if( largs->params.randomMessageParams.isRandomiseInitMsgLength){
+            			if(largs->params.randomMessageParams.randomMaxInitSize != largs->params.randomMessageParams.randomMinInitSize)
+            				available_body = available_write =  largs->params.randomMessageParams.randomMinInitSize +(random()%(largs->params.randomMessageParams.randomMaxInitSize - largs->params.randomMessageParams.randomMinInitSize) );
+            			else
+            				available_body = available_write = largs->params.randomMessageParams.randomMaxInitSize;
+            		}
+
+            		if(largs->params.randomMessageParams.randomizeInitMsgContent)
+            			rand_str(position, available_write);
+
+            	}else{
+            		if(largs->params.randomMessageParams.isRandomiseMsgLength){
+            			if(largs->params.randomMessageParams.randomMaxSize != largs->params.randomMessageParams.randomMinSize)
+            				available_body = available_write =  largs->params.randomMessageParams.randomMinSize +(random()%(largs->params.randomMessageParams.randomMaxSize - largs->params.randomMessageParams.randomMinSize) );
+            			else
+            				available_body = available_write = largs->params.randomMessageParams.randomMinSize;
+            		}
+                	if(largs->params.randomMessageParams.randomizeMsgContent)
+                      	rand_str(position, available_write);
+
+            	}
+
+
             ssize_t wrote = write(tk_fd(w), position, available_write);
             if(wrote == -1) {
                 char buf[INET6_ADDRSTRLEN + 64];
@@ -2374,7 +2401,7 @@ process_WRITE:
                        && largs->dump_connect_fd == tk_fd(w))) {
                     debug_dump_data("Snd", tk_fd(w), position, wrote, 0);
                 }
-                if((size_t)wrote > available_header) {
+                if(conn->traffic_ongoing.bytes_sent > available_header) {
                     position += wrote;
                     wrote -= available_header;
                     available_header = 0;
@@ -2567,4 +2594,17 @@ number_of_cpus() {
 #endif
 
     return ncpus;
+}
+
+
+void rand_str(char *dest, size_t length) {
+    char charset[] = "0123456789"
+                     "abcdefghijklmnopqrstuvwxyz"
+                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    while (length-- > 0) {
+        size_t index = (double) rand() / RAND_MAX * (sizeof charset - 1);
+        *dest++ = charset[index];
+    }
+    *dest = '\0';
 }

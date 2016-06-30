@@ -43,6 +43,7 @@
 #include <assert.h>
 #include <time.h>
 
+
 #include <statsd.h>
 
 #include "tcpkali.h"
@@ -67,6 +68,7 @@
 #define CLI_SOCKET_OPT (1 << 12)
 #define CLI_LATENCY (1 << 13)
 #define CLI_DUMP (1 << 14)
+
 static struct option cli_long_options[] = {
     {"channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't'},
     {"channel-bandwidth-upstream", 1, 0, 'U'},
@@ -109,6 +111,8 @@ static struct option cli_long_options[] = {
     {"write-combine", 1, 0, 'C'},
     {"websocket", 0, 0, 'W'},
     {"ws", 0, 0, 'W'},
+	{"randomInitMsgParams", 1, 0, 'x'},
+	{"randomMsgParams", 1, 0, 'y'},
     {0, 0, 0, 0}};
 
 static struct tcpkali_config {
@@ -135,6 +139,7 @@ static struct tcpkali_config {
  */
 static void usage_short(char *argv0);
 static void usage_long(char *argv0, struct tcpkali_config *);
+char** str_split(char* a_str, const char a_delim);
 struct multiplier {
     char *prefix;
     double mult;
@@ -179,7 +184,8 @@ main(int argc, char **argv) {
                                           .connect_timeout = 1.0,
                                           .channel_lifetime = INFINITY,
                                           .nagle_setting = NSET_UNSET,
-                                          .write_combine = WRCOMB_ON};
+                                          .write_combine = WRCOMB_ON,
+    									.randomMessageParams={false,false,false,false,70,80,300,380}};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
 
@@ -554,6 +560,122 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
         } break;
+        case 'x':{
+
+        	engine_params.randomMessageParams.isRandomiseInitMsgLength = 1;
+        	char** tokens;
+        	char * newMsg;
+        	char * msg;
+        	tokens = str_split(optarg, ':');
+            if (tokens)
+            {
+                int i;
+                for (i = 0; *(tokens + i); i++)
+                {
+                    switch(i){
+						case 0:
+							engine_params.randomMessageParams.randomMinInitSize = atoi(*(tokens + i));
+							break;
+						case 1:
+							engine_params.randomMessageParams.randomMaxInitSize = atoi(*(tokens + i));
+							break;
+						case 2:
+							msg = *(tokens + i);
+							break;
+						case 3:
+							engine_params.randomMessageParams.randomizeInitMsgContent = atoi(*(tokens + i));;
+						   break;
+
+                	}
+                    if(i!=2)
+                    	free(*(tokens + i));
+                }
+                free(tokens);
+            }
+
+            //swap
+			if(engine_params.randomMessageParams.randomMaxInitSize < engine_params.randomMessageParams.randomMinInitSize){
+				int tmp = engine_params.randomMessageParams.randomMinInitSize;
+				engine_params.randomMessageParams.randomMinInitSize = engine_params.randomMessageParams.randomMaxInitSize;
+				engine_params.randomMessageParams.randomMaxInitSize = tmp;
+
+			}
+
+			if(strlen(msg) < engine_params.randomMessageParams.randomMinInitSize){
+				newMsg = malloc(engine_params.randomMessageParams.randomMinInitSize+1);
+				memset(newMsg,' ',engine_params.randomMessageParams.randomMinInitSize+1);
+				newMsg[engine_params.randomMessageParams.randomMinInitSize]='\0';
+				strncpy(newMsg,msg,strlen(msg));
+				int a = strlen(msg);
+				int b = strlen(newMsg);
+				free(msg);
+
+			}else
+				newMsg = msg;
+
+			//Lets add this as first message to collection
+            message_collection_add(&engine_params.message_collection,
+                                   MSK_PURPOSE_FIRST_MSG, newMsg,
+                                   strlen(newMsg), 0, 1);
+
+        }
+        break;
+        case 'y':{
+        	char** tokens;
+			char * newMsg;
+			char * msg;
+			engine_params.randomMessageParams.isRandomiseMsgLength = 1;
+			tokens = str_split(optarg, ':');
+			if (tokens)
+			{
+				int i;
+				for (i = 0; *(tokens + i); i++)
+				{
+					switch(i){
+						case 0:
+							engine_params.randomMessageParams.randomMinSize = atoi(*(tokens + i));
+							break;
+						case 1:
+							engine_params.randomMessageParams.randomMaxSize = atoi(*(tokens + i));
+							break;
+						case 2:
+							msg = *(tokens + i);
+							break;
+						case 3:
+							engine_params.randomMessageParams.randomizeMsgContent = atoi(*(tokens + i));
+
+						   break;
+
+					}
+					if(i!=2)
+						free(*(tokens + i));
+				}
+				free(tokens);
+			}
+
+			//swap
+			if(engine_params.randomMessageParams.randomMaxSize < engine_params.randomMessageParams.randomMinSize){
+				int tmp = engine_params.randomMessageParams.randomMinSize;
+				engine_params.randomMessageParams.randomMinSize = engine_params.randomMessageParams.randomMaxSize;
+				engine_params.randomMessageParams.randomMaxSize = tmp;
+
+			}
+
+			if(strlen(msg) < engine_params.randomMessageParams.randomMaxSize){
+				newMsg = malloc(engine_params.randomMessageParams.randomMaxSize+1);
+				memset(newMsg,' ',engine_params.randomMessageParams.randomMaxSize+1);
+				newMsg[engine_params.randomMessageParams.randomMaxSize]='\0';
+				strncpy(newMsg,msg,strlen(msg));
+				free(msg);
+
+			}else
+				newMsg = msg;
+
+			//Lets add this  message to collection
+			message_collection_add(&engine_params.message_collection,
+								   MSK_PURPOSE_MESSAGE, newMsg, strlen(newMsg),
+								   0, 1);
+        }break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -1003,7 +1125,10 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "\n"
-    "Variable units and recognized multipliers:\n"
+    "Randomization Options with Message Rate\n"
+    "randomInitMsgParams			{firstMessageMinLength}:{firstMessageMaxLength}:{FirstMessage}:{Randomize firstMessage Content}"
+	"randomMsgParams				{MessageMinLength}:{MessageMaxLength}:{Message}:{Randomize Message Content}"
+    "\nVariable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
     "  <SizeBytes>:  k (1024, as in \"5k\" is 5120), m (1024*1024)\n"
     "  <Bandwidth>:  kbps, Mbps (bits per second), kBps, MBps (bytes per second)\n"
@@ -1047,4 +1172,52 @@ usage_short(char *argv0) {
     "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
     basename(argv0));
     /* clang-format on */
+}
+
+char** str_split(char* a_str, const char a_delim)
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+            assert(idx < count);
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        assert(idx == count - 1);
+        *(result + idx) = 0;
+    }
+
+    return result;
 }

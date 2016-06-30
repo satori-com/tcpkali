@@ -39,10 +39,21 @@
 #include "tcpkali_dns.h"
 
 long number_of_cpus();
+struct randomMessage_t {
+	bool isRandomiseMsgLength;
+	bool isRandomiseInitMsgLength;
+	bool randomizeMsgContent;
+	bool randomizeInitMsgContent;
+	int randomMinSize;
+	int randomMaxSize;
+	int randomMinInitSize;
+	int randomMaxInitSize;
+};
 
 struct engine;
 
 struct engine_params {
+	struct randomMessage_t randomMessageParams;
     struct addresses remote_addresses;
     struct addresses listen_addresses;
     struct addresses source_addresses;

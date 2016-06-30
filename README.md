@@ -68,7 +68,11 @@ Install the following packages first:
       -1 <string>          Message to send to the remote host once
       -m <string>          Message to repeatedly send to the remote
       -r <Rate>            Messages per second to send in a connection
-
+      
+    Randomization Options for Messages with tcpkali
+    --randomInitMsgParams			{firstMessageMinLength}:{firstMessageMaxLength}:{FirstMessage}:{Randomize firstMessage Content}
+	--randomMsgParams				{MessageMinLength}:{MessageMaxLength}:{Message}:{Randomize Message Content}
+	
     Variable units and recognized multipliers:
       <N>, <Rate>:  k (1000, as in "5k" is 5000), m (1000000)
       <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)
@@ -108,7 +112,15 @@ Listen for incoming connections and throw away data for 3 hours:
 
     tcpkali --listen-port 12345 --duration 3h
     tcpkali -l12345 -T3h
+    
+#Message Randomization example
+Following Example randomizes the initial message length between 300-380 and message length is randomized between 80-90, and this example randomizes the content too, so at server side
+you're expcted to receive randomized content rather than the one sent here.
 
+    Server:
+    tcpkali -l12345 -T3h
+    tcpkali -v -c1  --connect-rate 1 --randomInitMsgParams 300:380:"testeas":1 --message-rate 2 --randomMsgParams 80:90:"HELLOWO":1 127.0.0.1:12345 --duration 5s
+    
 # WebSocket examples
 
 Open connection to the local WebSocket server, send hello, and wait:
