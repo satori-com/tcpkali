@@ -51,6 +51,7 @@ tregex *tregex_alternative_add(tregex *base, tregex *rhs);
 /* "a?" = ("a", 0, 1) */
 tregex *tregex_repeat(tregex *, unsigned from, unsigned to);
 
+size_t tregex_min_size(tregex *);
 size_t tregex_max_size(tregex *);
 
 ssize_t tregex_eval(tregex *, char *buf, size_t size);
