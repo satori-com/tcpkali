@@ -225,7 +225,6 @@ RegexAlternatives:
         $$ = tregex_alternative($1);
     }
     | RegexAlternatives '|' RegexSequence {
-        $$ = tregex_alternative($1);
         $$ = tregex_alternative_add($1, $3);
     }
 
@@ -248,6 +247,9 @@ RegexPiece:
         $$ = tregex_string($1.buf, $1.len);
     }
     | '[' RegexClasses ']' {
+        $$ = $2;
+    }
+    | '(' CompleteRegex ')' {
         $$ = $2;
     }
 

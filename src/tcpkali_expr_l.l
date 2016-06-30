@@ -141,7 +141,7 @@ WSP [\t\r\v\f\n ]
 
 <in_regex>{
     {WSP}+          /* Ignore whitespace */
-    [^][{}+?|* ][^][{}+?|*]*   {
+    [^][{}+?|*() ][^][{}+?|*()]*   {
                 yylval.tv_string.buf = malloc(yyleng + 1);
                 yylval.tv_string.len = yyleng;
                 memcpy(yylval.tv_string.buf, yytext, yyleng);
@@ -151,6 +151,8 @@ WSP [\t\r\v\f\n ]
     "|"     { return '|'; }
     "["     { yy_push_state(in_regex_class); return '['; }
     "]"     { return ']'; }
+    "("     { return '('; }
+    ")"     { return ')'; }
     "{"     { yy_push_state(in_regex_range); return '{'; }
     "}"     { yy_pop_state(); unput('}'); }
     "?"     { return '?'; }
