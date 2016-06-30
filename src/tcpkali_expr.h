@@ -63,7 +63,7 @@ typedef struct tk_expr {
         } regex;
     } u;
     size_t estimate_size;
-    enum {
+    enum tk_expr_dynamic_scope {
         DS_GLOBAL_FIXED,   /* All connection share data */
         DS_PER_CONNECTION, /* Each connection has its own */
         DS_PER_MESSAGE     /* Each message is different */

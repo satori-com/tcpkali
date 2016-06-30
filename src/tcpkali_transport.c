@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -114,7 +114,8 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
         size_t n = ceil(((double)target_size) / payload_size);
         size_t new_payload_size = n * payload_size;
         size_t once_offset = data->once_size;
-        char *p = realloc(data->ptr, once_offset + new_payload_size + 1);
+        size_t allocated = once_offset + new_payload_size + 1;
+        char *p = realloc(data->ptr, allocated);
         void *msg_data = p + once_offset;
         assert(p);
         for(size_t i = 1; i < n; i++) {
@@ -123,6 +124,7 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
         p[once_offset + new_payload_size] = '\0';
         data->ptr = p;
         data->total_size = once_offset + new_payload_size;
+        data->allocated_size = allocated;
     }
 
     /*
@@ -235,8 +237,9 @@ message_collection_add_expr(struct message_collection *mc,
             if(!(snip->flags & MSK_PURPOSE_HTTP_HEADER))
                 snip->flags |= MSK_FRAMING_ALLOWED;
             snip->flags |= MSK_EXPRESSION_FOUND;
-            mc->dynamic_expressions_found +=
-                snip->expr->dynamic_scope != DS_GLOBAL_FIXED;
+            if(mc->most_dynamic_expression < snip->expr->dynamic_scope) {
+                mc->most_dynamic_expression = snip->expr->dynamic_scope;
+            }
             mc->snippets_count++;
 
             snip = &mc->snippets[mc->snippets_count];
@@ -300,23 +303,30 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                                        struct message_collection *mc,
                                        expr_callback_f optional_cb,
                                        void *expr_cb_key,
-                                       enum transport_websocket_side tws_side) {
+                                       enum transport_websocket_side tws_side,
+                                       enum transport_conversion tconv) {
     /*
      * If expressions found we can not create a transport data specification
      * from this collection directly. Need to go through expression evaluator.
      */
-    if(mc->dynamic_expressions_found) {
+    if(mc->most_dynamic_expression != DS_GLOBAL_FIXED) {
         if(!optional_cb) return NULL;
     }
-
-    size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
 
     struct transport_data_spec *data_spec;
     /* out_spec is expected to be 0-filled, if given. */
     data_spec = out_spec ? out_spec : calloc(1, sizeof(*data_spec));
     assert(data_spec);
-    data_spec->ptr = malloc(estimate_size + 1);
-    assert(data_spec->ptr);
+    if(tconv == TS_CONVERSION_INITIAL) {
+        size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
+        data_spec->ptr = malloc(estimate_size + 1);
+        data_spec->allocated_size = estimate_size + 1;
+        assert(data_spec->ptr);
+    } else {
+        assert(data_spec);
+        assert(data_spec->ptr);
+        data_spec->total_size = data_spec->once_size;
+    }
 
     enum websocket_side ws_side =
         (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
@@ -328,13 +338,17 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
         void *data = snip->data;
         size_t size = snip->size;
 
+        if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES
+            && MSK_PURPOSE(snip) != MSK_PURPOSE_MESSAGE)
+            continue;
+
         if(snip->flags & MSK_EXPRESSION_FOUND) {
             ssize_t reified_size;
             char *tptr = (char *)data_spec->ptr + data_spec->total_size;
-            assert(estimate_size
-                   >= data_spec->total_size + snip->expr->estimate_size);
+            assert(data_spec->total_size + snip->expr->estimate_size
+                    < data_spec->allocated_size);
             reified_size = eval_expression(
-                &tptr, estimate_size - data_spec->total_size, snip->expr,
+                &tptr, data_spec->allocated_size - data_spec->total_size, snip->expr,
                 optional_cb, expr_cb_key, 0, (tws_side == TWS_SIDE_CLIENT));
             assert(reified_size >= 0);
             data = 0;
@@ -366,7 +380,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                 } else {
                     ws_frame_size = websocket_frame_header(
                         (uint8_t *)data_spec->ptr + data_spec->total_size,
-                        estimate_size - data_spec->total_size, ws_side,
+                        data_spec->allocated_size - data_spec->total_size, ws_side,
                         WS_OP_TEXT_FRAME, 1, size);
                 }
             }
@@ -399,7 +413,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
             return NULL;
         }
     }
-    assert(data_spec->total_size <= estimate_size);
+    assert(data_spec->total_size < data_spec->allocated_size);
     ((char *)data_spec->ptr)[data_spec->total_size] = '\0';
 
     return data_spec;

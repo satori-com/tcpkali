@@ -339,16 +339,17 @@ engine_start(struct engine_params params) {
     /*
      * The data template creation may fail because the message collection
      * might contain expressions which must be resolved
-     * on a per connection basis.
+     * on a per connection or per message basis.
      */
     enum transport_websocket_side tws_side;
     for(tws_side = TWS_SIDE_CLIENT; tws_side <= TWS_SIDE_SERVER; tws_side++) {
         assert(params.data_templates[tws_side] == NULL);
         params.data_templates[tws_side] =
             transport_spec_from_message_collection(
-                0, &params.message_collection, 0, 0, tws_side);
+                0, &params.message_collection, 0, 0, tws_side, TS_CONVERSION_INITIAL);
         assert(params.data_templates[tws_side]
-               || params.message_collection.dynamic_expressions_found);
+               || params.message_collection.most_dynamic_expression
+                    != DS_GLOBAL_FIXED);
     }
 
     if(params.data_templates[0])
@@ -1254,6 +1255,7 @@ explode_data_template(struct message_collection *mc,
                       struct loop_arguments *largs UNUSED,
                       struct connection *conn) {
     if(data_templates[tws_side]) {
+        assert(mc->most_dynamic_expression == DS_GLOBAL_FIXED);
         /*
          * Return the already once prepared data.
          */
@@ -1269,12 +1271,34 @@ explode_data_template(struct message_collection *mc,
 
         struct transport_data_spec *new_data_ptr;
         new_data_ptr = transport_spec_from_message_collection(
-            out_data, mc, expr_callback, conn, tws_side);
+            out_data, mc, expr_callback, conn, tws_side, TS_CONVERSION_INITIAL);
         assert(new_data_ptr == out_data);
 
-        replicate_payload(out_data, REPLICATE_MAX_SIZE);
+        switch(mc->most_dynamic_expression) {
+        case DS_GLOBAL_FIXED:
+            assert(!"Unreachable");
+        case DS_PER_CONNECTION:
+            replicate_payload(out_data, REPLICATE_MAX_SIZE);
+            break;
+        case DS_PER_MESSAGE:
+            break;
+        }
         assert(out_data->ptr);
     }
+}
+
+static void
+explode_data_template_override(struct message_collection *mc,
+                      enum transport_websocket_side tws_side,
+                      struct transport_data_spec *out_data,
+                      struct loop_arguments *largs UNUSED,
+                      struct connection *conn) {
+    assert(mc->most_dynamic_expression == DS_PER_MESSAGE);
+
+    struct transport_data_spec *new_data_ptr;
+    new_data_ptr = transport_spec_from_message_collection(
+        out_data, mc, expr_callback, conn, tws_side, TS_CONVERSION_OVERRIDE_MESSAGES);
+    assert(new_data_ptr == out_data);
 }
 
 static void
@@ -2120,6 +2144,16 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *position = conn->data.ptr + *current_offset;
         *available_body = available - *available_header;
     } else {
+
+        /* If we're at the end of the buffer, re-blow it with new messages */
+        if(largs->params.message_collection.most_dynamic_expression
+        == DS_PER_MESSAGE) {
+            explode_data_template_override(&largs->params.message_collection,
+                        (conn->conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER,
+                                        &conn->data, largs, conn);
+            accessible_size = conn->data.total_size;
+        }
+
         size_t off = conn->data.once_size;
         *position = conn->data.ptr + off;
         *available_body = accessible_size - off;

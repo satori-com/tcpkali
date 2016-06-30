@@ -62,9 +62,11 @@ struct message_collection {
      */
     size_t snippets_size;
     /*
-     * Whether variable \{expressions} were found in snippets
+     * Whether variable \{expressions} were found in snippets,
+     * and exactly how dynamic is the most dynamic expression.
+     * Scopes are: global, connection and per message.
      */
-    int dynamic_expressions_found;
+    enum tk_expr_dynamic_scope most_dynamic_expression;
     /*
      * A collection must be finalized before use.
      */
@@ -107,17 +109,18 @@ size_t message_collection_estimate_size(struct message_collection *mc,
 
 
 /*
- * Our send buffer is pre-computed in advance and typically
- * shared between the instances of engine (workers).
+ * Our send buffer is pre-computed in advance and may be shared
+ * between the instances of engine (workers).
  * The buffer contains both headers and payload.
- * The data_header_size is used to determine the end of
- * the headers and start of the payload.
+ * The data_header_size is used to determine the end of the headers
+ * and start of the payload.
  */
 struct transport_data_spec {
     void *ptr;
     size_t ws_hdr_size; /* HTTP header for WebSocket upgrade. */
     size_t once_size;   /* Part of data to send just once. */
     size_t total_size;
+    size_t allocated_size;
     size_t single_message_size;
     enum transport_data_flags {
         TDS_FLAG_NONE = 0x00,
@@ -134,10 +137,15 @@ enum transport_websocket_side {
     TWS_SIDE_CLIENT,
     TWS_SIDE_SERVER,
 };
+enum transport_conversion {
+    TS_CONVERSION_INITIAL,
+    TS_CONVERSION_OVERRIDE_MESSAGES,
+};
 struct transport_data_spec *transport_spec_from_message_collection(
     struct transport_data_spec *out_spec, struct message_collection *,
     expr_callback_f optional_cb, void *expr_cb_key,
-    enum transport_websocket_side);
+    enum transport_websocket_side,
+    enum transport_conversion);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate
