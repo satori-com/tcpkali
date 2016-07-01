@@ -677,7 +677,7 @@ main(int argc, char **argv) {
     int no_message_to_send =
         (0 == message_collection_estimate_size(
                   &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
-                  MSK_PURPOSE_MESSAGE));
+                  MSK_PURPOSE_MESSAGE, MCE_MINIMUM_SIZE));
 
     /*
      * Check that we will actually send messages
@@ -708,9 +708,17 @@ main(int argc, char **argv) {
     if((engine_params.channel_send_rate.value_base == RS_MESSAGES_PER_SECOND
         || rate_modulator.mode != RM_UNMODULATED)
        && no_message_to_send) {
-        fprintf(stderr,
-                "--message-rate parameter makes no sense "
-                "without --message or --message-file\n");
+        if(message_collection_estimate_size(
+                  &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
+                  MSK_PURPOSE_MESSAGE, MCE_MAXIMUM_SIZE) > 0) {
+            fprintf(stderr,
+                    "--message may resolve "
+                    "to zero length, double-check regular expression\n");
+        } else {
+            fprintf(stderr,
+                    "--message-rate parameter makes no sense "
+                    "without --message or --message-file\n");
+        }
         exit(EX_USAGE);
     }
 

@@ -273,7 +273,8 @@ message_collection_add_expr(struct message_collection *mc,
 size_t
 message_collection_estimate_size(struct message_collection *mc,
                                  enum mc_snippet_kind kind_and,
-                                 enum mc_snippet_kind kind_equal) {
+                                 enum mc_snippet_kind kind_equal,
+                                 enum mc_snippet_estimate mce) {
     size_t total_size = 0;
     size_t i;
 
@@ -286,7 +287,10 @@ message_collection_estimate_size(struct message_collection *mc,
         if((snip->flags & kind_and) != kind_equal) continue;
 
         if(snip->flags & MSK_EXPRESSION_FOUND) {
-            total_size += snip->expr->estimate_size;
+            if(snip->expr->type == EXPR_REGEX && mce == MCE_MINIMUM_SIZE)
+                total_size += tregex_min_size(snip->expr->u.regex.re);
+            else
+                total_size += snip->expr->estimate_size;
         } else {
             total_size += snip->size;
         }
@@ -318,7 +322,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     data_spec = out_spec ? out_spec : calloc(1, sizeof(*data_spec));
     assert(data_spec);
     if(tconv == TS_CONVERSION_INITIAL) {
-        size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
+        size_t estimate_size = message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE);
         if(estimate_size < REPLICATE_MAX_SIZE)
             estimate_size = REPLICATE_MAX_SIZE;
         data_spec->ptr = malloc(estimate_size + 1);
@@ -333,7 +337,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     enum websocket_side ws_side =
         (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
 
-    int place_multiple_messages = (tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
+    int place_multiple_messages = 0;
 
     do { /* while(place_multiple_messages) */
 
@@ -344,9 +348,12 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
             void *data = snip->data;
             size_t size = snip->size;
 
-            if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES
-               && MSK_PURPOSE(snip) != MSK_PURPOSE_MESSAGE)
-                continue;
+            if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES) {
+                if(MSK_PURPOSE(snip) == MSK_PURPOSE_MESSAGE)
+                    place_multiple_messages = 1;
+                else
+                    continue;
+            }
 
             if(snip->flags & MSK_EXPRESSION_FOUND) {
                 ssize_t reified_size;

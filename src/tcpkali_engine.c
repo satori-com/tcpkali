@@ -2146,7 +2146,9 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
     } else {
         /* If we're at the end of the buffer, re-blow it with new messages */
         if(largs->params.message_collection.most_dynamic_expression
-           == DS_PER_MESSAGE) {
+           == DS_PER_MESSAGE
+            && (conn->conn_type == CONN_OUTGOING
+            ||  (largs->params.listen_mode & _LMODE_SND_MASK))) {
             explode_data_template_override(&largs->params.message_collection,
                                            (conn->conn_type == CONN_OUTGOING)
                                                ? TWS_SIDE_CLIENT
