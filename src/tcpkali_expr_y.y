@@ -253,7 +253,7 @@ RepeatedRegex:
     | RegexPiece '{' integer ',' integer '}' { $$ = tregex_repeat($1, $3, $5); }
 
 RegexPiece:
-    String {
+    string_token {
         $$ = tregex_string($1.buf, $1.len);
     }
     | '[' RegexClasses ']' {

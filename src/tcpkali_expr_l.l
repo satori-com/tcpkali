@@ -148,6 +148,13 @@ WSP [\t\r\v\f\n ]
                 yylval.tv_string.buf[yyleng] = '\0';
                 return string_token;
             }
+    [^][{}+?|*() ][^][{}+?|*()]*/[^][{}+?|*()][+?*{]   {
+                yylval.tv_string.buf = malloc(yyleng + 1);
+                yylval.tv_string.len = yyleng;
+                memcpy(yylval.tv_string.buf, yytext, yyleng);
+                yylval.tv_string.buf[yyleng] = '\0';
+                return string_token;
+            }
     "|"     { return '|'; }
     "["     { yy_push_state(in_regex_class); return '['; }
     "]"     { return ']'; }

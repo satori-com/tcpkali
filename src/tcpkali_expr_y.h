@@ -1,19 +1,19 @@
-/* A Bison parser, made by GNU Bison 3.0.4.  */
+/* A Bison parser, made by GNU Bison 2.7.  */
 
 /* Bison interface for Yacc-like parsers in C
-
-   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
-
+   
+      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
+   
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
-
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-
+   
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
@@ -26,13 +26,13 @@
    special exception, which will cause the skeleton and the resulting
    Bison output files to be licensed under the GNU General Public
    License without this special exception.
-
+   
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
 #ifndef YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
 # define YY_YY_TCPKALI_EXPR_Y_H_INCLUDED
-/* Debug traces.  */
+/* Enabling traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
 #endif
@@ -40,28 +40,29 @@
 extern int yydebug;
 #endif
 
-/* Token type.  */
+/* Tokens.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
-  enum yytokentype
-  {
-    END = 0,
-    TOK_ws = 258,
-    TOK_ws_opcode = 259,
-    TOK_global = 260,
-    TOK_connection = 261,
-    TOK_ptr = 262,
-    TOK_uid = 263,
-    TOK_regex = 264,
-    TOK_ellipsis = 265,
-    TOK_filename_start = 266,
-    string_token = 267,
-    class_range_token = 268,
-    repeat_range_token = 269,
-    quoted_string = 270,
-    filename = 271,
-    integer = 272
-  };
+   /* Put the tokens into the symbol table, so that GDB and other debuggers
+      know about them.  */
+   enum yytokentype {
+     END = 0,
+     TOK_ws = 258,
+     TOK_ws_opcode = 259,
+     TOK_global = 260,
+     TOK_connection = 261,
+     TOK_ptr = 262,
+     TOK_uid = 263,
+     TOK_regex = 264,
+     TOK_ellipsis = 265,
+     TOK_filename_start = 266,
+     string_token = 267,
+     class_range_token = 268,
+     repeat_range_token = 269,
+     quoted_string = 270,
+     filename = 271,
+     integer = 272
+   };
 #endif
 /* Tokens.  */
 #define END 0
@@ -81,12 +82,13 @@ extern int yydebug;
 #define filename 271
 #define integer 272
 
-/* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 
-union YYSTYPE
+
+#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+typedef union YYSTYPE
 {
-#line 21 "tcpkali_expr_y.y" /* yacc.c:1909  */
+/* Line 2058 of yacc.c  */
+#line 21 "tcpkali_expr_y.y"
 
     tk_expr_t   *tv_expr;
     tregex      *tv_regex;
@@ -106,17 +108,29 @@ union YYSTYPE
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
-#line 110 "tcpkali_expr_y.h" /* yacc.c:1909  */
-};
 
-typedef union YYSTYPE YYSTYPE;
+/* Line 2058 of yacc.c  */
+#line 114 "tcpkali_expr_y.h"
+} YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
+# define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 #endif
 
-
 extern YYSTYPE yylval;
 
+#ifdef YYPARSE_PARAM
+#if defined __STDC__ || defined __cplusplus
+int yyparse (void *YYPARSE_PARAM);
+#else
+int yyparse ();
+#endif
+#else /* ! YYPARSE_PARAM */
+#if defined __STDC__ || defined __cplusplus
 int yyparse (tk_expr_t **param);
+#else
+int yyparse ();
+#endif
+#endif /* ! YYPARSE_PARAM */
 
 #endif /* !YY_YY_TCPKALI_EXPR_Y_H_INCLUDED  */
