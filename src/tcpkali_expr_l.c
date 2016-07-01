@@ -1060,7 +1060,7 @@ YY_RULE_SETUP
 case 9:
 YY_RULE_SETUP
 #line 84 "tcpkali_expr_l.l"
-{ yy_push_state(in_filename); return TOK_filename_start; }
+{ yy_push_state(in_filename); return '<'; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP

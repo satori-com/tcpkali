@@ -81,7 +81,7 @@ WSP [\t\r\v\f\n ]
 }
 
 <in_expression>{
-    "<"             { yy_push_state(in_filename); return TOK_filename_start; }
+    "<"             { yy_push_state(in_filename); return '<'; }
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
     "ws"            return TOK_ws;

@@ -46,7 +46,6 @@ int yyerror(tk_expr_t **, const char *);
 %token              TOK_uid          "uid"
 %token              TOK_regex        "re"
 %token              TOK_ellipsis     "..."
-%token              TOK_filename_start "<filename.ext>"
 %token              END 0            "end of expression"
 %token  <tv_string> string_token     "arbitrary string"
 %token  <tv_class_range>  class_range_token      "regex character class range"
@@ -63,6 +62,7 @@ int yyerror(tk_expr_t **, const char *);
 %type   <tv_expr>   WSBasicFrame WSFrameWithData WSFrameFinalized
 %type   <tv_expr>   ByteSequenceOrExpr          "some string or \\{expression}"
 %type   <tv_expr>   ByteSequencesAndExpressions "data and expressions"
+%type   <tv_expr>   Expression      "ws, connection, global, re, or <filename.ext>"
 
 %%
 
@@ -108,45 +108,48 @@ ByteSequenceOrExpr:
         expr->estimate_size = ($1).len;
         $$ = expr;
     }
-    | '{' File '}' {    /* \{<filename.txt>} */
+    | '{' Expression '}' {
+        $$ = $2;
+    }
+
+Expression:
+    File {    /* \{<filename.txt>} */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
-        expr->u.data.data = ($2).buf;
-        expr->u.data.size = ($2).len;
-        expr->estimate_size = ($2).len;
+        expr->u.data.data = ($1).buf;
+        expr->u.data.size = ($1).len;
+        expr->estimate_size = ($1).len;
         $$ = expr;
     }
-    | '{' NumericExpr '}' {
-        $$ = $2;
+    | NumericExpr {
+        $$ = $1;
         $$->dynamic_scope = DS_PER_CONNECTION;
     }
-    | '{' WSFrameFinalized '}' {
-        $$ = $2;
-    }
-    | '{' TOK_global '.' TOK_regex CompleteRegex '}' {
+    | WSFrameFinalized
+    | TOK_global '.' TOK_regex CompleteRegex {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
-        char *data = malloc(tregex_max_size($5) + 1);
+        char *data = malloc(tregex_max_size($4) + 1);
         assert(data);
         expr->u.data.data = data;
-        expr->u.data.size = tregex_eval($5, data, tregex_max_size($5)+ 1);
+        expr->u.data.size = tregex_eval($4, data, tregex_max_size($4)+ 1);
         expr->estimate_size = expr->u.data.size;
-        tregex_free($5);
+        tregex_free($4);
         $$ = expr;
     }
-    | '{' TOK_connection '.' TOK_regex CompleteRegex '}' {
+    | TOK_connection '.' TOK_regex CompleteRegex {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
-        expr->u.regex.re = $5;
-        expr->estimate_size = tregex_max_size($5);
+        expr->u.regex.re = $4;
+        expr->estimate_size = tregex_max_size($4);
         expr->dynamic_scope = DS_PER_CONNECTION;
         $$ = expr;
     }
-    | '{' TOK_regex CompleteRegex '}' {
+    | TOK_regex CompleteRegex {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
-        expr->u.regex.re = $3;
-        expr->estimate_size = tregex_max_size($3);
+        expr->u.regex.re = $2;
+        expr->estimate_size = tregex_max_size($2);
         expr->dynamic_scope = DS_PER_MESSAGE;
         $$ = expr;
     }
@@ -208,7 +211,7 @@ WSBasicFrame:
 FileOrQuoted: quoted_string | File
 
 File:
-    TOK_filename_start filename '>' {
+    '<' filename '>' {
         const char *name = $2.buf;
         FILE *fp = fopen(name, "r");
         if(!fp) {
