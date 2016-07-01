@@ -252,7 +252,7 @@ tregex_eval(tregex *re, char *buf, size_t size) {
     const char *bold = buf;
     const char *bend = buf + size;
 
-    assert(re->max_size <= size);
+    if(re->max_size > size) return -1;
 
     switch(re->kind) {
     case TRegexChars:
@@ -271,34 +271,22 @@ tregex_eval(tregex *re, char *buf, size_t size) {
         size_t cycles = re->repeat.minimum
                         + (re->repeat.range ? random() % re->repeat.range : 0);
         for(unsigned i = 0; i < cycles; i++) {
-            ssize_t written = tregex_eval(re->repeat.what, buf, bend - buf);
-            if(written < 0 || (bend - buf) < written)
-                return -1;
-            else
-                buf += written;
+            buf += tregex_eval(re->repeat.what, buf, bend - buf);
         }
     } break;
     case TRegexSequence:
         for(size_t i = 0; i < re->sequence.pieces; i++) {
-            ssize_t written =
-                tregex_eval(re->sequence.piece[i], buf, bend - buf);
-            if(written < 0 || (bend - buf) < written)
-                return -1;
-            else
-                buf += written;
+            buf += tregex_eval(re->sequence.piece[i], buf, bend - buf);
         }
         break;
-    case TRegexAlternative: {
-        ssize_t written = tregex_eval(
+    case TRegexAlternative:
+        buf += tregex_eval(
             re->alternative.branch[random() % re->alternative.branches], buf,
             bend - buf);
-        if(written < 0 || (bend - buf) < written)
-            return -1;
-        else
-            buf += written;
-    } break;
+        break;
     }
 
+    assert(buf <= bend);
     if(bold > buf) *buf = '\0';
 
     return (buf - bold);
@@ -315,7 +303,6 @@ tregex_max_size(tregex *re) {
     assert(re);
     return re->max_size;
 }
-
 
 #ifdef TCPKALI_REGEX_UNIT_TEST
 

@@ -81,15 +81,18 @@ typedef struct tk_expr {
  * Parse the expression string of a given length into an expression.
  * Returns -1 on parse error.
  */
-int parse_expression(tk_expr_t **,
-                     const char *expr_string,
-                     size_t size, int debug);
+int parse_expression(tk_expr_t **, const char *expr_string, size_t size,
+                     int debug);
 
 void free_expression(tk_expr_t *expr);
 
-
 typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
                                  long *output_value);
+
+/*
+ * Returns -1 if the expression doesn't fit in the (size) fully.
+ * Returns the size of the data placed into *buf_p otherwise.
+ */
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
                         void *key, long *output_value, int client_mode);
 
@@ -97,7 +100,6 @@ ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
  * Concatenate expressions. One or both expressions can be NULL.
  */
 tk_expr_t *concat_expressions(tk_expr_t *, tk_expr_t *);
-
 
 /*
  * Split expression into three parts: prefix, predefined websocket frame, and

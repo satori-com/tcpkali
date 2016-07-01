@@ -308,8 +308,6 @@ control_cb_uv(tk_io *w, int UNUSED status, int revents) {
             debug_log(level, largs->params.verbosity_level, fmt, ##args); \
     } while(0)
 
-#define REPLICATE_MAX_SIZE (64 * 1024) /* Proven to be a sweet spot */
-
 struct engine *
 engine_start(struct engine_params params) {
     int fildes[2];
@@ -346,10 +344,11 @@ engine_start(struct engine_params params) {
         assert(params.data_templates[tws_side] == NULL);
         params.data_templates[tws_side] =
             transport_spec_from_message_collection(
-                0, &params.message_collection, 0, 0, tws_side, TS_CONVERSION_INITIAL);
+                0, &params.message_collection, 0, 0, tws_side,
+                TS_CONVERSION_INITIAL);
         assert(params.data_templates[tws_side]
                || params.message_collection.most_dynamic_expression
-                    != DS_GLOBAL_FIXED);
+                      != DS_GLOBAL_FIXED);
     }
 
     if(params.data_templates[0])
@@ -1289,15 +1288,16 @@ explode_data_template(struct message_collection *mc,
 
 static void
 explode_data_template_override(struct message_collection *mc,
-                      enum transport_websocket_side tws_side,
-                      struct transport_data_spec *out_data,
-                      struct loop_arguments *largs UNUSED,
-                      struct connection *conn) {
+                               enum transport_websocket_side tws_side,
+                               struct transport_data_spec *out_data,
+                               struct loop_arguments *largs UNUSED,
+                               struct connection *conn) {
     assert(mc->most_dynamic_expression == DS_PER_MESSAGE);
 
     struct transport_data_spec *new_data_ptr;
     new_data_ptr = transport_spec_from_message_collection(
-        out_data, mc, expr_callback, conn, tws_side, TS_CONVERSION_OVERRIDE_MESSAGES);
+        out_data, mc, expr_callback, conn, tws_side,
+        TS_CONVERSION_OVERRIDE_MESSAGES);
     assert(new_data_ptr == out_data);
 }
 
@@ -2144,13 +2144,14 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *position = conn->data.ptr + *current_offset;
         *available_body = available - *available_header;
     } else {
-
         /* If we're at the end of the buffer, re-blow it with new messages */
         if(largs->params.message_collection.most_dynamic_expression
-        == DS_PER_MESSAGE) {
+           == DS_PER_MESSAGE) {
             explode_data_template_override(&largs->params.message_collection,
-                        (conn->conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER,
-                                        &conn->data, largs, conn);
+                                           (conn->conn_type == CONN_OUTGOING)
+                                               ? TWS_SIDE_CLIENT
+                                               : TWS_SIDE_SERVER,
+                                           &conn->data, largs, conn);
             accessible_size = conn->data.total_size;
         }
 

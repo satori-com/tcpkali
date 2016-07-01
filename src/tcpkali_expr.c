@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2015, 2016  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -151,9 +151,10 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         return s;
     } break;
     case EXPR_CONCAT: {
-        assert((expr->u.concat.expr[0]->estimate_size
-                + expr->u.concat.expr[1]->estimate_size)
-               <= size);
+        if((expr->u.concat.expr[0]->estimate_size
+            + expr->u.concat.expr[1]->estimate_size)
+           > size)
+            return -1;
         ssize_t size1 = eval_expression(&buf, size, expr->u.concat.expr[0], cb,
                                         key, value, client_mode);
         if(size1 < 0) return -1;

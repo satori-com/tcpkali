@@ -36,7 +36,6 @@
 #include "tcpkali_websocket.h"
 #include "tcpkali_transport.h"
 
-
 /*
  * Helper function to sort headers first, messages last.
  */
@@ -94,7 +93,6 @@ message_collection_finalize(struct message_collection *mc, int as_websocket,
           snippet_compare_cb);
 }
 
-
 /*
  * If the payload is less then target_size,
  * replicate it several times so the total buffer exceeds target_size.
@@ -133,7 +131,6 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
      */
     data->flags |= TDS_FLAG_REPLICATED;
 }
-
 
 static void
 message_collection_ensure_space(struct message_collection *mc, size_t need) {
@@ -192,7 +189,8 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
     if(parse_expressions) {
         const int ENABLE_DEBUG = 1;
         tk_expr_t *expr = 0;
-        if(parse_expression(&expr, snip->data, snip->size, ENABLE_DEBUG) == -1) {
+        if(parse_expression(&expr, snip->data, snip->size, ENABLE_DEBUG)
+           == -1) {
             /* parse_expression() has already printed the failure reason */
             exit(1);
         }
@@ -269,7 +267,6 @@ message_collection_add_expr(struct message_collection *mc,
     }
 }
 
-
 /*
  * Give the largest size the message can possibly occupy.
  */
@@ -322,8 +319,10 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     assert(data_spec);
     if(tconv == TS_CONVERSION_INITIAL) {
         size_t estimate_size = message_collection_estimate_size(mc, 0, 0);
+        if(estimate_size < REPLICATE_MAX_SIZE)
+            estimate_size = REPLICATE_MAX_SIZE;
         data_spec->ptr = malloc(estimate_size + 1);
-        data_spec->allocated_size = estimate_size + 1;
+        data_spec->allocated_size = estimate_size;
         assert(data_spec->ptr);
     } else {
         assert(data_spec);
@@ -334,89 +333,109 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     enum websocket_side ws_side =
         (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
 
-    size_t i;
-    for(i = 0; i < mc->snippets_count; i++) {
-        struct message_collection_snippet *snip = &mc->snippets[i];
+    int place_multiple_messages = (tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
 
-        void *data = snip->data;
-        size_t size = snip->size;
+    do { /* while(place_multiple_messages) */
 
-        if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES
-            && MSK_PURPOSE(snip) != MSK_PURPOSE_MESSAGE)
-            continue;
+        size_t i;
+        for(i = 0; i < mc->snippets_count; i++) {
+            struct message_collection_snippet *snip = &mc->snippets[i];
 
-        if(snip->flags & MSK_EXPRESSION_FOUND) {
-            ssize_t reified_size;
-            char *tptr = (char *)data_spec->ptr + data_spec->total_size;
-            assert(data_spec->total_size + snip->expr->estimate_size
-                    < data_spec->allocated_size);
-            reified_size = eval_expression(
-                &tptr, data_spec->allocated_size - data_spec->total_size, snip->expr,
-                optional_cb, expr_cb_key, 0, (tws_side == TWS_SIDE_CLIENT));
-            assert(reified_size >= 0);
-            data = 0;
-            size = reified_size;
-        }
+            void *data = snip->data;
+            size_t size = snip->size;
 
-        size_t ws_frame_size = 0;
-        if(mc->state == MC_FINALIZED_WEBSOCKET) {
-            /* Do not construct WebSocket/HTTP header. */
-            if((ws_side == WS_SIDE_SERVER)
-               && (snip->flags & MSK_PURPOSE_HTTP_HEADER))
+            if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES
+               && MSK_PURPOSE(snip) != MSK_PURPOSE_MESSAGE)
                 continue;
 
-            if(snip->flags & MSK_FRAMING_ALLOWED) {
-                if(snip->flags & MSK_EXPRESSION_FOUND) {
-                    uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
-                    /* Save the websocket frame elsewhere temporarily */
-                    ws_frame_size =
-                        websocket_frame_header(tmpbuf, sizeof(tmpbuf), ws_side,
-                                               WS_OP_TEXT_FRAME, 1, size);
-                    /* Move the data to the right to make space for framing */
-                    memmove((char *)data_spec->ptr + data_spec->total_size
-                                + ws_frame_size,
-                            (char *)data_spec->ptr + data_spec->total_size,
-                            size);
-                    /* Prepend the websocket frame */
-                    memcpy((char *)data_spec->ptr + data_spec->total_size,
-                           tmpbuf, ws_frame_size);
-                } else {
-                    ws_frame_size = websocket_frame_header(
-                        (uint8_t *)data_spec->ptr + data_spec->total_size,
-                        data_spec->allocated_size - data_spec->total_size, ws_side,
-                        WS_OP_TEXT_FRAME, 1, size);
+            if(snip->flags & MSK_EXPRESSION_FOUND) {
+                ssize_t reified_size;
+                char *tptr = (char *)data_spec->ptr + data_spec->total_size;
+                if(data_spec->total_size + snip->expr->estimate_size
+                   > data_spec->allocated_size) {
+                    assert(tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
+                    place_multiple_messages = 0;
+                    break;
                 }
+                reified_size = eval_expression(
+                    &tptr, data_spec->allocated_size - data_spec->total_size,
+                    snip->expr, optional_cb, expr_cb_key, 0,
+                    (tws_side == TWS_SIDE_CLIENT));
+                assert(reified_size >= 0);
+                data = 0;
+                size = reified_size;
+            } else {
+                if(data_spec->total_size + snip->size
+                   > data_spec->allocated_size) {
+                    assert(tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
+                    place_multiple_messages = 0;
+                    break;
+                }
+            }
+
+            size_t ws_frame_size = 0;
+            if(mc->state == MC_FINALIZED_WEBSOCKET) {
+                /* Do not construct WebSocket/HTTP header. */
+                if((ws_side == WS_SIDE_SERVER)
+                   && (snip->flags & MSK_PURPOSE_HTTP_HEADER))
+                    continue;
+
+                if(snip->flags & MSK_FRAMING_ALLOWED) {
+                    if(snip->flags & MSK_EXPRESSION_FOUND) {
+                        uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
+                        /* Save the websocket frame elsewhere temporarily */
+                        ws_frame_size = websocket_frame_header(
+                            tmpbuf, sizeof(tmpbuf), ws_side, WS_OP_TEXT_FRAME,
+                            1, size);
+                        /* Move the data to the right to make space for framing
+                         */
+                        memmove((char *)data_spec->ptr + data_spec->total_size
+                                    + ws_frame_size,
+                                (char *)data_spec->ptr + data_spec->total_size,
+                                size);
+                        /* Prepend the websocket frame */
+                        memcpy((char *)data_spec->ptr + data_spec->total_size,
+                               tmpbuf, ws_frame_size);
+                    } else {
+                        ws_frame_size = websocket_frame_header(
+                            (uint8_t *)data_spec->ptr + data_spec->total_size,
+                            data_spec->allocated_size - data_spec->total_size,
+                            ws_side, WS_OP_TEXT_FRAME, 1, size);
+                    }
+                }
+            }
+
+            /*
+             * We only add data if it has not already been added.
+             */
+            size_t framed_snippet_size = ws_frame_size + size;
+            if(data) { /* Data is not there if expression is used. */
+                memcpy((char *)data_spec->ptr + data_spec->total_size
+                           + ws_frame_size,
+                       data, size);
+            }
+            data_spec->total_size += framed_snippet_size;
+
+            switch(MSK_PURPOSE(snip)) {
+            case MSK_PURPOSE_HTTP_HEADER:
+                data_spec->ws_hdr_size += framed_snippet_size;
+                data_spec->once_size += framed_snippet_size;
+                break;
+            case MSK_PURPOSE_FIRST_MSG:
+                data_spec->once_size += framed_snippet_size;
+                break;
+            case MSK_PURPOSE_MESSAGE:
+                data_spec->single_message_size += framed_snippet_size;
+                break;
+            default:
+                assert(!"No recognized snippet purpose");
+                return NULL;
             }
         }
 
-        /*
-         * We only add data if it has not already been added.
-         */
-        size_t framed_snippet_size = ws_frame_size + size;
-        if(data) { /* Data is not there if expression is used. */
-            memcpy(
-                (char *)data_spec->ptr + data_spec->total_size + ws_frame_size,
-                data, size);
-        }
-        data_spec->total_size += framed_snippet_size;
+    } while(place_multiple_messages);
 
-        switch(MSK_PURPOSE(snip)) {
-        case MSK_PURPOSE_HTTP_HEADER:
-            data_spec->ws_hdr_size += framed_snippet_size;
-            data_spec->once_size += framed_snippet_size;
-            break;
-        case MSK_PURPOSE_FIRST_MSG:
-            data_spec->once_size += framed_snippet_size;
-            break;
-        case MSK_PURPOSE_MESSAGE:
-            data_spec->single_message_size += framed_snippet_size;
-            break;
-        default:
-            assert(!"No recognized snippet purpose");
-            return NULL;
-        }
-    }
-    assert(data_spec->total_size < data_spec->allocated_size);
+    assert(data_spec->total_size <= data_spec->allocated_size);
     ((char *)data_spec->ptr)[data_spec->total_size] = '\0';
 
     return data_spec;

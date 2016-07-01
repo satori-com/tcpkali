@@ -107,7 +107,6 @@ size_t message_collection_estimate_size(struct message_collection *mc,
                                         enum mc_snippet_kind kind_and,
                                         enum mc_snippet_kind kind_equal);
 
-
 /*
  * Our send buffer is pre-computed in advance and may be shared
  * between the instances of engine (workers).
@@ -129,6 +128,8 @@ struct transport_data_spec {
     } flags;
 };
 
+#define REPLICATE_MAX_SIZE (64 * 1024 - 1) /* Proven to be a sweet spot */
+
 /*
  * Convert message collection into transport data specification, which is
  * friendlier for the high speed sending routine.
@@ -144,8 +145,7 @@ enum transport_conversion {
 struct transport_data_spec *transport_spec_from_message_collection(
     struct transport_data_spec *out_spec, struct message_collection *,
     expr_callback_f optional_cb, void *expr_cb_key,
-    enum transport_websocket_side,
-    enum transport_conversion);
+    enum transport_websocket_side, enum transport_conversion);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate
