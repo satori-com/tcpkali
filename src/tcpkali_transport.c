@@ -322,7 +322,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     data_spec = out_spec ? out_spec : calloc(1, sizeof(*data_spec));
     assert(data_spec);
     if(tconv == TS_CONVERSION_INITIAL) {
-        size_t estimate_size = message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE);
+        size_t estimate_size =
+            message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE);
         if(estimate_size < REPLICATE_MAX_SIZE)
             estimate_size = REPLICATE_MAX_SIZE;
         data_spec->ptr = malloc(estimate_size + 1);

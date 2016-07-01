@@ -103,10 +103,7 @@ void message_collection_finalize(struct message_collection *, int as_websocket,
  * Estimate the size of the snippets of the specified kind (and mask).
  * Works on a finalized message collection.
  */
-enum mc_snippet_estimate {
-    MCE_MINIMUM_SIZE,
-    MCE_MAXIMUM_SIZE
-};
+enum mc_snippet_estimate { MCE_MINIMUM_SIZE, MCE_MAXIMUM_SIZE };
 size_t message_collection_estimate_size(struct message_collection *mc,
                                         enum mc_snippet_kind kind_and,
                                         enum mc_snippet_kind kind_equal,

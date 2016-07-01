@@ -709,8 +709,9 @@ main(int argc, char **argv) {
         || rate_modulator.mode != RM_UNMODULATED)
        && no_message_to_send) {
         if(message_collection_estimate_size(
-                  &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
-                  MSK_PURPOSE_MESSAGE, MCE_MAXIMUM_SIZE) > 0) {
+               &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
+               MSK_PURPOSE_MESSAGE, MCE_MAXIMUM_SIZE)
+           > 0) {
             fprintf(stderr,
                     "--message may resolve "
                     "to zero length, double-check regular expression\n");
