@@ -51,7 +51,7 @@ Install the following packages first:
 
 [![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
 
-# Usage
+# Usage (Short version)
 
     Usage: tcpkali [OPTIONS] [-l <port>] [<host:port>...]
     Where some OPTIONS are:
