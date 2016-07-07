@@ -314,7 +314,13 @@ main(int argc, char **argv) {
         case 'w': {
             int n = atoi(optarg);
             if(n <= 0) {
-                fprintf(stderr, "Expected --workers > 1\n");
+                if(optarg[0] >= '0' && optarg[0] <= '9') {
+                    fprintf(stderr, "Expected --workers > 1\n");
+                } else if(optarg[0] == 's') {
+                    fprintf(stderr, "Expected -w <N> (--workers) or --ws (--websocket), but not -ws.\n");
+                } else {
+                    fprintf(stderr, "Expected --workers <N> (-w <N>), or --websocket (--ws)\n");
+                }
                 exit(EX_USAGE);
             }
             if(n > number_of_cpus()) {
