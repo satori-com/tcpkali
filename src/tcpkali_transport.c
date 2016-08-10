@@ -359,7 +359,9 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
             if(snip->flags & MSK_EXPRESSION_FOUND) {
                 ssize_t reified_size;
                 char *tptr = (char *)data_spec->ptr + data_spec->total_size;
-                if(data_spec->total_size + snip->expr->estimate_size
+                if(data_spec->total_size
+                    + WEBSOCKET_MAX_FRAME_HDR_SIZE
+                    + snip->expr->estimate_size
                    > data_spec->allocated_size) {
                     assert(tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
                     place_multiple_messages = 0;
