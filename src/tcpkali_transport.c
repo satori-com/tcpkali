@@ -356,19 +356,29 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     continue;
             }
 
+            ssize_t estimate_ws_frame_size = 0;
+
             if(snip->flags & MSK_EXPRESSION_FOUND) {
                 ssize_t reified_size;
                 char *tptr = (char *)data_spec->ptr + data_spec->total_size;
-                if(data_spec->total_size
-                    + WEBSOCKET_MAX_FRAME_HDR_SIZE
-                    + snip->expr->estimate_size
+                if(data_spec->total_size + WEBSOCKET_MAX_FRAME_HDR_SIZE
+                       + snip->expr->estimate_size
                    > data_spec->allocated_size) {
                     assert(tconv == TS_CONVERSION_OVERRIDE_MESSAGES);
                     place_multiple_messages = 0;
                     break;
                 }
+                if(snip->flags & MSK_FRAMING_ALLOWED) {
+                    estimate_ws_frame_size = websocket_frame_header(
+                        tptr, data_spec->allocated_size - data_spec->total_size,
+                        ws_side, WS_OP_TEXT_FRAME, 1,
+                        snip->expr->estimate_size);
+                    tptr += estimate_ws_frame_size;
+                }
                 reified_size = eval_expression(
-                    &tptr, data_spec->allocated_size - data_spec->total_size,
+                    &tptr,
+                    data_spec->allocated_size
+                        - (data_spec->total_size + estimate_ws_frame_size),
                     snip->expr, optional_cb, expr_cb_key, 0,
                     (tws_side == TWS_SIDE_CLIENT));
                 assert(reified_size >= 0);
@@ -392,20 +402,30 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
 
                 if(snip->flags & MSK_FRAMING_ALLOWED) {
                     if(snip->flags & MSK_EXPRESSION_FOUND) {
-                        uint8_t tmpbuf[WEBSOCKET_MAX_FRAME_HDR_SIZE];
+                        char *tptr =
+                            (char *)data_spec->ptr + data_spec->total_size;
                         /* Save the websocket frame elsewhere temporarily */
                         ws_frame_size = websocket_frame_header(
-                            tmpbuf, sizeof(tmpbuf), ws_side, WS_OP_TEXT_FRAME,
-                            1, size);
-                        /* Move the data to the right to make space for framing
+                            tptr,
+                            data_spec->allocated_size - data_spec->total_size,
+                            ws_side, WS_OP_TEXT_FRAME, 1, size);
+                        /*
+                         * Most of the time websocket frame will have the
+                         * same length as the estimated one
                          */
-                        memmove((char *)data_spec->ptr + data_spec->total_size
-                                    + ws_frame_size,
-                                (char *)data_spec->ptr + data_spec->total_size,
-                                size);
-                        /* Prepend the websocket frame */
-                        memcpy((char *)data_spec->ptr + data_spec->total_size,
-                               tmpbuf, ws_frame_size);
+                        if(ws_frame_size != estimate_ws_frame_size) {
+                            assert(ws_frame_size < estimate_ws_frame_size);
+                            /*
+                             * Move the data to the left to adjust for lower
+                             * space used by the framing.
+                             */
+                            memmove((char *)data_spec->ptr
+                                        + data_spec->total_size + ws_frame_size,
+                                    (char *)data_spec->ptr
+                                        + data_spec->total_size
+                                        + estimate_ws_frame_size,
+                                    size);
+                        }
                     } else {
                         ws_frame_size = websocket_frame_header(
                             (uint8_t *)data_spec->ptr + data_spec->total_size,
