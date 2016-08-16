@@ -317,9 +317,13 @@ main(int argc, char **argv) {
                 if(optarg[0] >= '0' && optarg[0] <= '9') {
                     fprintf(stderr, "Expected --workers > 1\n");
                 } else if(optarg[0] == 's') {
-                    fprintf(stderr, "Expected -w <N> (--workers) or --ws (--websocket), but not -ws.\n");
+                    fprintf(stderr,
+                            "Expected -w <N> (--workers) or --ws "
+                            "(--websocket), but not -ws.\n");
                 } else {
-                    fprintf(stderr, "Expected --workers <N> (-w <N>), or --websocket (--ws)\n");
+                    fprintf(stderr,
+                            "Expected --workers <N> (-w <N>), or --websocket "
+                            "(--ws)\n");
                 }
                 exit(EX_USAGE);
             }
