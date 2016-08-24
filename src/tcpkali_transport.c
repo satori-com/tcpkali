@@ -164,7 +164,7 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
         break;
     case MSK_PURPOSE_FIRST_MSG:
     case MSK_PURPOSE_MESSAGE:
-        adjusted_kind |= MSK_FRAMING_ALLOWED;
+        adjusted_kind |= MSK_FRAMING_REQUESTED;
         break;
     default:
         assert(!"Cannot add message with non-MSK_PURPOSE_ kind");
@@ -236,7 +236,7 @@ message_collection_add_expr(struct message_collection *mc,
             snip->expr = result.esw_prefix;
             snip->flags = kind;
             if(!(snip->flags & MSK_PURPOSE_HTTP_HEADER))
-                snip->flags |= MSK_FRAMING_ALLOWED;
+                snip->flags |= MSK_FRAMING_REQUESTED;
             snip->flags |= MSK_EXPRESSION_FOUND;
             if(mc->most_dynamic_expression < snip->expr->dynamic_scope) {
                 mc->most_dynamic_expression = snip->expr->dynamic_scope;
@@ -254,7 +254,8 @@ message_collection_add_expr(struct message_collection *mc,
             snip->expr = result.esw_websocket_frame;
             /* Disallow framing of websocket frames. */
             snip->flags = kind;
-            snip->flags &= (~MSK_FRAMING_ALLOWED);
+            snip->flags &= (~MSK_FRAMING_REQUESTED);
+            snip->flags |= MSK_FRAMING_DYNAMIC;
             snip->flags |= MSK_EXPRESSION_FOUND;
             mc->snippets_count++;
         }
@@ -295,7 +296,7 @@ message_collection_estimate_size(struct message_collection *mc,
             total_size += snip->size;
         }
         total_size += (mc->state == MC_FINALIZED_WEBSOCKET
-                       && (snip->flags & MSK_FRAMING_ALLOWED))
+                       && (snip->flags & (MSK_FRAMING_REQUESTED | MSK_FRAMING_DYNAMIC)))
                           ? WEBSOCKET_MAX_FRAME_HDR_SIZE
                           : 0;
     }
@@ -368,7 +369,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     place_multiple_messages = 0;
                     break;
                 }
-                if(snip->flags & MSK_FRAMING_ALLOWED) {
+                if(snip->flags & MSK_FRAMING_REQUESTED) {
                     estimate_ws_frame_size = websocket_frame_header(
                         tptr, data_spec->allocated_size - data_spec->total_size,
                         ws_side, WS_OP_TEXT_FRAME, 1,
@@ -400,7 +401,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                    && (snip->flags & MSK_PURPOSE_HTTP_HEADER))
                     continue;
 
-                if(snip->flags & MSK_FRAMING_ALLOWED) {
+                if(snip->flags & MSK_FRAMING_REQUESTED) {
                     if(snip->flags & MSK_EXPRESSION_FOUND) {
                         uint8_t *tptr = data_spec->ptr + data_spec->total_size;
                         /* Save the websocket frame elsewhere temporarily */

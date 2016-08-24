@@ -46,8 +46,9 @@ struct message_collection {
             MSK_PURPOSE_HTTP_HEADER = 0x01, /* HTTP connection upgrade */
             MSK_PURPOSE_FIRST_MSG = 0x02,   /* --first-message, *-file */
             MSK_PURPOSE_MESSAGE = 0x04,     /* --message, *-file */
-            MSK_FRAMING_ALLOWED = 0x10,     /* msg=framing, hdr=!framing */
-            MSK_EXPRESSION_FOUND = 0x20     /* Expression */
+            MSK_FRAMING_REQUESTED = 0x10,   /* msg needs framing, hdr doesn't */
+            MSK_FRAMING_DYNAMIC = 0x20,     /* msg will be framed */
+            MSK_EXPRESSION_FOUND = 0x40     /* Expression */
 #define MSK_PURPOSE(snippet) ((snippet)->flags & 0x0f)
         } flags;
         int sort_index;
