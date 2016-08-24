@@ -356,11 +356,11 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     continue;
             }
 
-            ssize_t estimate_ws_frame_size = 0;
+            size_t estimate_ws_frame_size = 0;
 
             if(snip->flags & MSK_EXPRESSION_FOUND) {
                 ssize_t reified_size;
-                char *tptr = (char *)data_spec->ptr + data_spec->total_size;
+                uint8_t *tptr = data_spec->ptr + data_spec->total_size;
                 if(data_spec->total_size + WEBSOCKET_MAX_FRAME_HDR_SIZE
                        + snip->expr->estimate_size
                    > data_spec->allocated_size) {
@@ -376,7 +376,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     tptr += estimate_ws_frame_size;
                 }
                 reified_size = eval_expression(
-                    &tptr,
+                    (char **)&tptr,
                     data_spec->allocated_size
                         - (data_spec->total_size + estimate_ws_frame_size),
                     snip->expr, optional_cb, expr_cb_key, 0,
@@ -402,8 +402,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
 
                 if(snip->flags & MSK_FRAMING_ALLOWED) {
                     if(snip->flags & MSK_EXPRESSION_FOUND) {
-                        char *tptr =
-                            (char *)data_spec->ptr + data_spec->total_size;
+                        uint8_t *tptr = data_spec->ptr + data_spec->total_size;
                         /* Save the websocket frame elsewhere temporarily */
                         ws_frame_size = websocket_frame_header(
                             tptr,
