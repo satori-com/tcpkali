@@ -1,10 +1,16 @@
 #!/bin/sh
 
+set -o pipefail
 set -e
 
 if [ -z "${TCPKALI}" ]; then
     echo "WARNING: Use \`make check\` instead of running $0 directly."
     TCPKALI=../src/tcpkali
+fi
+
+use_test_no="$1"
+if [ -n "$1" ]; then
+    echo "Selected test ${use_test_no}"
 fi
 
 PORT=1230
@@ -13,6 +19,10 @@ check() {
     local testno="$1"
     local togrep="$2"
     shift 2
+
+    if [ -n "${use_test_no}" -a "${testno}" != "${use_test_no}" ]; then
+        return
+    fi
 
     PORT=$((PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
@@ -50,4 +60,16 @@ check 18 "." ${TCPKALI} -m '\{ws.binary < /dev/null >}'
 
 check 19 "." ${TCPKALI} -m '\{connection.uid%10}'
 check 20 "." ${TCPKALI} -c10 -m '\{re [a-z]+}'
+
+# Test 21
+TESTFILE=/tmp/.tcpkali-64k-test.$$
+rm_testfile() {
+    rm -f "${TESTFILE}"
+}
+trap rm_testfile EXIT
+for size_k in 63 65 1000; do
+    dd if=/dev/zero of=${TESTFILE} bs=1024 count=${size_k}
+    check 21 "." ${TCPKALI} --ws -r1 -m "\{ws.text <${TESTFILE}>}"
+done
+rm_testfile
 
