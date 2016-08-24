@@ -295,12 +295,11 @@ message_collection_estimate_size(struct message_collection *mc,
         } else {
             total_size += snip->size;
         }
-        total_size +=
-            ((mc->state == MC_FINALIZED_WEBSOCKET
-                && (snip->flags & MSK_FRAMING_REQUESTED))
-            || (snip->flags & MSK_FRAMING_ASSERTED))
-                ? WEBSOCKET_MAX_FRAME_HDR_SIZE
-                : 0;
+        total_size += ((mc->state == MC_FINALIZED_WEBSOCKET
+                        && (snip->flags & MSK_FRAMING_REQUESTED))
+                       || (snip->flags & MSK_FRAMING_ASSERTED))
+                          ? WEBSOCKET_MAX_FRAME_HDR_SIZE
+                          : 0;
     }
     return total_size;
 }
