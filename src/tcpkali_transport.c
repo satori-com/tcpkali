@@ -255,7 +255,7 @@ message_collection_add_expr(struct message_collection *mc,
             /* Disallow framing of websocket frames. */
             snip->flags = kind;
             snip->flags &= (~MSK_FRAMING_REQUESTED);
-            snip->flags |= MSK_FRAMING_DYNAMIC;
+            snip->flags |= MSK_FRAMING_ASSERTED;
             snip->flags |= MSK_EXPRESSION_FOUND;
             mc->snippets_count++;
         }
@@ -296,8 +296,9 @@ message_collection_estimate_size(struct message_collection *mc,
             total_size += snip->size;
         }
         total_size +=
-            (mc->state == MC_FINALIZED_WEBSOCKET
-             && (snip->flags & (MSK_FRAMING_REQUESTED | MSK_FRAMING_DYNAMIC)))
+            ((mc->state == MC_FINALIZED_WEBSOCKET
+                && (snip->flags & MSK_FRAMING_REQUESTED))
+            || (snip->flags & MSK_FRAMING_ASSERTED))
                 ? WEBSOCKET_MAX_FRAME_HDR_SIZE
                 : 0;
     }

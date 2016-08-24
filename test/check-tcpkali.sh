@@ -72,6 +72,7 @@ trap rm_testfile EXIT
 for size_k in 63 65 1000; do
     dd if=/dev/zero of=${TESTFILE} bs=1024 count=${size_k}
     check 21 "." ${TCPKALI} --ws -r1 -m "\{ws.text <${TESTFILE}>}"
+    check 22 "." ${TCPKALI}      -r1 -m "\{ws.text <${TESTFILE}>}"
 done
 rm_testfile
 
