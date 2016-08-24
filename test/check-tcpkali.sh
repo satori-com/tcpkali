@@ -1,6 +1,8 @@
 #!/bin/sh
 
-set -o pipefail
+if [ -z "${CONTINUOUS_INTEGRATION}" ]; then
+    set -o pipefail
+fi
 set -e
 
 if [ -z "${TCPKALI}" ]; then
