@@ -32,15 +32,6 @@
 
 #include "tcpkali_statsd.h"
 
-void
-report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
-    static statsd_feedback empty_feedback;
-
-    if(!statsd) return;
-    if(!sf) sf = &empty_feedback;
-
-    statsd_resetBatch(statsd);
-
 #define SBATCH(t, str, value)                                  \
     do {                                                       \
         int ret = statsd_addToBatch(statsd, t, str, value, 1); \
@@ -50,6 +41,72 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
         }                                                      \
         assert(ret == STATSD_SUCCESS);                         \
     } while(0)
+
+
+static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, struct hdr_histogram *hist) {
+
+    struct {
+        unsigned p50;
+        unsigned p95;
+        unsigned p99;
+        unsigned p99_5;
+        unsigned mean;
+        unsigned max;
+    } lat;
+
+    if(hist) {
+        lat.p50 = hdr_value_at_percentile(hist, 50.0) / 10.0;
+        lat.p95 = hdr_value_at_percentile(hist, 95.0) / 10.0;
+        lat.p99 = hdr_value_at_percentile(hist, 99.0) / 10.0;
+        lat.p99_5 = hdr_value_at_percentile(hist, 99.5) / 10.0;
+        lat.mean = hdr_mean(hist) / 10.0;
+        lat.max = hdr_max(hist) / 10.0;
+        assert(lat.p95 < 1000000);
+        assert(lat.mean < 1000000);
+        assert(lat.max < 1000000);
+    } else {
+        memset(&lat, 0, sizeof(lat));
+    }
+
+    static struct prefixes {
+        const char *mean;
+        const char *p50;
+        const char *p95;
+        const char *p99;
+        const char *p99_5;
+        const char *max;
+    } prefixes[] =
+        {[SLT_CONNECT] = {"latency.connect.mean", "latency.connect.50",
+                          "latency.connect.95", "latency.connect.99",
+                          "latency.connect.99.5", "latency.connect.max"},
+         [SLT_FIRSTBYTE] = {"latency.firstbyte.mean", "latency.firstbyte.50",
+                            "latency.firstbyte.95", "latency.firstbyte.99",
+                            "latency.firstbyte.99.5", "latency.firstbyte.max"},
+         [SLT_MARKER] = {"latency.message.mean", "latency.message.50",
+                         "latency.message.95", "latency.message.99",
+                         "latency.message.99.5", "latency.message.max"}};
+    assert(ltype < sizeof(prefixes)/sizeof(prefixes[0]));
+    const struct prefixes *pfx = &prefixes[ltype];
+    assert(pfx->mean);
+
+    SBATCH(STATSD_GAUGE, pfx->mean, lat.mean);
+    SBATCH(STATSD_GAUGE, pfx->p50, lat.p50);
+    SBATCH(STATSD_GAUGE, pfx->p95, lat.p95);
+    SBATCH(STATSD_GAUGE, pfx->p99, lat.p99);
+    SBATCH(STATSD_GAUGE, pfx->p99_5, lat.p99_5);
+    SBATCH(STATSD_GAUGE, pfx->max, lat.max);
+}
+
+
+void
+report_to_statsd(Statsd *statsd, statsd_feedback *sf, statsd_report_latency_types latency_types) {
+    if(!statsd) return;
+    if(!sf) {
+        static statsd_feedback empty_feedback;
+        sf = &empty_feedback;
+    }
+
+    statsd_resetBatch(statsd);
 
     SBATCH(STATSD_COUNT, "connections.opened", sf->opened);
     SBATCH(STATSD_GAUGE, "connections.total", sf->conns_in + sf->conns_out);
@@ -65,38 +122,16 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf) {
     SBATCH(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
     SBATCH(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
 
-    if((sf->latency && sf->latency->marker_histogram)
-       || sf == &empty_feedback) {
-        struct {
-            unsigned p50;
-            unsigned p95;
-            unsigned p99;
-            unsigned p99_5;
-            unsigned mean;
-            unsigned max;
-        } lat;
-
-        if(sf->latency && sf->latency->marker_histogram) {
-            struct hdr_histogram *hist = sf->latency->marker_histogram;
-            lat.p50 = hdr_value_at_percentile(hist, 50.0) / 10.0;
-            lat.p95 = hdr_value_at_percentile(hist, 95.0) / 10.0;
-            lat.p99 = hdr_value_at_percentile(hist, 99.0) / 10.0;
-            lat.p99_5 = hdr_value_at_percentile(hist, 99.5) / 10.0;
-            lat.mean = hdr_mean(hist) / 10.0;
-            lat.max = hdr_max(hist) / 10.0;
-            assert(lat.p95 < 1000000);
-            assert(lat.mean < 1000000);
-            assert(lat.max < 1000000);
-        } else {
-            memset(&lat, 0, sizeof(lat));
-        }
-
-        SBATCH(STATSD_GAUGE, "latency.mean", lat.mean);
-        SBATCH(STATSD_GAUGE, "latency.50", lat.p50);
-        SBATCH(STATSD_GAUGE, "latency.95", lat.p95);
-        SBATCH(STATSD_GAUGE, "latency.99", lat.p99);
-        SBATCH(STATSD_GAUGE, "latency.99.5", lat.p99_5);
-        SBATCH(STATSD_GAUGE, "latency.max", lat.max);
+    if(latency_types) {
+        if(latency_types & SLT_CONNECT)
+            report_latency(statsd, SLT_CONNECT,
+                           sf->latency ? sf->latency->connect_histogram : 0);
+        if(latency_types & SLT_FIRSTBYTE)
+            report_latency(statsd, SLT_FIRSTBYTE,
+                           sf->latency ? sf->latency->firstbyte_histogram : 0);
+        if(latency_types & SLT_MARKER)
+            report_latency(statsd, SLT_MARKER,
+                           sf->latency ? sf->latency->marker_histogram : 0);
     }
 
     statsd_sendBatch(statsd);

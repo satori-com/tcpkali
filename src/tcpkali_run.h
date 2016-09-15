@@ -81,4 +81,6 @@ enum oc_return_value open_connections_until_maxed_out(
     mavg traffic_mavgs[2], Statsd *statsd, sig_atomic_t *term_flag,
     enum work_phase phase, struct rate_modulator *, int print_stats);
 
+statsd_report_latency_types engine_reports_latency_types(const struct engine_params *);
+
 #endif /* TCPKALI_RUN_H */

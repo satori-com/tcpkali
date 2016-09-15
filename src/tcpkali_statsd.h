@@ -46,7 +46,17 @@ typedef struct {
     struct latency_snapshot *latency;
 } statsd_feedback;
 
-void report_to_statsd(Statsd *statsd, statsd_feedback *feedback_optional);
+/*
+ * Requested types of latency measurement.
+ */
+typedef enum {
+    SLT_CONNECT = (1 << 0),
+    SLT_FIRSTBYTE = (1 << 1),
+    SLT_MARKER = (1 << 2)
+} statsd_report_latency_types;
+
+void report_to_statsd(Statsd *statsd, statsd_feedback *feedback_optional,
+                      statsd_report_latency_types types);
 
 
 #endif /* TCPKALI_STATSD_H */

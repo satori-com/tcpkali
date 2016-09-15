@@ -789,6 +789,10 @@ main(int argc, char **argv) {
         }
     }
 
+    /* Which latency types to report to statsd */
+    statsd_report_latency_types requested_latency_types =
+        engine_reports_latency_types(&engine_params);
+
     /*
      * Initialize statsd library and push initial (empty) metrics.
      */
@@ -797,7 +801,7 @@ main(int argc, char **argv) {
         statsd_new(&statsd, conf.statsd_host, conf.statsd_port,
                    conf.statsd_namespace, NULL);
         /* Clear up traffic numbers, for better graphing. */
-        report_to_statsd(statsd, 0);
+        report_to_statsd(statsd, 0, requested_latency_types);
     } else {
         statsd = 0;
     }
@@ -845,7 +849,7 @@ main(int argc, char **argv) {
                     conf.max_connections, conf.max_connections == 1 ? "" : "s",
                     conf.test_duration);
             /* Level down graphs/charts. */
-            report_to_statsd(statsd, 0);
+            report_to_statsd(statsd, 0, requested_latency_types);
             exit(1);
         }
     }
@@ -873,7 +877,7 @@ main(int argc, char **argv) {
     free(latency_percentiles.doubles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
-    report_to_statsd(statsd, 0);
+    report_to_statsd(statsd, 0, requested_latency_types);
 
     switch(orv) {
     case OC_CONNECTED:
