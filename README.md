@@ -29,6 +29,7 @@
 | Mac OS X | [Homebrew](http://brew.sh/)             | `brew install tcpkali` |
 | Mac OS X | [MacPorts](https://www.macports.org/)   | `port install tcpkali` |
 | FreeBSD  | [pkgng](https://wiki.freebsd.org/pkgng) | `pkg install tcpkali`  |
+| Linux    | [nix](https://nixos.org/nix/)           | `nix-env -i tcpkali`   |
 
 ## From sources
 
