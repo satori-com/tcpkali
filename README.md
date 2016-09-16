@@ -79,7 +79,11 @@ You can get the full list of options using `tcpkali --help`, from
 `man tcpkali`, and by consulting the
 [tcpkali man page source](doc/tcpkali.man.md).
 
-# TCP Examples
+# Usage Examples
+<details>
+<summary>A few command line examples</summary>
+
+## TCP Examples
 
 Connect to a local web server and do nothing:
 
@@ -110,7 +114,7 @@ Listen for incoming connections and throw away data for 3 hours:
     tcpkali --listen-port 12345 --duration 3h
     tcpkali -l12345 -T3h
 
-# WebSocket examples
+## WebSocket examples
 
 Open connection to the local WebSocket server, send hello, and wait:
 
@@ -124,3 +128,4 @@ Send a binary frame with a picture every second (angle brackets are literal):
 
     tcpkali --ws -m "\{ws.binary <image.png>}" -r1 127.1:80
 
+</details>
