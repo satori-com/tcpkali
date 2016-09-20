@@ -34,4 +34,24 @@
 #define UNUSED __attribute__((unused))
 #define PRINTFLIKE(n, m) __attribute__((format(printf, n, m)))
 
+/*
+ * Requested types of latency measurement.
+ */
+typedef enum {
+    SLT_CONNECT = (1 << 0),
+    SLT_FIRSTBYTE = (1 << 1),
+    SLT_MARKER = (1 << 2)
+} statsd_report_latency_types;
+
+/*
+ * Array of doubles used in e.g. overriding reported latency percentiles.
+ */
+struct percentile_values {
+    size_t size;
+    struct percentile_value {
+        double value_d;
+        char value_s[sizeof("100.123")];
+    } *values;
+};
+
 #endif /* TCPKALI_COMMON_H */

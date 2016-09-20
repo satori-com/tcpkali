@@ -393,21 +393,21 @@ engine_start(struct engine_params params) {
         largs->thread_no = n;
         largs->serialize_output_lock = &eng->serialize_output_lock;
         const int decims_in_1s = 10 * 1000; /* decimilliseconds, 1/10 ms */
-        if(params.latency_setting & LMEASURE_CONNECT) {
+        if(params.latency_setting & SLT_CONNECT) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
                 100 * decims_in_1s, /* 100 seconds is a max storable value */
                 3, &largs->connect_histogram_local);
             assert(ret == 0);
         }
-        if(params.latency_setting & LMEASURE_FIRSTBYTE) {
+        if(params.latency_setting & SLT_FIRSTBYTE) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
                 100 * decims_in_1s, /* 100 seconds is a max storable value */
                 3, &largs->firstbyte_histogram_local);
             assert(ret == 0);
         }
-        if(params.latency_setting & LMEASURE_MARKER) {
+        if(params.latency_setting & SLT_MARKER) {
             int ret = hdr_init(
                 1, /* 1/10 milliseconds is the lowest storable value. */
                 100 * decims_in_1s, /* 100 seconds is a max storable value */
@@ -442,48 +442,39 @@ engine_start(struct engine_params params) {
  */
 static void
 print_latency_hdr_histrogram_percentiles(
-    char *title, struct array_of_doubles want_percentiles,
+    const char *title, const struct percentile_values *report_percentiles,
     struct hdr_histogram *histogram) {
     assert(histogram);
 
-    double *percentiles = want_percentiles.doubles;
-    size_t size = want_percentiles.size;
-
-    double default_percentiles[] = {95.0, 99.0, 99.5};
-    size_t default_size = sizeof(default_percentiles) / sizeof(double);
-
-    if(size == 0) {
-        size = default_size;
-        percentiles = default_percentiles;
-    }
+    size_t size = report_percentiles->size;
 
     printf("%s latency at percentiles: ", title);
     for(size_t i = 0; i < size; i++) {
-        double perc = percentiles[i];
-        printf("%.1f%s", hdr_value_at_percentile(histogram, perc) / 10.0,
+        double per_d = report_percentiles->values[i].value_d;
+        printf("%.1f%s", hdr_value_at_percentile(histogram, per_d) / 10.0,
                i == size - 1 ? "" : "/");
     }
     printf(" (");
     for(size_t i = 0; i < size; i++) {
-        double perc = percentiles[i];
-        printf("%.1f%s", perc, i == size - 1 ? "" : "/");
+        printf("%s%s", report_percentiles->values[i].value_s,
+               i == size - 1 ? "" : "/");
     }
     printf("%%)\n");
 }
 
 static void
-latency_snapshot_print(struct array_of_doubles want_percentiles,
-                       struct latency_snapshot *latency) {
+latency_snapshot_print(const struct percentile_values *latency_percentiles,
+                       const struct latency_snapshot *latency) {
     if(latency->connect_histogram) {
         print_latency_hdr_histrogram_percentiles(
-            "TCP connect", want_percentiles, latency->connect_histogram);
+            "TCP connect", latency_percentiles, latency->connect_histogram);
     }
     if(latency->firstbyte_histogram) {
-        print_latency_hdr_histrogram_percentiles("First byte", want_percentiles,
+        print_latency_hdr_histrogram_percentiles("First byte", latency_percentiles,
                                                  latency->firstbyte_histogram);
     }
     if(latency->marker_histogram) {
-        print_latency_hdr_histrogram_percentiles("Message", want_percentiles,
+        print_latency_hdr_histrogram_percentiles("Message", latency_percentiles,
                                                  latency->marker_histogram);
     }
 }
@@ -520,7 +511,7 @@ engine_update_message_send_rate(struct engine *eng, double msg_rate) {
 void
 engine_terminate(struct engine *eng, double epoch,
                  non_atomic_traffic_stats initial_traffic_stats,
-                 struct array_of_doubles want_latency_percentiles) {
+                 struct percentile_values *latency_percentiles) {
     size_t connecting, conn_in, conn_out, conn_counter;
 
     engine_get_connection_stats(eng, &connecting, &conn_in, &conn_out,
@@ -583,7 +574,7 @@ engine_terminate(struct engine *eng, double epoch,
                                     epoch_traffic.bytes_rcvd),
            estimate_segments_per_op(epoch_traffic.num_writes,
                                     epoch_traffic.bytes_sent));
-    latency_snapshot_print(want_latency_percentiles, latency);
+    latency_snapshot_print(latency_percentiles, latency);
 
     engine_free_latency_snapshot(latency);
     printf("Test duration: %g s.\n", test_duration);

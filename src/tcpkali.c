@@ -141,8 +141,8 @@ struct multiplier {
 };
 static double parse_with_multipliers(const char *, char *str,
                                      struct multiplier *, int n);
-static int parse_array_of_doubles(const char *option, char *str,
-                                  struct array_of_doubles *array);
+static int parse_percentile_values(const char *option, char *str,
+                                   struct percentile_values *array);
 
 /* clang-format off */
 static struct multiplier km_multiplier[] = { { "k", 1000 }, { "m", 1000000 } };
@@ -190,15 +190,16 @@ main(int argc, char **argv) {
     srandom(time(NULL));
 #endif
 
-    struct array_of_doubles latency_percentiles = {
-        .size = 0, .doubles = NULL,
+    struct percentile_values latency_percentiles = {
+        .size = 0, .values = NULL,
     };
 
     while(1) {
         char *option = argv[optind];
+        int longindex = -1;
         int c;
         c = getopt_long(argc, argv, "dhc:e1:m:f:r:l:vw:T:", cli_long_options,
-                        NULL);
+                        &longindex);
         if(c == -1) break;
         switch(c) {
         case 'V':
@@ -511,13 +512,13 @@ main(int argc, char **argv) {
             engine_params.websocket_enable = 1;
             break;
         case CLI_LATENCY + 'c': /* --latency-connect */
-            engine_params.latency_setting |= LMEASURE_CONNECT;
+            engine_params.latency_setting |= SLT_CONNECT;
             break;
         case CLI_LATENCY + 'f': /* --latency-first-byte */
-            engine_params.latency_setting |= LMEASURE_FIRSTBYTE;
+            engine_params.latency_setting |= SLT_FIRSTBYTE;
             break;
         case CLI_LATENCY + 'm': { /* --latency-marker */
-            engine_params.latency_setting |= LMEASURE_MARKER;
+            engine_params.latency_setting |= SLT_MARKER;
             char *data = strdup(optarg);
             size_t size = strlen(optarg);
             if(unescape_message_data) unescape_data(data, &size);
@@ -545,18 +546,9 @@ main(int argc, char **argv) {
             }
         } break;
         case CLI_LATENCY + 'p': { /* --latency-percentiles */
-            if(parse_array_of_doubles(option, optarg, &latency_percentiles))
+            if(parse_percentile_values(cli_long_options[longindex].name,
+                                       optarg, &latency_percentiles))
                 exit(EX_USAGE);
-            for(size_t i = 0; i < latency_percentiles.size; i++) {
-                double number = latency_percentiles.doubles[i];
-                if(number < 0.0 || number > 100.0) {
-                    fprintf(
-                        stderr,
-                        "--latency-percentiles: "
-                        "Percentile number should be within [0..100] range\n");
-                    exit(EX_USAGE);
-                }
-            }
         } break;
         case 'I': { /* --source-ip */
             if(add_source_ip(&engine_params.source_addresses, optarg) < 0) {
@@ -790,8 +782,17 @@ main(int argc, char **argv) {
     }
 
     /* Which latency types to report to statsd */
-    statsd_report_latency_types requested_latency_types =
-        engine_reports_latency_types(&engine_params);
+    statsd_report_latency_types requested_latency_types = engine_params.latency_setting;
+
+    if(requested_latency_types && !latency_percentiles.size) {
+        static struct percentile_value percentile_values[] = {
+            { 95, "95" }, { 99, "99" }, { 99.5, "99.5" } };
+        static struct percentile_values pvs = {
+                .size = sizeof(percentile_values) / sizeof(percentile_values[1]),
+                .values = percentile_values
+            };
+        latency_percentiles = pvs;
+    }
 
     /*
      * Initialize statsd library and push initial (empty) metrics.
@@ -801,7 +802,7 @@ main(int argc, char **argv) {
         statsd_new(&statsd, conf.statsd_host, conf.statsd_port,
                    conf.statsd_namespace, NULL);
         /* Clear up traffic numbers, for better graphing. */
-        report_to_statsd(statsd, 0, requested_latency_types);
+        report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
     } else {
         statsd = 0;
     }
@@ -836,7 +837,8 @@ main(int argc, char **argv) {
         if(open_connections_until_maxed_out(
                eng, conf.connect_rate, conf.max_connections, epoch_end,
                &checkpoint, traffic_mavgs, statsd, &term_flag,
-               PHASE_ESTABLISHING_CONNECTIONS, &rate_modulator, print_stats)
+               PHASE_ESTABLISHING_CONNECTIONS, &rate_modulator,
+               &latency_percentiles, print_stats)
            == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
@@ -849,7 +851,7 @@ main(int argc, char **argv) {
                     conf.max_connections, conf.max_connections == 1 ? "" : "s",
                     conf.test_duration);
             /* Level down graphs/charts. */
-            report_to_statsd(statsd, 0, requested_latency_types);
+            report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
             exit(1);
         }
     }
@@ -868,16 +870,14 @@ main(int argc, char **argv) {
     enum oc_return_value orv = open_connections_until_maxed_out(
         eng, conf.connect_rate, conf.max_connections, epoch_end, &checkpoint,
         traffic_mavgs, statsd, &term_flag, PHASE_STEADY_STATE, &rate_modulator,
-        print_stats);
+        &latency_percentiles, print_stats);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
-                     checkpoint.initial_traffic_stats, latency_percentiles);
-
-    free(latency_percentiles.doubles);
+                     checkpoint.initial_traffic_stats, &latency_percentiles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
-    report_to_statsd(statsd, 0, requested_latency_types);
+    report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
 
     switch(orv) {
     case OC_CONNECTED:
@@ -939,33 +939,70 @@ parse_with_multipliers(const char *option, char *str, struct multiplier *ms,
 }
 
 static int
-parse_array_of_doubles(const char *option, char *str,
-                       struct array_of_doubles *array) {
-    double *doubles = array->doubles;
+parse_percentile_values(const char *option, char *str,
+                       struct percentile_values *array) {
+    struct percentile_value *values = array->values;
     size_t size = array->size;
 
     for(char *pos = str; *pos; pos++) {
+        const char *start = pos;
         char *endpos;
-        double got = strtod(pos, &endpos);
-        if(pos == endpos) {
-            fprintf(stderr, "%s: Failed to parse: bad number\n", option);
+
+        double value_d = strtod(start, &endpos);
+
+        if(start == endpos) {
+            fprintf(stderr, "--%s: %s: Failed to parse: bad number\n", option, str);
             return -1;
         }
+        if(value_d < 0 || !isfinite(value_d) || value_d > 100) {
+            fprintf(stderr, "--%s: %s: Failed to parse: bad latency percentile specification"
+                            ", expected range is [0..100]\n", option, str);
+            return -1;
+        }
+        for(; pos < endpos; pos++) {
+            switch(*pos) {
+            case '+': case ' ':
+                assert(pos == start);
+                start++;
+                continue;
+            case '.':
+                if(endpos - pos == 1) {
+                    fprintf(stderr, "--%s: %s: Fractional part is missing\n", option, str);
+                    return -1;
+                }
+                continue;
+            case '0' ... '9':
+                continue;
+            default:
+                fprintf(stderr, "--%s: %s: Number should contain only digits\n", option, str);
+                return -1;
+            }
+            break;
+        }
+        if(endpos - start >= (ssize_t)sizeof(values[0].value_s)) {
+            fprintf(stderr, "--%s: %s: Unreasonably precise percentile specification\n", option, str);
+            return -1;
+        }
+
         if(*endpos != 0 && *endpos != ',' && *endpos != '/') {
             fprintf(stderr,
-                    "%s: Failed to parse: "
+                    "--%s: %s: Failed to parse: "
                     "invalid separator, use ',' or '/'\n",
-                    option);
+                    option, str);
             return -1;
         }
-        doubles = realloc(doubles, ++size * sizeof(double));
-        doubles[size - 1] = got;
+
+        values = realloc(values, ++size * sizeof(values[0]));
+        assert(values);
+        values[size - 1].value_d = value_d;
+        memcpy(values[size - 1].value_s, start, endpos-start);
+        values[size - 1].value_s[endpos - start] = '\0';
 
         pos = endpos;
         if(*pos == 0) break;
     }
 
-    array->doubles = doubles;
+    array->values = values;
     array->size = size;
     return 0;
 }

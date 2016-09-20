@@ -82,20 +82,11 @@ struct engine_params {
         DS_DUMP_ALL_OUT = 8,
         DS_DUMP_ALL = 12 /* 8|4 */
     } dump_setting;
-    enum {
-        LMEASURE_CONNECT = (1 << 0),
-        LMEASURE_FIRSTBYTE = (1 << 1),
-        LMEASURE_MARKER = (1 << 2)
-    } latency_setting;
+    statsd_report_latency_types latency_setting;
     tk_expr_t *latency_marker; /* --latency-marker */
     int latency_marker_skip;   /* --latency-marker-skip <N> */
 
     struct StreamBMH_Occ sbmh_shared_occ; /* Streaming Boyer-Moore-Horspool */
-};
-
-struct array_of_doubles {
-    size_t size;
-    double *doubles;
 };
 
 struct engine *engine_start(struct engine_params);
@@ -130,6 +121,6 @@ void engine_terminate(struct engine *, double epoch_start,
                       /* Traffic observed during ramp-up phase */
                       non_atomic_traffic_stats initial_traffic,
                       /* Report latencies at specified %'iles */
-                      struct array_of_doubles want_latency_percentiles);
+                      struct percentile_values *report_latency_percentiles);
 
 #endif /* TCPKALI_ENGINE_H */

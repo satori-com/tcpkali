@@ -40,11 +40,6 @@
 #include "tcpkali_pacefier.h"
 #include "tcpkali_terminfo.h"
 
-statsd_report_latency_types
-engine_reports_latency_types(const struct engine_params *params) {
-    return (statsd_report_latency_types)params->latency_setting;
-}
-
 static const char *
 time_progress(double start, double now, double stop) {
     const char *clocks[] = {"🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
@@ -239,9 +234,10 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                                  mavg traffic_mavgs[2], Statsd *statsd,
                                  sig_atomic_t *term_flag, enum work_phase phase,
                                  struct rate_modulator *rate_modulator,
+                                 struct percentile_values *latency_percentiles,
                                  int print_stats) {
     statsd_report_latency_types requested_latency_types =
-        engine_reports_latency_types(engine_params(eng));
+        engine_params(eng)->latency_setting;
 
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
@@ -325,7 +321,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                                             .bps_out = bps_out,
                                             .traffic_delta = traffic_delta,
                                             .latency = latency},
-                         requested_latency_types);
+                         requested_latency_types, latency_percentiles);
 
         if(print_stats) {
             if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
