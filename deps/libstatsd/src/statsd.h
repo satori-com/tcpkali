@@ -114,6 +114,7 @@ ADDAPI int ADDCALL statsd_set(Statsd* statsd, const char* bucket, int64_t value,
 ADDAPI int ADDCALL statsd_timing(Statsd* statsd, const char* bucket, int timing, double sampleRate);
 ADDAPI int ADDCALL statsd_resetBatch(Statsd* statsd);
 ADDAPI int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket, int64_t value, double sampleRate);
+ADDAPI int ADDCALL statsd_addToBatch_dbl(Statsd* statsd, StatsType type, const char* bucket, double value, double sampleRate);
 ADDAPI int ADDCALL statsd_sendBatch(Statsd* statsd);
 
 #ifdef __cplusplus

@@ -24,6 +24,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 #include <errno.h>
 
 #if defined (_WIN32)
@@ -46,6 +47,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size);
 static int sendToServer(Statsd* stats, const char* bucket, StatsType type, int64_t delta, double sampleRate);
 static ssize_t buildStatString(char* stat, size_t stat_size, const char* nameSpace, const char* bucket, StatsType type, int64_t delta, double sampleRate);
+static ssize_t buildStatString_dbl(char* stat, size_t stat_size, const char* nameSpace, const char* bucket, StatsType type, double delta, double sampleRate);
 
 static const char *networkToPresentation(int af, const void *src, char *dst, size_t size){
    return inet_ntop(af, src, dst, size);
@@ -138,6 +140,50 @@ static ssize_t buildStatString(char* stat, size_t stat_size, const char* nameSpa
             bucket, delta, statType, sampleRate);
    } else {
       resulting_size = snprintf(stat, stat_size, "%s%s%s:%"PRId64"|%s\n",
+            nameSpace ? nameSpace : "", nameSpace ? "." : "",
+            bucket, delta, statType);
+   }
+   if(resulting_size >= stat_size) {
+       if(stat_size >= 1)
+           stat[0] = '\0';
+       return -1;
+   }
+
+   return resulting_size;
+}
+
+static ssize_t buildStatString_dbl(char* stat, size_t stat_size, const char* nameSpace, const char* bucket, StatsType type, double delta, double sampleRate){
+   char* statType = NULL;
+
+    if(!isfinite(delta))
+        return 0;
+
+   //Figure out what type of message to generate
+   switch(type){
+      case STATSD_COUNT:
+         statType = "c";
+         break;
+      case STATSD_GAUGE:
+         statType = "g";
+         break;
+      case STATSD_SET:
+         statType = "s";
+         break;
+      case STATSD_TIMING:
+         statType = "ms";
+         break;
+      default:
+         return -STATSD_BAD_STATS_TYPE;
+   }
+
+   //Do we have a sample rate?
+   int resulting_size;
+   if (sampleRate > 0.0 && sampleRate < 1.0) {
+      resulting_size = snprintf(stat, stat_size, "%s%s%s:%.1f|%s|@%.2f\n",
+            nameSpace ? nameSpace : "", nameSpace ? "." : "",
+            bucket, delta, statType, sampleRate);
+   } else {
+      resulting_size = snprintf(stat, stat_size, "%s%s%s:%.1f|%s\n",
             nameSpace ? nameSpace : "", nameSpace ? "." : "",
             bucket, delta, statType);
    }
@@ -417,6 +463,28 @@ int ADDCALL statsd_addToBatch(Statsd* statsd, StatsType type, const char* bucket
     }
 
     ssize_t strLength = buildStatString(statsd->batch + statsd->batchIndex,
+                            sizeof(statsd->batch) - statsd->batchIndex,
+                            statsd->nameSpace, bucket, type, value, sampleRate);
+    if (strLength < 0) {
+        return STATSD_BATCH_FULL;
+    }
+
+    statsd->batchIndex += strLength;
+
+    return STATSD_SUCCESS;
+}
+
+int ADDCALL statsd_addToBatch_dbl(Statsd* statsd, StatsType type, const char* bucket, double value, double sampleRate){
+    //See if we randomly fall under the sample rate
+    if (sampleRate > 0 && sampleRate < 1 && (double)((double)statsd->random() / RAND_MAX) >= sampleRate){
+        return STATSD_SUCCESS;
+    }
+ 
+    if (!bucket) {
+        bucket = statsd->bucket;
+    }
+
+    ssize_t strLength = buildStatString_dbl(statsd->batch + statsd->batchIndex,
                             sizeof(statsd->batch) - statsd->batchIndex,
                             statsd->nameSpace, bucket, type, value, sampleRate);
     if (strLength < 0) {

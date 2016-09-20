@@ -32,14 +32,24 @@
 
 #include "tcpkali_statsd.h"
 
-#define SBATCH(t, str, value)                                  \
-    do {                                                       \
-        int ret = statsd_addToBatch(statsd, t, str, value, 1); \
-        if(ret == STATSD_BATCH_FULL) {                         \
-            statsd_sendBatch(statsd);                          \
-            ret = statsd_addToBatch(statsd, t, str, value, 1); \
-        }                                                      \
-        assert(ret == STATSD_SUCCESS);                         \
+#define SBATCH_INT(t, str, value)                               \
+    do {                                                        \
+        int ret = statsd_addToBatch(statsd, t, str, value, 1);  \
+        if(ret == STATSD_BATCH_FULL) {                          \
+            statsd_sendBatch(statsd);                           \
+            ret = statsd_addToBatch(statsd, t, str, value, 1);  \
+        }                                                       \
+        assert(ret == STATSD_SUCCESS);                          \
+    } while(0)
+
+#define SBATCH_DBL(t, str, value)                                   \
+    do {                                                            \
+        int ret = statsd_addToBatch_dbl(statsd, t, str, value, 1);  \
+        if(ret == STATSD_BATCH_FULL) {                              \
+            statsd_sendBatch(statsd);                               \
+            ret = statsd_addToBatch_dbl(statsd, t, str, value, 1);  \
+        }                                                           \
+        assert(ret == STATSD_SUCCESS);                              \
     } while(0)
 
 
@@ -70,11 +80,11 @@ static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, st
         memcpy(name, pfx->latency_kind.str, pfx->latency_kind.size);
         strcpy(name+pfx->latency_kind.size, pv->value_s);
         double latency_ms = hist ? hdr_value_at_percentile(hist, pv->value_d) / 10.0 : 0;
-        SBATCH(STATSD_GAUGE, name, latency_ms);
+        SBATCH_DBL(STATSD_GAUGE, name, latency_ms);
     }
 
-    SBATCH(STATSD_GAUGE, pfx->mean, hist ? hdr_mean(hist) / 10.0 : 0);
-    SBATCH(STATSD_GAUGE, pfx->max, hist ? hdr_max(hist) / 10.0 : 0);
+    SBATCH_DBL(STATSD_GAUGE, pfx->mean, hist ? hdr_mean(hist) / 10.0 : 0);
+    SBATCH_DBL(STATSD_GAUGE, pfx->max, hist ? hdr_max(hist) / 10.0 : 0);
 }
 
 
@@ -88,19 +98,19 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf, statsd_report_latency_type
 
     statsd_resetBatch(statsd);
 
-    SBATCH(STATSD_COUNT, "connections.opened", sf->opened);
-    SBATCH(STATSD_GAUGE, "connections.total", sf->conns_in + sf->conns_out);
-    SBATCH(STATSD_GAUGE, "connections.total.in", sf->conns_in);
-    SBATCH(STATSD_GAUGE, "connections.total.out", sf->conns_out);
-    SBATCH(STATSD_GAUGE, "traffic.bitrate", sf->bps_in + sf->bps_out);
-    SBATCH(STATSD_GAUGE, "traffic.bitrate.in", sf->bps_in);
-    SBATCH(STATSD_GAUGE, "traffic.bitrate.out", sf->bps_out);
-    SBATCH(STATSD_COUNT, "traffic.data",
+    SBATCH_INT(STATSD_COUNT, "connections.opened", sf->opened);
+    SBATCH_INT(STATSD_GAUGE, "connections.total", sf->conns_in + sf->conns_out);
+    SBATCH_INT(STATSD_GAUGE, "connections.total.in", sf->conns_in);
+    SBATCH_INT(STATSD_GAUGE, "connections.total.out", sf->conns_out);
+    SBATCH_INT(STATSD_GAUGE, "traffic.bitrate", sf->bps_in + sf->bps_out);
+    SBATCH_INT(STATSD_GAUGE, "traffic.bitrate.in", sf->bps_in);
+    SBATCH_INT(STATSD_GAUGE, "traffic.bitrate.out", sf->bps_out);
+    SBATCH_INT(STATSD_COUNT, "traffic.data",
            sf->traffic_delta.bytes_rcvd + sf->traffic_delta.bytes_sent);
-    SBATCH(STATSD_COUNT, "traffic.data.rcvd", sf->traffic_delta.bytes_rcvd);
-    SBATCH(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
-    SBATCH(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
-    SBATCH(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
+    SBATCH_INT(STATSD_COUNT, "traffic.data.rcvd", sf->traffic_delta.bytes_rcvd);
+    SBATCH_INT(STATSD_COUNT, "traffic.data.sent", sf->traffic_delta.bytes_sent);
+    SBATCH_INT(STATSD_COUNT, "traffic.data.reads", sf->traffic_delta.num_reads);
+    SBATCH_INT(STATSD_COUNT, "traffic.data.writes", sf->traffic_delta.num_writes);
 
     if(latency_types) {
         if(latency_types & SLT_CONNECT)
