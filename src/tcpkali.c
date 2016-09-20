@@ -1012,10 +1012,10 @@ parse_percentile_values(const char *option, char *str,
  */
 static void
 usage_long(char *argv0, struct tcpkali_config *conf) {
-    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
+    fprintf(stdout, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
             basename(argv0));
     /* clang-format off */
-    fprintf(stderr,
+    fprintf(stdout,
     "Where OPTIONS are:\n"
     "  -h                           Print short help screen, then exit\n"
     "  --help                       Print this help screen, then exit\n"
@@ -1080,14 +1080,17 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
 
 static void
 usage_short(char *argv0) {
-    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
+    if(isatty(fileno(stdout))) {
+        tcpkali_init_terminal();
+    }
+
+    fprintf(stdout, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
             basename(argv0));
-    fprintf(
-        stderr,
+    fprintf(stdout,
         /* clang-format off */
     "Where some OPTIONS are:\n"
     "  -h                   Print this help screen, then exit\n"
-    "  --help               Print long help screen, then exit\n"
+    "  %s--help%s               Print long help screen, then exit\n"
     "  -d                   Dump i/o data for a single connection\n"
     "\n"
     "  -c <N>               Connections to keep open to the destinations\n"
@@ -1105,7 +1108,14 @@ usage_short(char *argv0) {
     "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
     "  <Rate> and <Time> can be fractional values, such as 0.25.\n"
     "\n"
-    "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
-    basename(argv0));
+    "Use `%s %s--help%s` or `man tcpkali` for a %sfull set%s of supported options.\n",
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL),
+    basename(argv0),
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL),
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL)
+    );
     /* clang-format on */
 }
