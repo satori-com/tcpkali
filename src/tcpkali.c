@@ -807,6 +807,10 @@ main(int argc, char **argv) {
         statsd = 0;
     }
 
+    /* Stop flashing cursor in the middle of status reporting. */
+    if(print_stats)
+        tcpkali_disable_cursor();
+
     /* Block term signals so they're not scheduled in the worker threads. */
     block_term_signals();
 
