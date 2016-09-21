@@ -228,16 +228,9 @@ static enum {
 }
 
 enum oc_return_value
-open_connections_until_maxed_out(struct engine *eng, double connect_rate,
-                                 int max_connections, double epoch_end,
-                                 struct stats_checkpoint *checkpoint,
-                                 mavg traffic_mavgs[2], Statsd *statsd,
-                                 sig_atomic_t *term_flag, enum work_phase phase,
-                                 struct rate_modulator *rate_modulator,
-                                 struct percentile_values *latency_percentiles,
-                                 int print_stats) {
+open_connections_until_maxed_out(enum work_phase phase, struct oc_args args) {
     statsd_report_latency_types requested_latency_types =
-        engine_params(eng)->latency_setting;
+        engine_params(args.eng)->latency_setting;
 
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
@@ -248,7 +241,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
      * operations per batch.
      * Therefore, we round the timeout_us upwards to the nearest millisecond.
      */
-    long timeout_us = 1000 * ceil(1000.0 / connect_rate);
+    long timeout_us = 1000 * ceil(1000.0 / args.connect_rate);
     if(timeout_us > 250000) timeout_us = 250000;
 
     struct pacefier keepup_pace;
@@ -256,7 +249,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
 
     ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
 
-    while(now < epoch_end && !*term_flag
+    while(now < args.epoch_end && !*args.term_flag
           /* ...until we have all connections established or
            * we're in a steady state. */
           && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
@@ -265,11 +258,11 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
         now = tk_now(TK_DEFAULT);
 
         size_t connecting, conns_in, conns_out, conns_counter;
-        engine_get_connection_stats(eng, &connecting, &conns_in, &conns_out,
+        engine_get_connection_stats(args.eng, &connecting, &conns_in, &conns_out,
                                     &conns_counter);
-        conn_deficit = max_connections - (connecting + conns_out);
+        conn_deficit = args.max_connections - (connecting + conns_out);
 
-        size_t allowed = pacefier_allow(&keepup_pace, connect_rate, now);
+        size_t allowed = pacefier_allow(&keepup_pace, args.connect_rate, now);
         size_t to_start = allowed;
         if(conn_deficit <= 0) {
             to_start = 0;
@@ -277,33 +270,33 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
         if(to_start > (size_t)conn_deficit) {
             to_start = conn_deficit;
         }
-        engine_initiate_new_connections(eng, to_start);
-        pacefier_moved(&keepup_pace, connect_rate, allowed, now);
+        engine_initiate_new_connections(args.eng, to_start);
+        pacefier_moved(&keepup_pace, args.connect_rate, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
-        if(!every(0.25, now, &checkpoint->last_update)) continue;
+        if(!every(0.25, now, &args.checkpoint->last_update)) continue;
 
         /*
          * traffic_delta.* contains traffic observed within the last
          * period (now - checkpoint->last_stats_sent).
          */
-        non_atomic_traffic_stats _last = checkpoint->last_traffic_stats;
-        checkpoint->last_traffic_stats = engine_traffic(eng);
+        non_atomic_traffic_stats _last = args.checkpoint->last_traffic_stats;
+        args.checkpoint->last_traffic_stats = engine_traffic(args.eng);
         non_atomic_traffic_stats traffic_delta =
-            subtract_traffic_stats(checkpoint->last_traffic_stats, _last);
+            subtract_traffic_stats(args.checkpoint->last_traffic_stats, _last);
 
-        mavg_bump(&traffic_mavgs[0], now, (double)traffic_delta.bytes_rcvd);
-        mavg_bump(&traffic_mavgs[1], now, (double)traffic_delta.bytes_sent);
+        mavg_bump(&args.traffic_mavgs[0], now, (double)traffic_delta.bytes_rcvd);
+        mavg_bump(&args.traffic_mavgs[1], now, (double)traffic_delta.bytes_sent);
 
-        double bps_in = 8 * mavg_per_second(&traffic_mavgs[0], now);
-        double bps_out = 8 * mavg_per_second(&traffic_mavgs[1], now);
+        double bps_in = 8 * mavg_per_second(&args.traffic_mavgs[0], now);
+        double bps_out = 8 * mavg_per_second(&args.traffic_mavgs[1], now);
 
-        engine_prepare_latency_snapshot(eng);
-        struct latency_snapshot *latency = engine_collect_latency_snapshot(eng);
+        engine_prepare_latency_snapshot(args.eng);
+        struct latency_snapshot *latency = engine_collect_latency_snapshot(args.eng);
 
         /* Change the request rate according to the modulation rules. */
         if(phase == PHASE_STEADY_STATE) {
-            switch(modulate_request_rate(eng, now, rate_modulator, latency)) {
+            switch(modulate_request_rate(args.eng, now, args.rate_modulator, latency)) {
             case MRR_ONGOING:
                 break;
             case MRR_RATE_SEARCH_SUCCEEDED:
@@ -313,7 +306,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
             }
         }
 
-        report_to_statsd(statsd,
+        report_to_statsd(args.statsd,
                          &(statsd_feedback){.opened = to_start,
                                             .conns_in = conns_in,
                                             .conns_out = conns_out,
@@ -321,11 +314,11 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                                             .bps_out = bps_out,
                                             .traffic_delta = traffic_delta,
                                             .latency = latency},
-                         requested_latency_types, latency_percentiles);
+                         requested_latency_types, args.latency_percentiles);
 
-        if(print_stats) {
+        if(args.print_stats) {
             if(phase == PHASE_ESTABLISHING_CONNECTIONS) {
-                print_connections_line(conns_out, max_connections,
+                print_connections_line(conns_out, args.max_connections,
                                        conns_counter);
             } else {
                 char latency_buf[256];
@@ -334,7 +327,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
                 fprintf(stderr,
                         "%sTraffic %.3f↓, %.3f↑ Mbps "
                         "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
-                        time_progress(checkpoint->epoch_start, now, epoch_end),
+                        time_progress(args.checkpoint->epoch_start, now, args.epoch_end),
                         bps_in / 1000000.0, bps_out / 1000000.0, (long)conns_in,
                         (long)conns_out, (long)connecting, (long)conns_counter,
                         latency_buf, tcpkali_clear_eol());
@@ -344,7 +337,7 @@ open_connections_until_maxed_out(struct engine *eng, double connect_rate,
         engine_free_latency_snapshot(latency);
     }
 
-    if(now >= epoch_end) return OC_TIMEOUT;
-    if(*term_flag) return OC_INTERRUPT;
+    if(now >= args.epoch_end) return OC_TIMEOUT;
+    if(*args.term_flag) return OC_INTERRUPT;
     return OC_CONNECTED;
 }

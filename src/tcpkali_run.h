@@ -75,11 +75,22 @@ enum oc_return_value {
     OC_RATE_GOAL_MET,
     OC_RATE_GOAL_FAILED
 };
-enum oc_return_value open_connections_until_maxed_out(
-    struct engine *eng, double connect_rate, int max_connections,
-    double epoch_end, struct stats_checkpoint *checkpoint,
-    mavg traffic_mavgs[2], Statsd *statsd, sig_atomic_t *term_flag,
-    enum work_phase phase, struct rate_modulator *,
-    struct percentile_values *latency_percentiles, int print_stats);
+
+struct oc_args {
+    struct engine *eng;
+    double connect_rate;
+    int max_connections;
+    double epoch_end;
+    struct stats_checkpoint *checkpoint;
+    mavg *traffic_mavgs;
+    Statsd *statsd;
+    sig_atomic_t *term_flag;
+    struct rate_modulator *rate_modulator;
+    struct percentile_values *latency_percentiles;
+    int print_stats;
+};
+
+enum oc_return_value open_connections_until_maxed_out(enum work_phase phase,
+                                                      struct oc_args);
 
 #endif /* TCPKALI_RUN_H */

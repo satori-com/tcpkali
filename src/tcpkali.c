@@ -827,19 +827,27 @@ main(int argc, char **argv) {
     mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
     mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
     struct stats_checkpoint checkpoint = {0, 0, {0, 0, 0, 0}, {0, 0, 0, 0}};
+    struct oc_args oc_args = {
+        .eng = eng,
+        .connect_rate = conf.connect_rate,
+        .max_connections = conf.max_connections,
+        .checkpoint = &checkpoint,
+        .traffic_mavgs = traffic_mavgs,
+        .statsd = statsd,
+        .term_flag = &term_flag,
+        .rate_modulator = &rate_modulator,
+        .latency_percentiles = &latency_percentiles,
+        .print_stats = print_stats
+    };
 
     /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
      */
     if(conf.max_connections) {
-        double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
-        if(open_connections_until_maxed_out(
-               eng, conf.connect_rate, conf.max_connections, epoch_end,
-               &checkpoint, traffic_mavgs, statsd, &term_flag,
-               PHASE_ESTABLISHING_CONNECTIONS, &rate_modulator,
-               &latency_percentiles, print_stats)
-           == OC_CONNECTED) {
+        oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
+        if(open_connections_until_maxed_out(PHASE_ESTABLISHING_CONNECTIONS,
+                oc_args) == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -866,11 +874,8 @@ main(int argc, char **argv) {
     checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
-    double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
     enum oc_return_value orv = open_connections_until_maxed_out(
-        eng, conf.connect_rate, conf.max_connections, epoch_end, &checkpoint,
-        traffic_mavgs, statsd, &term_flag, PHASE_STEADY_STATE, &rate_modulator,
-        &latency_percentiles, print_stats);
+                                    PHASE_STEADY_STATE, oc_args);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, checkpoint.epoch_start,
