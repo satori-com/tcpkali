@@ -60,6 +60,7 @@ static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, st
 
 #define LENGTH_PREFIXED_STR(s)  {sizeof(s)-1,(s)}
     static struct prefixes {
+        const char *min;
         const char *mean;
         const char *max;
         struct {
@@ -67,12 +68,15 @@ static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, st
             const char *str;
         } latency_kind;
     } prefixes[] =
-        {[SLT_CONNECT] = {"latency.connect.mean", "latency.connect.max",
+        {[SLT_CONNECT] = {"latency.connect.min", "latency.connect.mean",
+                          "latency.connect.max",
                           LENGTH_PREFIXED_STR("latency.connect.")},
-         [SLT_FIRSTBYTE] = {"latency.firstbyte.mean", "latency.firstbyte.max",
-                          LENGTH_PREFIXED_STR("latency.firstbyte.")},
-         [SLT_MARKER] = {"latency.message.mean", "latency.message.max",
-                          LENGTH_PREFIXED_STR("latency.message.")}};
+         [SLT_FIRSTBYTE] = {"latency.firstbyte.min", "latency.firstbyte.mean",
+                            "latency.firstbyte.max",
+                            LENGTH_PREFIXED_STR("latency.firstbyte.")},
+         [SLT_MARKER] = {"latency.message.min", "latency.message.mean",
+                         "latency.message.max",
+                         LENGTH_PREFIXED_STR("latency.message.")}};
     assert(ltype < sizeof(prefixes)/sizeof(prefixes[0]));
     const struct prefixes *pfx = &prefixes[ltype];
     assert(pfx->mean);
@@ -86,6 +90,7 @@ static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, st
         SBATCH_DBL(STATSD_GAUGE, name, latency_ms);
     }
 
+    SBATCH_DBL(STATSD_GAUGE, pfx->min, hdr_min(hist) / 10.0);
     SBATCH_DBL(STATSD_GAUGE, pfx->mean, hdr_mean(hist) / 10.0);
     SBATCH_DBL(STATSD_GAUGE, pfx->max, hdr_max(hist) / 10.0);
 }
