@@ -102,15 +102,11 @@ void engine_get_connection_stats(struct engine *, size_t *connecting,
                                  size_t *counter);
 
 /*
- * Snapshot of the current latency.
+ * Create snapshot of the current latency histogram.
  */
-struct latency_snapshot {
-    struct hdr_histogram *connect_histogram;
-    struct hdr_histogram *firstbyte_histogram;
-    struct hdr_histogram *marker_histogram;
-};
 void engine_prepare_latency_snapshot(struct engine *);
 struct latency_snapshot *engine_collect_latency_snapshot(struct engine *);
+struct latency_snapshot *engine_diff_latency_snapshot(struct latency_snapshot *base, struct latency_snapshot *update);
 void engine_free_latency_snapshot(struct latency_snapshot *);
 
 size_t engine_initiate_new_connections(struct engine *, size_t n);

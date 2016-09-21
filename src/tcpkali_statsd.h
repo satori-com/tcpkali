@@ -50,5 +50,9 @@ void report_to_statsd(Statsd *statsd, statsd_feedback *feedback_optional,
                       statsd_report_latency_types types,
                       const struct percentile_values *latency_percentiles);
 
+void report_latency_to_statsd(Statsd *statsd, struct latency_snapshot *,
+                      statsd_report_latency_types types,
+                      const struct percentile_values *latency_percentiles);
+
 
 #endif /* TCPKALI_STATSD_H */

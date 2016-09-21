@@ -735,6 +735,28 @@ engine_collect_latency_snapshot(struct engine *eng) {
     return latency;
 }
 
+struct latency_snapshot *
+engine_diff_latency_snapshot(struct latency_snapshot *base, struct latency_snapshot *update) {
+
+    assert(base);
+    assert(update);
+
+    struct latency_snapshot *diff = calloc(1, sizeof(*diff));
+    assert(diff);
+
+    if(base->connect_histogram)
+        diff->connect_histogram =
+            hdr_diff(base->connect_histogram, update->connect_histogram);
+    if(base->firstbyte_histogram)
+        diff->firstbyte_histogram =
+            hdr_diff(base->firstbyte_histogram, update->firstbyte_histogram);
+    if(base->marker_histogram)
+        diff->marker_histogram =
+            hdr_diff(base->marker_histogram, update->marker_histogram);
+
+    return diff;
+}
+
 non_atomic_traffic_stats
 engine_traffic(struct engine *eng) {
     non_atomic_traffic_stats traffic = {0, 0, 0, 0};

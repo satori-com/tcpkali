@@ -102,6 +102,7 @@ static struct option cli_long_options[] = {
     {"statsd-host", 1, 0, CLI_STATSD_OFFSET + 'h'},
     {"statsd-port", 1, 0, CLI_STATSD_OFFSET + 'p'},
     {"statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n'},
+    {"statsd-latency-window", 1, 0, CLI_STATSD_OFFSET + 'w'},
     {"unescape-message-args", 0, 0, 'e'},
     {"version", 0, 0, 'V'},
     {"verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v'},
@@ -115,6 +116,7 @@ static struct tcpkali_config {
     int max_connections;
     double connect_rate;  /* New connects per second. */
     double test_duration; /* Seconds for the full test. */
+    double latency_window;  /* Seconds */
     int statsd_enable;
     char *statsd_host;
     int statsd_port;
@@ -466,6 +468,15 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case CLI_STATSD_OFFSET + 'w':
+            conf.latency_window = parse_with_multipliers(
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
+            if(conf.latency_window <= 0) {
+                fprintf(stderr, "Expected positive --statsd-latency-window=%s\n", optarg);
+                exit(EX_USAGE);
+            }
+            break;
         case 'l':
             conf.listen_port = atoi(optarg);
             if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
@@ -595,6 +606,26 @@ main(int argc, char **argv) {
     }
     if(!engine_params.requested_workers)
         engine_params.requested_workers = number_of_cpus();
+
+
+    /*
+     * Check that we'll have a chance to report latency
+     */
+    if(conf.latency_window) {
+        if(conf.latency_window > conf.test_duration) {
+            fprintf(stderr, "--statsd-latency-window=%gs exceeds --duration=%gs.\n",
+                conf.latency_window, conf.test_duration);
+            exit(EX_USAGE);
+        }
+        if(conf.latency_window >= conf.test_duration / 2) {
+            warning("--statsd-latency-window=%gs might result in too few latency reports.\n", conf.latency_window);
+        }
+        if(conf.latency_window < 0.5) {
+            fprintf(stderr, "--statsd-latency-window=%gs is too small. Try 0.5s.\n",
+                conf.latency_window);
+            exit(EX_USAGE);
+        }
+    }
 
     /*
      * Check that the system environment is prepared to handle high load.
@@ -817,32 +848,27 @@ main(int argc, char **argv) {
     struct engine *eng = engine_start(engine_params);
 
     /*
-     * Convert SIGINT into change of a flag.
-     * Has to be run after all other threads are run, otherwise
-     * a signal can be delivered to a wrong thread.
-     */
-    sig_atomic_t term_flag = 0;
-    flagify_term_signals(&term_flag);
-
-    /*
      * Traffic in/out moving average, smoothing period is 3 seconds.
      */
-    mavg traffic_mavgs[2];
-    mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
-    mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
-    struct stats_checkpoint checkpoint = {0, 0, {0, 0, 0, 0}, {0, 0, 0, 0}};
     struct oc_args oc_args = {
         .eng = eng,
-        .connect_rate = conf.connect_rate,
         .max_connections = conf.max_connections,
-        .checkpoint = &checkpoint,
-        .traffic_mavgs = traffic_mavgs,
+        .connect_rate = conf.connect_rate,
+        .latency_window = conf.latency_window,
         .statsd = statsd,
-        .term_flag = &term_flag,
         .rate_modulator = &rate_modulator,
         .latency_percentiles = &latency_percentiles,
         .print_stats = print_stats
     };
+    mavg_init(&oc_args.traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
+    mavg_init(&oc_args.traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
+
+    /*
+     * Convert SIGINT into change of a flag.
+     * Has to be run after all other threads are run, otherwise
+     * a signal can be delivered to a wrong thread.
+     */
+    flagify_term_signals(&oc_args.term_flag);
 
     /*
      * Ramp up to the specified number of connections by opening them at a
@@ -851,7 +877,7 @@ main(int argc, char **argv) {
     if(conf.max_connections) {
         oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(PHASE_ESTABLISHING_CONNECTIONS,
-                oc_args) == OC_CONNECTED) {
+                &oc_args) == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -874,16 +900,16 @@ main(int argc, char **argv) {
      * (initial_traffic_stats) contain traffic numbers accumulated duing
      * ramp-up time.
      */
-    checkpoint.initial_traffic_stats = engine_traffic(eng);
-    checkpoint.epoch_start = tk_now(TK_DEFAULT);
+    oc_args.checkpoint.initial_traffic_stats = engine_traffic(eng);
+    oc_args.checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
     enum oc_return_value orv = open_connections_until_maxed_out(
-                                    PHASE_STEADY_STATE, oc_args);
+                                    PHASE_STEADY_STATE, &oc_args);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
-    engine_terminate(eng, checkpoint.epoch_start,
-                     checkpoint.initial_traffic_stats, &latency_percentiles);
+    engine_terminate(eng, oc_args.checkpoint.epoch_start,
+                     oc_args.checkpoint.initial_traffic_stats, &latency_percentiles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
@@ -1072,6 +1098,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-host <host>         StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
+    "  --statsd-latency-window <T>  Aggregate latencies in discrete windows\n"
     "\n"
     "Variable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"

@@ -44,6 +44,15 @@ typedef enum {
 } statsd_report_latency_types;
 
 /*
+ * Snapshot of the current latency.
+ */
+struct latency_snapshot {
+    struct hdr_histogram *connect_histogram;
+    struct hdr_histogram *firstbyte_histogram;
+    struct hdr_histogram *marker_histogram;
+};
+
+/*
  * Array of doubles used in e.g. overriding reported latency percentiles.
  */
 struct percentile_values {

@@ -55,6 +55,9 @@
 
 static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, struct hdr_histogram *hist, const struct percentile_values *latency_percentiles) {
 
+    if(!hist || hist->total_count == 0)
+        return;
+
 #define LENGTH_PREFIXED_STR(s)  {sizeof(s)-1,(s)}
     static struct prefixes {
         const char *mean;
@@ -79,12 +82,12 @@ static void report_latency(Statsd *statsd, statsd_report_latency_types ltype, st
         char name[64];
         memcpy(name, pfx->latency_kind.str, pfx->latency_kind.size);
         strcpy(name+pfx->latency_kind.size, pv->value_s);
-        double latency_ms = hist ? hdr_value_at_percentile(hist, pv->value_d) / 10.0 : 0;
+        double latency_ms = hdr_value_at_percentile(hist, pv->value_d) / 10.0;
         SBATCH_DBL(STATSD_GAUGE, name, latency_ms);
     }
 
-    SBATCH_DBL(STATSD_GAUGE, pfx->mean, hist ? hdr_mean(hist) / 10.0 : 0);
-    SBATCH_DBL(STATSD_GAUGE, pfx->max, hist ? hdr_max(hist) / 10.0 : 0);
+    SBATCH_DBL(STATSD_GAUGE, pfx->mean, hdr_mean(hist) / 10.0);
+    SBATCH_DBL(STATSD_GAUGE, pfx->max, hdr_max(hist) / 10.0);
 }
 
 
@@ -129,3 +132,26 @@ report_to_statsd(Statsd *statsd, statsd_feedback *sf, statsd_report_latency_type
 
     statsd_sendBatch(statsd);
 }
+
+void
+report_latency_to_statsd(Statsd *statsd, struct latency_snapshot *latency, statsd_report_latency_types latency_types, const struct percentile_values *latency_percentiles) {
+    if(!statsd) return;
+
+    statsd_resetBatch(statsd);
+
+    if(latency_types & SLT_CONNECT)
+        report_latency(statsd, SLT_CONNECT,
+                       latency->connect_histogram,
+                       latency_percentiles);
+    if(latency_types & SLT_FIRSTBYTE)
+        report_latency(statsd, SLT_FIRSTBYTE,
+                       latency->firstbyte_histogram,
+                       latency_percentiles);
+    if(latency_types & SLT_MARKER)
+        report_latency(statsd, SLT_MARKER,
+                       latency->marker_histogram,
+                       latency_percentiles);
+
+    statsd_sendBatch(statsd);
+}
+

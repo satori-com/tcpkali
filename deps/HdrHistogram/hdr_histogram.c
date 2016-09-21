@@ -595,6 +595,29 @@ int64_t hdr_add(struct hdr_histogram* h, struct hdr_histogram* from)
     return dropped;
 }
 
+struct hdr_histogram *hdr_diff(struct hdr_histogram *base, struct hdr_histogram *update) {
+    struct hdr_histogram *h;
+
+    if(hdr_init(base->lowest_trackable_value, base->highest_trackable_value,
+                base->significant_figures, &h) != 0) {
+        return NULL;
+    } else {
+        assert(update->lowest_trackable_value == base->lowest_trackable_value);
+        assert(update->highest_trackable_value == base->highest_trackable_value);
+        assert(update->significant_figures == base->significant_figures);
+
+        struct hdr_iter iter;
+        int32_t ct;
+        for(int32_t ct = 0; ct < update->counts_len; ct++) {
+            h->counts[ct] = update->counts[ct] - base->counts[ct];
+        }
+        h->total_count = update->total_count - base->total_count;
+        hdr_reset_internal_counters(h);    /* Re-sets min and max */
+
+        return h;
+    }
+}
+
 
 // ##     ##    ###    ##       ##     ## ########  ######
 // ##     ##   ## ##   ##       ##     ## ##       ##    ##
