@@ -271,6 +271,10 @@ static void largest_contiguous_chunk(struct loop_arguments *largs,
                                      size_t *available_body);
 static void debug_dump_data(const char *prefix, int fd, const void *data,
                             size_t size, ssize_t limit);
+static void debug_dump_data_highlight(const char *prefix, int fd,
+                                      const void *data, size_t size,
+                                      ssize_t limit, size_t hl_offset,
+                                      size_t hl_length);
 
 #ifdef USE_LIBUV
 static void
@@ -1802,6 +1806,12 @@ accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
 static void
 debug_dump_data(const char *prefix, int fd, const void *data, size_t size,
                 ssize_t limit) {
+    debug_dump_data_highlight(prefix, fd, data, size, limit, 0, 0);
+}
+static void
+debug_dump_data_highlight(const char *prefix, int fd, const void *data,
+                          size_t size, ssize_t limit, size_t hl_offset,
+                          size_t hl_length) {
     /*
      * Do not show more than (limit) first bytes,
      * or more than (-limit) last bytes of the buffer.
@@ -1844,7 +1854,8 @@ debug_dump_data(const char *prefix, int fd, const void *data, size_t size,
             prefix, fdnumbuf, (long)original_size, preceding ? "..." : "",
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL),
-            printable_data(buffer, buf_size, data, size, 0),
+            printable_data_highlight(buffer, buf_size, data, size, 0, hl_offset,
+                                     hl_length),
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL), following ? "..." : "");
     if(buffer != stack_buffer) free(buffer);
@@ -2137,20 +2148,24 @@ scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     if(conn->sbmh_abort_ctx) {
+        size_t needlen = largs->params.message_abort_expr->u.data.size;
         size_t analyzed = sbmh_feed(
             conn->sbmh_abort_ctx, &largs->params.sbmh_shared_abort_occ,
             (unsigned char *)largs->params.message_abort_expr->u.data.data,
-            largs->params.message_abort_expr->u.data.size, (unsigned char *)buf,
-            size);
+            needlen, (unsigned char *)buf, size);
         if(conn->sbmh_abort_ctx->found == sbmh_true) {
-            debug_dump_data("Last packet", -1, buf, size, 0);
-            char abort_msg[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(
-                largs->params.message_abort_expr->u.data.size)];
+            /* Length of --message-abort. */
+            size_t needle_tail_in_scope = analyzed > needlen ? needlen : analyzed;
+            debug_dump_data_highlight(
+                "Last packet", -1, buf, size, 0,
+                analyzed > needlen ? analyzed - needlen : 0,
+                needle_tail_in_scope);
+            char abort_msg[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(needlen)];
             fprintf(stdout, "Found --message-abort=%s, aborting.\n",
-                    printable_data(
+                    printable_data_highlight(
                         abort_msg, sizeof(abort_msg),
-                        largs->params.message_abort_expr->u.data.data,
-                        largs->params.message_abort_expr->u.data.size, 1));
+                        largs->params.message_abort_expr->u.data.data, needlen,
+                        1, 0, needlen));
             exit(2);
         }
         (void)analyzed;
