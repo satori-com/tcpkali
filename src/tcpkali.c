@@ -94,7 +94,7 @@ static struct option cli_long_options[] = {
     {"message", 1, 0, 'm'},
     {"message-file", 1, 0, 'f'},
     {"message-rate", 1, 0, 'r'},
-    {"message-abort", 1, 0, 'a'},
+    {"message-stop", 1, 0, 's'},
     {"nagle", 1, 0, 'N'},
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
@@ -409,24 +409,24 @@ main(int argc, char **argv) {
             }
             break;
         }
-        case 'a': { /* --message-abort */
+        case 's': { /* --message-stop */
             char *data = strdup(optarg);
             size_t size = strlen(optarg);
             if(unescape_message_data) unescape_data(data, &size);
             if(size == 0) {
                 fprintf(stderr,
-                        "--message-abort: Non-empty message expected\n");
+                        "--message-stop: Non-empty message expected\n");
                 exit(EX_USAGE);
             }
-            if(parse_expression(&engine_params.message_abort_expr, data, size,
+            if(parse_expression(&engine_params.message_stop_expr, data, size,
                                 0)
                == -1) {
                 fprintf(stderr,
-                        "--message-abort: Failed to parse expression\n");
+                        "--message-stop: Failed to parse expression\n");
                 exit(EX_USAGE);
-            } else if(!EXPR_IS_TRIVIAL(engine_params.message_abort_expr)) {
+            } else if(!EXPR_IS_TRIVIAL(engine_params.message_stop_expr)) {
                 fprintf(stderr,
-                        "--message-abort: Non-trivial expressions are not "
+                        "--message-stop: Non-trivial expressions are not "
                         "supported\n");
                 exit(EX_USAGE);
             }
@@ -1111,6 +1111,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -f, --message-file <name>    Read message to send from a file\n"
     "  -r, --message-rate <Rate>    Messages per second to send in a connection\n"
     "  -r, --message-rate @<Latency> Measure a message rate at a given latency\n"
+    "  --message-stop <string>      Abort if this string is found in received data\n"
     "\n"
     "  --latency-connect            Measure TCP connection establishment latency\n"
     "  --latency-first-byte         Measure time to first byte latency\n"

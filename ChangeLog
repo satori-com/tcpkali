@@ -2,7 +2,7 @@
 0.9.*:
     * Export --latency-connect and --latency-first-bytes to statsd.
     * --latency-percentiles now affect --statsd reporting as well.
-    * Added --message-abort to quickly die if a given message is seen.
+    * Added --message-stop to quickly die if a given message is seen.
 
 0.9:	2016-Aug-24
     * Added -r@<Latency> form to measure message rate at a given latency.

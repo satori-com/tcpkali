@@ -132,6 +132,9 @@ open more than 64k connections to destinations.
 :   Repeatedly send the specified message to each destination.
     This option can be specified several times.
 
+--message-stop *string*
+:   Terminate tcpkali if the given string is encountered in the incoming byte stream.
+
 -f, --message-file *filename*
 :   Repeatedly send the message read from the file to each destination.
     This option can be specified several times.

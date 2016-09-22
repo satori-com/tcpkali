@@ -85,11 +85,11 @@ struct engine_params {
     statsd_report_latency_types latency_setting;
     int latency_marker_skip;        /* --latency-marker-skip <N> */
     tk_expr_t *latency_marker_expr; /* --latency-marker */
-    tk_expr_t *message_abort_expr;  /* --message-abort */
+    tk_expr_t *message_stop_expr;   /* --message-stop */
 
     /* Streaming Boyer-Moore-Horspool */
     struct StreamBMH_Occ sbmh_shared_marker_occ; /* --latency-marker */
-    struct StreamBMH_Occ sbmh_shared_abort_occ;  /* --message-abort */
+    struct StreamBMH_Occ sbmh_shared_stop_occ;   /* --message-stop */
 };
 
 struct engine *engine_start(struct engine_params);

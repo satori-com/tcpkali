@@ -123,7 +123,7 @@ struct connection {
         const uint8_t *sbmh_data;
         size_t sbmh_size;
     } latency;
-    struct StreamBMH *sbmh_abort_ctx;
+    struct StreamBMH *sbmh_stop_ctx;
 };
 
 struct loop_arguments {
@@ -385,11 +385,11 @@ engine_start(struct engine_params params) {
                   (void *)params.latency_marker_expr->u.data.data,
                   params.latency_marker_expr->u.data.size);
     }
-    if(params.message_abort_expr    /* --message-abort */
-       && EXPR_IS_TRIVIAL(params.message_abort_expr)) {
-        sbmh_init(NULL, &params.sbmh_shared_abort_occ,
-                  (void *)params.message_abort_expr->u.data.data,
-                  params.message_abort_expr->u.data.size);
+    if(params.message_stop_expr    /* --message-stop */
+       && EXPR_IS_TRIVIAL(params.message_stop_expr)) {
+        sbmh_init(NULL, &params.sbmh_shared_stop_occ,
+                  (void *)params.message_stop_expr->u.data.data,
+                  params.message_stop_expr->u.data.size);
     }
 
     params.epoch = tk_now(TK_DEFAULT); /* Single epoch for all threads */
@@ -1618,10 +1618,10 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                               &conn->data, largs, conn);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
             largs->params.channel_send_rate, conn->data.single_message_size);
-        if(largs->params.message_abort_expr) {
-            conn->sbmh_abort_ctx = malloc(sizeof(*conn->sbmh_abort_ctx));
-            assert(conn->sbmh_abort_ctx);
-            sbmh_init(conn->sbmh_abort_ctx, NULL, 0, 0);
+        if(largs->params.message_stop_expr) {
+            conn->sbmh_stop_ctx = malloc(sizeof(*conn->sbmh_stop_ctx));
+            assert(conn->sbmh_stop_ctx);
+            sbmh_init(conn->sbmh_stop_ctx, NULL, 0, 0);
         }
         if(largs->params.latency_marker_expr
            && conn->data.single_message_size) {
@@ -2147,24 +2147,24 @@ static void
 scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
-    if(conn->sbmh_abort_ctx) {
-        size_t needlen = largs->params.message_abort_expr->u.data.size;
+    if(conn->sbmh_stop_ctx) {
+        size_t needlen = largs->params.message_stop_expr->u.data.size;
         size_t analyzed = sbmh_feed(
-            conn->sbmh_abort_ctx, &largs->params.sbmh_shared_abort_occ,
-            (unsigned char *)largs->params.message_abort_expr->u.data.data,
+            conn->sbmh_stop_ctx, &largs->params.sbmh_shared_stop_occ,
+            (unsigned char *)largs->params.message_stop_expr->u.data.data,
             needlen, (unsigned char *)buf, size);
-        if(conn->sbmh_abort_ctx->found == sbmh_true) {
-            /* Length of --message-abort. */
+        if(conn->sbmh_stop_ctx->found == sbmh_true) {
+            /* Length of --message-stop. */
             size_t needle_tail_in_scope = analyzed > needlen ? needlen : analyzed;
             debug_dump_data_highlight(
                 "Last packet", -1, buf, size, 0,
                 analyzed > needlen ? analyzed - needlen : 0,
                 needle_tail_in_scope);
-            char abort_msg[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(needlen)];
-            fprintf(stdout, "Found --message-abort=%s, aborting.\n",
+            char stop_msg[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(needlen)];
+            fprintf(stdout, "Found --message-stop=%s, aborting.\n",
                     printable_data_highlight(
-                        abort_msg, sizeof(abort_msg),
-                        largs->params.message_abort_expr->u.data.data, needlen,
+                        stop_msg, sizeof(stop_msg),
+                        largs->params.message_stop_expr->u.data.data, needlen,
                         1, 0, needlen));
             exit(2);
         }
@@ -2540,9 +2540,9 @@ connection_free_internals(struct connection *conn) {
         }
     }
 
-    /* Remove --message-abort context. */
-    if(conn->sbmh_abort_ctx) {
-        free(conn->sbmh_abort_ctx);
+    /* Remove --message-stop context. */
+    if(conn->sbmh_stop_ctx) {
+        free(conn->sbmh_stop_ctx);
     }
 }
 
