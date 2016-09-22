@@ -94,6 +94,7 @@ static struct option cli_long_options[] = {
     {"message", 1, 0, 'm'},
     {"message-file", 1, 0, 'f'},
     {"message-rate", 1, 0, 'r'},
+    {"message-abort", 1, 0, 'a'},
     {"nagle", 1, 0, 'N'},
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
@@ -408,6 +409,28 @@ main(int argc, char **argv) {
             }
             break;
         }
+        case 'a': { /* --message-abort */
+            char *data = strdup(optarg);
+            size_t size = strlen(optarg);
+            if(unescape_message_data) unescape_data(data, &size);
+            if(size == 0) {
+                fprintf(stderr,
+                        "--message-abort: Non-empty message expected\n");
+                exit(EX_USAGE);
+            }
+            if(parse_expression(&engine_params.message_abort_expr, data, size,
+                                0)
+               == -1) {
+                fprintf(stderr,
+                        "--message-abort: Failed to parse expression\n");
+                exit(EX_USAGE);
+            } else if(!EXPR_IS_TRIVIAL(engine_params.message_abort_expr)) {
+                fprintf(stderr,
+                        "--message-abort: Non-trivial expressions are not "
+                        "supported\n");
+                exit(EX_USAGE);
+            }
+        } break;
         case 'N': /* --nagle {on|off} */
             /* Enabling Nagle toggles off NODELAY */
             if(strcmp(optarg, "on") == 0)
@@ -538,7 +561,8 @@ main(int argc, char **argv) {
                         "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
             }
-            if(parse_expression(&engine_params.latency_marker, data, size, 0)
+            if(parse_expression(&engine_params.latency_marker_expr, data, size,
+                                0)
                == -1) {
                 fprintf(stderr,
                         "--latency-marker: Failed to parse expression\n");
@@ -717,7 +741,7 @@ main(int argc, char **argv) {
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
-    if(engine_params.latency_marker) {
+    if(engine_params.latency_marker_expr) {
         if(no_message_to_send) {
             fprintf(stderr,
                     "--latency-marker is given, but no messages "

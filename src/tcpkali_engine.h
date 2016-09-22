@@ -83,10 +83,13 @@ struct engine_params {
         DS_DUMP_ALL = 12 /* 8|4 */
     } dump_setting;
     statsd_report_latency_types latency_setting;
-    tk_expr_t *latency_marker; /* --latency-marker */
-    int latency_marker_skip;   /* --latency-marker-skip <N> */
+    int latency_marker_skip;        /* --latency-marker-skip <N> */
+    tk_expr_t *latency_marker_expr; /* --latency-marker */
+    tk_expr_t *message_abort_expr;  /* --message-abort */
 
-    struct StreamBMH_Occ sbmh_shared_occ; /* Streaming Boyer-Moore-Horspool */
+    /* Streaming Boyer-Moore-Horspool */
+    struct StreamBMH_Occ sbmh_shared_marker_occ; /* --latency-marker */
+    struct StreamBMH_Occ sbmh_shared_abort_occ;  /* --message-abort */
 };
 
 struct engine *engine_start(struct engine_params);
