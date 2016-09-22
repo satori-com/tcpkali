@@ -231,6 +231,14 @@ and the time the latency marker is observed in the downstream traffic
 --statsd-namespace *string*
 :   Metric namespace. Default is "tcpkali".
 
+--statsd-latency-window *Time*
+:   By default latencies are measured across the entire duration of
+    tcpkali's run (as set by **--duration** or **-T**).
+    This option instructs tcpkali to flush latency data to StatsD every *Time*
+    period and start measuring latencies anew.
+    The latencies that are displayed in the user interface remain being
+    collected across the whole run.
+
 # VARIABLE UNITS
 
 -----------------------------------------------------------------------
