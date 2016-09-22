@@ -37,6 +37,6 @@ void block_term_signals();
 /*
  * Unblock term signals (SIGINT) and handle it by setting a flag.
  */
-void flagify_term_signals(sig_atomic_t *flag);
+void flagify_term_signals(volatile sig_atomic_t *flag);
 
 #endif /* TCPKALI_SIGNAL_H */

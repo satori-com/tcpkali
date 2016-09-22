@@ -94,6 +94,7 @@ static struct option cli_long_options[] = {
     {"message", 1, 0, 'm'},
     {"message-file", 1, 0, 'f'},
     {"message-rate", 1, 0, 'r'},
+    {"message-abort", 1, 0, 'a'},
     {"nagle", 1, 0, 'N'},
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
@@ -102,6 +103,7 @@ static struct option cli_long_options[] = {
     {"statsd-host", 1, 0, CLI_STATSD_OFFSET + 'h'},
     {"statsd-port", 1, 0, CLI_STATSD_OFFSET + 'p'},
     {"statsd-namespace", 1, 0, CLI_STATSD_OFFSET + 'n'},
+    {"statsd-latency-window", 1, 0, CLI_STATSD_OFFSET + 'w'},
     {"unescape-message-args", 0, 0, 'e'},
     {"version", 0, 0, 'V'},
     {"verbose", 1, 0, CLI_VERBOSE_OFFSET + 'v'},
@@ -115,6 +117,7 @@ static struct tcpkali_config {
     int max_connections;
     double connect_rate;  /* New connects per second. */
     double test_duration; /* Seconds for the full test. */
+    double latency_window;  /* Seconds */
     int statsd_enable;
     char *statsd_host;
     int statsd_port;
@@ -406,6 +409,28 @@ main(int argc, char **argv) {
             }
             break;
         }
+        case 'a': { /* --message-abort */
+            char *data = strdup(optarg);
+            size_t size = strlen(optarg);
+            if(unescape_message_data) unescape_data(data, &size);
+            if(size == 0) {
+                fprintf(stderr,
+                        "--message-abort: Non-empty message expected\n");
+                exit(EX_USAGE);
+            }
+            if(parse_expression(&engine_params.message_abort_expr, data, size,
+                                0)
+               == -1) {
+                fprintf(stderr,
+                        "--message-abort: Failed to parse expression\n");
+                exit(EX_USAGE);
+            } else if(!EXPR_IS_TRIVIAL(engine_params.message_abort_expr)) {
+                fprintf(stderr,
+                        "--message-abort: Non-trivial expressions are not "
+                        "supported\n");
+                exit(EX_USAGE);
+            }
+        } break;
         case 'N': /* --nagle {on|off} */
             /* Enabling Nagle toggles off NODELAY */
             if(strcmp(optarg, "on") == 0)
@@ -463,6 +488,15 @@ main(int argc, char **argv) {
             if(conf.statsd_port <= 0 || conf.statsd_port >= 65535) {
                 fprintf(stderr, "--statsd-port=%d is not in [1..65535]\n",
                         conf.statsd_port);
+                exit(EX_USAGE);
+            }
+            break;
+        case CLI_STATSD_OFFSET + 'w':
+            conf.latency_window = parse_with_multipliers(
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
+            if(conf.latency_window <= 0) {
+                fprintf(stderr, "Expected positive --statsd-latency-window=%s\n", optarg);
                 exit(EX_USAGE);
             }
             break;
@@ -527,7 +561,8 @@ main(int argc, char **argv) {
                         "--latency-marker: Non-empty marker expected\n");
                 exit(EX_USAGE);
             }
-            if(parse_expression(&engine_params.latency_marker, data, size, 0)
+            if(parse_expression(&engine_params.latency_marker_expr, data, size,
+                                0)
                == -1) {
                 fprintf(stderr,
                         "--latency-marker: Failed to parse expression\n");
@@ -595,6 +630,26 @@ main(int argc, char **argv) {
     }
     if(!engine_params.requested_workers)
         engine_params.requested_workers = number_of_cpus();
+
+
+    /*
+     * Check that we'll have a chance to report latency
+     */
+    if(conf.latency_window) {
+        if(conf.latency_window > conf.test_duration) {
+            fprintf(stderr, "--statsd-latency-window=%gs exceeds --duration=%gs.\n",
+                conf.latency_window, conf.test_duration);
+            exit(EX_USAGE);
+        }
+        if(conf.latency_window >= conf.test_duration / 2) {
+            warning("--statsd-latency-window=%gs might result in too few latency reports.\n", conf.latency_window);
+        }
+        if(conf.latency_window < 0.5) {
+            fprintf(stderr, "--statsd-latency-window=%gs is too small. Try 0.5s.\n",
+                conf.latency_window);
+            exit(EX_USAGE);
+        }
+    }
 
     /*
      * Check that the system environment is prepared to handle high load.
@@ -686,7 +741,7 @@ main(int argc, char **argv) {
      * Check that we will actually send messages
      * if we are also told to measure latency.
      */
-    if(engine_params.latency_marker) {
+    if(engine_params.latency_marker_expr) {
         if(no_message_to_send) {
             fprintf(stderr,
                     "--latency-marker is given, but no messages "
@@ -807,39 +862,46 @@ main(int argc, char **argv) {
         statsd = 0;
     }
 
+    /* Stop flashing cursor in the middle of status reporting. */
+    if(print_stats)
+        tcpkali_disable_cursor();
+
     /* Block term signals so they're not scheduled in the worker threads. */
     block_term_signals();
 
     struct engine *eng = engine_start(engine_params);
 
     /*
+     * Traffic in/out moving average, smoothing period is 3 seconds.
+     */
+    struct oc_args oc_args = {
+        .eng = eng,
+        .max_connections = conf.max_connections,
+        .connect_rate = conf.connect_rate,
+        .latency_window = conf.latency_window,
+        .statsd = statsd,
+        .rate_modulator = &rate_modulator,
+        .latency_percentiles = &latency_percentiles,
+        .print_stats = print_stats
+    };
+    mavg_init(&oc_args.traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
+    mavg_init(&oc_args.traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
+
+    /*
      * Convert SIGINT into change of a flag.
      * Has to be run after all other threads are run, otherwise
      * a signal can be delivered to a wrong thread.
      */
-    sig_atomic_t term_flag = 0;
-    flagify_term_signals(&term_flag);
-
-    /*
-     * Traffic in/out moving average, smoothing period is 3 seconds.
-     */
-    mavg traffic_mavgs[2];
-    mavg_init(&traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
-    mavg_init(&traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
-    struct stats_checkpoint checkpoint = {0, 0, {0, 0, 0, 0}, {0, 0, 0, 0}};
+    flagify_term_signals(&oc_args.term_flag);
 
     /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
      */
     if(conf.max_connections) {
-        double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
-        if(open_connections_until_maxed_out(
-               eng, conf.connect_rate, conf.max_connections, epoch_end,
-               &checkpoint, traffic_mavgs, statsd, &term_flag,
-               PHASE_ESTABLISHING_CONNECTIONS, &rate_modulator,
-               &latency_percentiles, print_stats)
-           == OC_CONNECTED) {
+        oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
+        if(open_connections_until_maxed_out(PHASE_ESTABLISHING_CONNECTIONS,
+                &oc_args) == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -862,19 +924,16 @@ main(int argc, char **argv) {
      * (initial_traffic_stats) contain traffic numbers accumulated duing
      * ramp-up time.
      */
-    checkpoint.initial_traffic_stats = engine_traffic(eng);
-    checkpoint.epoch_start = tk_now(TK_DEFAULT);
+    oc_args.checkpoint.initial_traffic_stats = engine_traffic(eng);
+    oc_args.checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
-    double epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
     enum oc_return_value orv = open_connections_until_maxed_out(
-        eng, conf.connect_rate, conf.max_connections, epoch_end, &checkpoint,
-        traffic_mavgs, statsd, &term_flag, PHASE_STEADY_STATE, &rate_modulator,
-        &latency_percentiles, print_stats);
+                                    PHASE_STEADY_STATE, &oc_args);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
-    engine_terminate(eng, checkpoint.epoch_start,
-                     checkpoint.initial_traffic_stats, &latency_percentiles);
+    engine_terminate(eng, oc_args.checkpoint.epoch_start,
+                     oc_args.checkpoint.initial_traffic_stats, &latency_percentiles);
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
@@ -1012,10 +1071,10 @@ parse_percentile_values(const char *option, char *str,
  */
 static void
 usage_long(char *argv0, struct tcpkali_config *conf) {
-    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
+    fprintf(stdout, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
             basename(argv0));
     /* clang-format off */
-    fprintf(stderr,
+    fprintf(stdout,
     "Where OPTIONS are:\n"
     "  -h                           Print short help screen, then exit\n"
     "  --help                       Print this help screen, then exit\n"
@@ -1063,6 +1122,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-host <host>         StatsD host to send data (default is localhost)\n"
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
+    "  --statsd-latency-window <T>  Aggregate latencies in discrete windows\n"
     "\n"
     "Variable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
@@ -1080,14 +1140,17 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
 
 static void
 usage_short(char *argv0) {
-    fprintf(stderr, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
+    if(isatty(fileno(stdout))) {
+        tcpkali_init_terminal();
+    }
+
+    fprintf(stdout, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
             basename(argv0));
-    fprintf(
-        stderr,
+    fprintf(stdout,
         /* clang-format off */
     "Where some OPTIONS are:\n"
     "  -h                   Print this help screen, then exit\n"
-    "  --help               Print long help screen, then exit\n"
+    "  %s--help%s               Print long help screen, then exit\n"
     "  -d                   Dump i/o data for a single connection\n"
     "\n"
     "  -c <N>               Connections to keep open to the destinations\n"
@@ -1105,7 +1168,14 @@ usage_short(char *argv0) {
     "  <Time>:       ms, s, m, h, d (milliseconds, seconds, minutes, hours, days)\n"
     "  <Rate> and <Time> can be fractional values, such as 0.25.\n"
     "\n"
-    "Use `%s --help` or `man tcpkali` for a full set of supported options.\n",
-    basename(argv0));
+    "Use `%s %s--help%s` or `man tcpkali` for a %sfull set%s of supported options.\n",
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL),
+    basename(argv0),
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL),
+    tk_attr(TKA_HIGHLIGHT),
+    tk_attr(TKA_NORMAL)
+    );
     /* clang-format on */
 }

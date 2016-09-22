@@ -50,9 +50,9 @@ check 8 "Total data received:[ ]+287 bytes" ${TCPKALI} --ws --first-message ABC
 check 9 "." ${TCPKALI} --ws --message ABC
 check 10 "." ${TCPKALI} --ws --first-message ABC --message foo
 
-check 11 "latency at percentiles.*50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50,100
-check 12 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50/100
-check 13 "50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
+check 11 "latency at percentiles.*50.0/100.0" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50.0,100.0
+check 12 "50/100" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50/100
+check 13 "50/100" ${TCPKALI} --latency-connect --latency-first-byte --latency-percentiles 50 --latency-percentiles 100
 
 check 14 "." ${TCPKALI} -m '\{ws.binary}'
 check 15 "." ${TCPKALI} -m '\{ws.binary "explicit data"}'

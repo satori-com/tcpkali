@@ -33,6 +33,8 @@
  */
 int tcpkali_init_terminal(void);
 
+void tcpkali_disable_cursor(void);
+
 /*
  * Capability "clr_eol":
  * Return a string which clears the line until the end of it.
@@ -53,7 +55,7 @@ int tcpkali_terminal_width();
  * Get an escape sequence for special terminal output
  * attributes used by tcpkali.
  */
-enum tk_attribute { TKA_NORMAL, TKA_WARNING, TKA_SndBrace, TKA_RcvBrace };
+enum tk_attribute { TKA_NORMAL, TKA_WARNING, TKA_HIGHLIGHT, TKA_SndBrace, TKA_RcvBrace };
 const char *tk_attr(enum tk_attribute);
 
 #endif /* TCPKALI_TERMINFO_H */

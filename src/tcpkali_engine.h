@@ -83,10 +83,13 @@ struct engine_params {
         DS_DUMP_ALL = 12 /* 8|4 */
     } dump_setting;
     statsd_report_latency_types latency_setting;
-    tk_expr_t *latency_marker; /* --latency-marker */
-    int latency_marker_skip;   /* --latency-marker-skip <N> */
+    int latency_marker_skip;        /* --latency-marker-skip <N> */
+    tk_expr_t *latency_marker_expr; /* --latency-marker */
+    tk_expr_t *message_abort_expr;  /* --message-abort */
 
-    struct StreamBMH_Occ sbmh_shared_occ; /* Streaming Boyer-Moore-Horspool */
+    /* Streaming Boyer-Moore-Horspool */
+    struct StreamBMH_Occ sbmh_shared_marker_occ; /* --latency-marker */
+    struct StreamBMH_Occ sbmh_shared_abort_occ;  /* --message-abort */
 };
 
 struct engine *engine_start(struct engine_params);
@@ -102,15 +105,11 @@ void engine_get_connection_stats(struct engine *, size_t *connecting,
                                  size_t *counter);
 
 /*
- * Snapshot of the current latency.
+ * Create snapshot of the current latency histogram.
  */
-struct latency_snapshot {
-    struct hdr_histogram *connect_histogram;
-    struct hdr_histogram *firstbyte_histogram;
-    struct hdr_histogram *marker_histogram;
-};
 void engine_prepare_latency_snapshot(struct engine *);
 struct latency_snapshot *engine_collect_latency_snapshot(struct engine *);
+struct latency_snapshot *engine_diff_latency_snapshot(struct latency_snapshot *base, struct latency_snapshot *update);
 void engine_free_latency_snapshot(struct latency_snapshot *);
 
 size_t engine_initiate_new_connections(struct engine *, size_t n);

@@ -39,7 +39,7 @@ static struct {
     char buf[64];
 } ctrlc_message;
 
-static sig_atomic_t *flagvar;
+static volatile sig_atomic_t *flagvar;
 static void
 signal_handler(int __attribute__((unused)) sig) {
     /* Wait until another thread output Ctrl+C notice to standard error. */
@@ -62,7 +62,7 @@ block_term_signals() {
 }
 
 void
-flagify_term_signals(sig_atomic_t *flag) {
+flagify_term_signals(volatile sig_atomic_t *flag) {
     sigset_t set;
 
     /* Pre-create the Ctrl+C message to be async-signal-safe. */

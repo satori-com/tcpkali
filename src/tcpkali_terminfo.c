@@ -42,21 +42,28 @@
 #include "tcpkali_common.h"
 #include "tcpkali_terminfo.h"
 
+static int terminal_initialized = 0;
 static int int_utf8 = 0;
 static int terminal_width = 80;
 static const char *str_clear_eol = "";  // ANSI terminal code: "\033[K";
 static char tka_sndbrace[16];
 static char tka_rcvbrace[16];
 static char tka_warn[16];
+static char tka_highlight[16];
 static char tka_normal[16];
 
 const char *
 tk_attr(enum tk_attribute tka) {
+    if(!terminal_initialized)
+        return "";
+
     switch(tka) {
     case TKA_NORMAL:
         return tka_normal;
     case TKA_WARNING:
         return tka_warn;
+    case TKA_HIGHLIGHT:
+        return tka_highlight;
     case TKA_SndBrace:
         return tka_sndbrace;
     case TKA_RcvBrace:
@@ -106,11 +113,27 @@ tcpkali_terminal_width(void) {
     return terminal_width;
 }
 
+void
+tcpkali_disable_cursor(void) {
+    if(tcpkali_init_terminal() == 0) {
+        /* Disable cursor */
+        printf("%s", cap("vi"));
+        atexit(enable_cursor);
+    }
+}
+
 int
 tcpkali_init_terminal(void) {
+    const int NOT_INITIALIZED = 1;
+    static int terminal_init_response = NOT_INITIALIZED;
     int errret = 0;
 
+    if(terminal_init_response != NOT_INITIALIZED) {
+        return terminal_init_response;
+    }
+
     if(setupterm(NULL, 1, &errret) == ERR) {
+        terminal_init_response = -1;
         return -1;
     } else {
         setvbuf(stdout, 0, _IONBF, 0);
@@ -125,10 +148,6 @@ tcpkali_init_terminal(void) {
     /* Obtain the clear end of line string */
     str_clear_eol = cap("ce");
 
-    /* Disable cursor */
-    printf("%s", cap("vi"));
-    atexit(enable_cursor);
-
     const char *bold = cap("md");
 
     snprintf(tka_warn, sizeof(tka_warn),
@@ -137,6 +156,8 @@ tcpkali_init_terminal(void) {
 #else
              "%s", bold);
 #endif
+
+    snprintf(tka_highlight, sizeof(tka_highlight), "%s", bold);
 
     snprintf(tka_sndbrace, sizeof(tka_sndbrace),
 #if NCURSES_TPARM_VARARGS
@@ -154,6 +175,8 @@ tcpkali_init_terminal(void) {
 
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
 
+    terminal_init_response = 0;
+    terminal_initialized = 1;
     return 0;
 }
 
@@ -161,8 +184,14 @@ tcpkali_init_terminal(void) {
 
 int
 tcpkali_init_terminal(void) {
+    return -1;
+}
+
+void
+tcpkali_disable_cursor(void) {
     return;
 }
+
 int
 tcpkali_terminal_width(void) {
     return terminal_width;

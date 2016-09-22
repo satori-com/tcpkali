@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <assert.h>
 
+#include "tcpkali_terminfo.h"
 #include "tcpkali_data.h"
 
 /*
@@ -40,6 +41,13 @@
 char *
 printable_data(char *buffer, size_t buf_size, const void *data,
                size_t data_size, int quote) {
+    return printable_data_highlight(buffer, buf_size, data, data_size, quote, 0, 0);
+}
+
+char *
+printable_data_highlight(char *buffer, size_t buf_size, const void *data,
+                         size_t data_size, int quote, size_t highlight_offset,
+                         size_t highlight_length) {
     const unsigned char *p = data;
     const unsigned char *pend = p + data_size;
 
@@ -48,7 +56,24 @@ printable_data(char *buffer, size_t buf_size, const void *data,
     char *b = buffer;
     if(quote) *b++ = '"';
 
+    const unsigned char *hl_start = NULL;
+    const unsigned char *hl_pre_end = NULL;
+    if(highlight_length > 0 && highlight_offset < data_size) {
+        hl_start = data + highlight_offset;
+        hl_pre_end = hl_start + highlight_length - 1;
+        if(hl_pre_end >= pend) {
+            hl_pre_end = pend - 1;
+            assert(hl_start < pend);
+        }
+    }
+
     for(; p < pend; p++) {
+        if(hl_start == p) {
+            b += snprintf(b, buf_size - (b - buffer), "%s",
+                          tk_attr(TKA_HIGHLIGHT));
+        }
+
+
         switch(*p) {
         case '\r':
             *b++ = '\\';
@@ -79,6 +104,10 @@ printable_data(char *buffer, size_t buf_size, const void *data,
         default:
             b += snprintf(b, buf_size - (b - buffer), "\\%03o", *p);
             break;
+        }
+
+        if(hl_pre_end == p) {
+            b += snprintf(b, buf_size - (b - buffer), "%s", tk_attr(TKA_NORMAL));
         }
     }
 

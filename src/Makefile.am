@@ -54,7 +54,7 @@ check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST
 TESTS = $(check_PROGRAMS) ${dist_check_SCRIPTS}
 check_PROGRAMS = check_platform check_tcpkali_ring check_tcpkali_regex check_tcpkali_iface 
 
-dist_check_SCRIPTS = check_code_format.sh
+dist_check_SCRIPTS = # check_code_format.sh
 
 reformat:
 	${CLANG_FORMAT} -i $(shell ls *.[ch] | grep -v "^tcpkali_expr_[yl].[ch]")

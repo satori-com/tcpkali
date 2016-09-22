@@ -116,13 +116,14 @@ struct connection {
         unsigned message_bytes_credit; /* See (EXPL:1) below. */
         unsigned lm_occurrences_skip;  /* See --latency-marker-skip */
         /* Boyer-Moore-Horspool substring search algorithm data */
-        struct StreamBMH *sbmh_ctx;
+        struct StreamBMH *sbmh_marker_ctx;
         /* The following fields might be shared across connections. */
         int sbmh_shared;
         struct StreamBMH_Occ *sbmh_occ;
         const uint8_t *sbmh_data;
         size_t sbmh_size;
     } latency;
+    struct StreamBMH *sbmh_abort_ctx;
 };
 
 struct loop_arguments {
@@ -270,6 +271,10 @@ static void largest_contiguous_chunk(struct loop_arguments *largs,
                                      size_t *available_body);
 static void debug_dump_data(const char *prefix, int fd, const void *data,
                             size_t size, ssize_t limit);
+static void debug_dump_data_highlight(const char *prefix, int fd,
+                                      const void *data, size_t size,
+                                      ssize_t limit, size_t hl_offset,
+                                      size_t hl_length);
 
 #ifdef USE_LIBUV
 static void
@@ -374,10 +379,17 @@ engine_start(struct engine_params params) {
      * if it can be shared between connections. It can only be shared
      * if it is trivial (does not depend on dynamic \{expressions}).
      */
-    if(params.latency_marker && EXPR_IS_TRIVIAL(params.latency_marker)) {
-        sbmh_init(NULL, &params.sbmh_shared_occ,
-                  (void *)params.latency_marker->u.data.data,
-                  params.latency_marker->u.data.size);
+    if(params.latency_marker_expr   /* --latency-marker */
+       && EXPR_IS_TRIVIAL(params.latency_marker_expr)) {
+        sbmh_init(NULL, &params.sbmh_shared_marker_occ,
+                  (void *)params.latency_marker_expr->u.data.data,
+                  params.latency_marker_expr->u.data.size);
+    }
+    if(params.message_abort_expr    /* --message-abort */
+       && EXPR_IS_TRIVIAL(params.message_abort_expr)) {
+        sbmh_init(NULL, &params.sbmh_shared_abort_occ,
+                  (void *)params.message_abort_expr->u.data.data,
+                  params.message_abort_expr->u.data.size);
     }
 
     params.epoch = tk_now(TK_DEFAULT); /* Single epoch for all threads */
@@ -733,6 +745,28 @@ engine_collect_latency_snapshot(struct engine *eng) {
     }
 
     return latency;
+}
+
+struct latency_snapshot *
+engine_diff_latency_snapshot(struct latency_snapshot *base, struct latency_snapshot *update) {
+
+    assert(base);
+    assert(update);
+
+    struct latency_snapshot *diff = calloc(1, sizeof(*diff));
+    assert(diff);
+
+    if(base->connect_histogram)
+        diff->connect_histogram =
+            hdr_diff(base->connect_histogram, update->connect_histogram);
+    if(base->firstbyte_histogram)
+        diff->firstbyte_histogram =
+            hdr_diff(base->firstbyte_histogram, update->firstbyte_histogram);
+    if(base->marker_histogram)
+        diff->marker_histogram =
+            hdr_diff(base->marker_histogram, update->marker_histogram);
+
+    return diff;
 }
 
 non_atomic_traffic_stats
@@ -1584,7 +1618,13 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                               &conn->data, largs, conn);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
             largs->params.channel_send_rate, conn->data.single_message_size);
-        if(largs->params.latency_marker && conn->data.single_message_size) {
+        if(largs->params.message_abort_expr) {
+            conn->sbmh_abort_ctx = malloc(sizeof(*conn->sbmh_abort_ctx));
+            assert(conn->sbmh_abort_ctx);
+            sbmh_init(conn->sbmh_abort_ctx, NULL, 0, 0);
+        }
+        if(largs->params.latency_marker_expr
+           && conn->data.single_message_size) {
             conn->latency.message_bytes_credit /* See (EXPL:1) below. */
                 = conn->data.single_message_size - 1;
             /*
@@ -1598,14 +1638,14 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
              * Initialize the Boyer-Moore-Horspool context for substring search.
              */
             struct StreamBMH_Occ *init_occ = NULL;
-            if(EXPR_IS_TRIVIAL(largs->params.latency_marker)) {
+            if(EXPR_IS_TRIVIAL(largs->params.latency_marker_expr)) {
                 /* Shared search table and expression */
                 conn->latency.sbmh_shared = 1;
-                conn->latency.sbmh_occ = &largs->params.sbmh_shared_occ;
+                conn->latency.sbmh_occ = &largs->params.sbmh_shared_marker_occ;
                 conn->latency.sbmh_data =
-                    (uint8_t *)largs->params.latency_marker->u.data.data;
+                    (uint8_t *)largs->params.latency_marker_expr->u.data.data;
                 conn->latency.sbmh_size =
-                    largs->params.latency_marker->u.data.size;
+                    largs->params.latency_marker_expr->u.data.size;
             } else {
                 /* Individual search table. */
                 conn->latency.sbmh_shared = 0;
@@ -1615,12 +1655,13 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                 init_occ = conn->latency.sbmh_occ;
                 explode_string_expression(
                     (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
-                    largs->params.latency_marker, largs, conn);
+                    largs->params.latency_marker_expr, largs, conn);
             }
-            conn->latency.sbmh_ctx = malloc(SBMH_SIZE(conn->latency.sbmh_size));
-            assert(conn->latency.sbmh_ctx);
-            sbmh_init(conn->latency.sbmh_ctx, init_occ, conn->latency.sbmh_data,
-                      conn->latency.sbmh_size);
+            conn->latency.sbmh_marker_ctx =
+                malloc(SBMH_SIZE(conn->latency.sbmh_size));
+            assert(conn->latency.sbmh_marker_ctx);
+            sbmh_init(conn->latency.sbmh_marker_ctx, init_occ,
+                      conn->latency.sbmh_data, conn->latency.sbmh_size);
 
             /*
              * Initialize the latency histogram by copying out the template
@@ -1765,10 +1806,17 @@ accept_cb(TK_P_ tk_io *w, int UNUSED revents) {
 static void
 debug_dump_data(const char *prefix, int fd, const void *data, size_t size,
                 ssize_t limit) {
+    debug_dump_data_highlight(prefix, fd, data, size, limit, 0, 0);
+}
+static void
+debug_dump_data_highlight(const char *prefix, int fd, const void *data,
+                          size_t size, ssize_t limit, size_t hl_offset,
+                          size_t hl_length) {
     /*
      * Do not show more than (limit) first bytes,
      * or more than (-limit) last bytes of the buffer.
      */
+    size_t original_size = size;
     size_t preceding = 0;
     size_t following = 0;
     if(limit) {
@@ -1803,10 +1851,11 @@ debug_dump_data(const char *prefix, int fd, const void *data, size_t size,
         fdnumbuf[0] = '\0';
     }
     fprintf(stderr, "%s%s(%s%ld): %s%s[%s%s%s]%s%s\n", tcpkali_clear_eol(),
-            prefix, fdnumbuf, (long)size, preceding ? "..." : "",
+            prefix, fdnumbuf, (long)original_size, preceding ? "..." : "",
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL),
-            printable_data(buffer, buf_size, data, size, 0),
+            printable_data_highlight(buffer, buf_size, data, size, 0, hl_offset,
+                                     hl_length),
             tk_attr(*prefix == 'S' ? TKA_SndBrace : TKA_RcvBrace),
             tk_attr(TKA_NORMAL), following ? "..." : "");
     if(buffer != stack_buffer) free(buffer);
@@ -2042,13 +2091,13 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
 
     for(; size > 0;) {
         size_t analyzed =
-            sbmh_feed(conn->latency.sbmh_ctx, conn->latency.sbmh_occ, lm,
+            sbmh_feed(conn->latency.sbmh_marker_ctx, conn->latency.sbmh_occ, lm,
                       lm_size, (unsigned char *)buf, size);
-        if(conn->latency.sbmh_ctx->found == sbmh_true) {
+        if(conn->latency.sbmh_marker_ctx->found == sbmh_true) {
             buf += analyzed;
             size -= analyzed;
             num_markers_found++;
-            sbmh_reset(conn->latency.sbmh_ctx);
+            sbmh_reset(conn->latency.sbmh_marker_ctx);
         } else {
             break;
         }
@@ -2093,6 +2142,36 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         }
     }
 }
+
+static void
+scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
+
+    if(conn->sbmh_abort_ctx) {
+        size_t needlen = largs->params.message_abort_expr->u.data.size;
+        size_t analyzed = sbmh_feed(
+            conn->sbmh_abort_ctx, &largs->params.sbmh_shared_abort_occ,
+            (unsigned char *)largs->params.message_abort_expr->u.data.data,
+            needlen, (unsigned char *)buf, size);
+        if(conn->sbmh_abort_ctx->found == sbmh_true) {
+            /* Length of --message-abort. */
+            size_t needle_tail_in_scope = analyzed > needlen ? needlen : analyzed;
+            debug_dump_data_highlight(
+                "Last packet", -1, buf, size, 0,
+                analyzed > needlen ? analyzed - needlen : 0,
+                needle_tail_in_scope);
+            char abort_msg[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(needlen)];
+            fprintf(stdout, "Found --message-abort=%s, aborting.\n",
+                    printable_data_highlight(
+                        abort_msg, sizeof(abort_msg),
+                        largs->params.message_abort_expr->u.data.data, needlen,
+                        1, 0, needlen));
+            exit(2);
+        }
+        (void)analyzed;
+    }
+}
+
 
 /*
  * Compute the largest amount of data we can send to the channel
@@ -2279,6 +2358,7 @@ connection_cb(TK_P_ tk_io *w, int revents) {
                 }
                 latency_record_incoming_ts(TK_A_ conn, largs->scratch_recv_buf,
                                            rd);
+                scan_incoming_bytes(TK_A_ conn, largs->scratch_recv_buf, rd);
 
                 if(record_moved_data) {
                     pacefier_moved(&conn->recv_pace,
@@ -2452,12 +2532,17 @@ connection_free_internals(struct connection *conn) {
     if(conn->latency.marker_histogram) free(conn->latency.marker_histogram);
 
     /* Remove Boyer-Moore-Horspool string search context. */
-    if(conn->latency.sbmh_ctx) {
-        free(conn->latency.sbmh_ctx);
+    if(conn->latency.sbmh_marker_ctx) {
+        free(conn->latency.sbmh_marker_ctx);
         if(conn->latency.sbmh_shared == 0) {
             free(conn->latency.sbmh_occ);
             free((void *)conn->latency.sbmh_data);
         }
+    }
+
+    /* Remove --message-abort context. */
+    if(conn->sbmh_abort_ctx) {
+        free(conn->sbmh_abort_ctx);
     }
 }
 

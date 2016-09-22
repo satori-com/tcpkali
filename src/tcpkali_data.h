@@ -31,10 +31,15 @@
 /*
  * Format data by escaping special characters. The buffer size should be
  * preallocated to at least (3 + 4*data_size).
+ * If highlighting is enabled, another 32 bytes should be added.
  */
-#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size) (3 + 4 * (size))
+#define PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(size) (3 + 4 * (size) + 32)
 char *printable_data(char *buffer, size_t buf_size, const void *data,
                      size_t data_size, int quote);
+char *printable_data_highlight(char *buffer, size_t buf_size, const void *data,
+                               size_t data_size, int quote,
+                               size_t highlight_offset,
+                               size_t highlight_length);
 
 /*
  * Convert backslash-escaping back into corresponding bytes.
