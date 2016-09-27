@@ -351,10 +351,14 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
 
                 fprintf(stderr,
                         "%sTraffic %.3f↓, %.3f↑ Mbps "
-                        "(conns %ld↓ %ld↑ %ld⇡; seen %ld)%s%s\r",
+                        "(%s%ld↓ %ld↑ %ld⇡; %s%ld)%s%s\r",
                         time_progress(args->checkpoint.epoch_start, now, args->epoch_end),
-                        bps_in / 1000000.0, bps_out / 1000000.0, (long)conns_in,
-                        (long)conns_out, (long)connecting, (long)conns_counter,
+                        bps_in / 1000000.0, bps_out / 1000000.0,
+                        requested_latency_types ? "" : "conns ",
+                        (long)conns_in,
+                        (long)conns_out, (long)connecting,
+                        requested_latency_types ? "" : "seen ",
+                        (long)conns_counter,
                         latency_buf, tcpkali_clear_eol());
             }
         }
