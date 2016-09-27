@@ -61,9 +61,10 @@ check 17 "." ${TCPKALI} -m '\{ws.binary < "/dev/null" >}'
 check 18 "." ${TCPKALI} -m '\{ws.binary < /dev/null >}'
 
 check 19 "." ${TCPKALI} -m '\{connection.uid%10}'
-check 20 "." ${TCPKALI} -c10 -m '\{re [a-z]+}'
+check 20 "\[GET" ${TCPKALI} -r3 -m '\{connection.uid%10}' -d
+check 21 "." ${TCPKALI} -c10 -m '\{re [a-z]+}'
 
-# Test 21
+# Test 22
 TESTFILE=/tmp/.tcpkali-64k-test.$$
 rm_testfile() {
     rm -f "${TESTFILE}"
@@ -71,8 +72,8 @@ rm_testfile() {
 trap rm_testfile EXIT
 for size_k in 63 65 1000; do
     dd if=/dev/zero of=${TESTFILE} bs=1024 count=${size_k}
-    check 21 "." ${TCPKALI} --ws -r1 -m "\{ws.text <${TESTFILE}>}"
-    check 22 "." ${TCPKALI}      -r1 -m "\{ws.text <${TESTFILE}>}"
+    check 22 "." ${TCPKALI} --ws -r1 -m "\{ws.text <${TESTFILE}>}"
+    check 23 "." ${TCPKALI}      -r1 -m "\{ws.text <${TESTFILE}>}"
 done
 rm_testfile
 

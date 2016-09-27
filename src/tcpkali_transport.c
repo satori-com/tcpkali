@@ -370,7 +370,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     place_multiple_messages = 0;
                     break;
                 }
-                if(snip->flags & MSK_FRAMING_REQUESTED) {
+                if(mc->state == MC_FINALIZED_WEBSOCKET
+                   && snip->flags & MSK_FRAMING_REQUESTED) {
                     estimate_ws_frame_size = websocket_frame_header(
                         tptr, data_spec->allocated_size - data_spec->total_size,
                         ws_side, WS_OP_TEXT_FRAME, 1,
