@@ -82,6 +82,9 @@ open more than 64k connections to destinations.
 --ws, --websocket
 :   Use RFC6455 WebSocket transport.
 
+-H, --header
+:   Add HTTP header into the WebSocket handshake.
+
 -c, --connections *N*
 :   Number of concurrent connections to open to the destinations. Default is 1.
 
