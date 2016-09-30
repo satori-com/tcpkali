@@ -975,6 +975,7 @@ main(int argc, char **argv) {
     oc_args.checkpoint.epoch_start = tk_now(TK_DEFAULT);
 
     /* Reset the test duration after ramp-up. */
+    oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
     enum oc_return_value orv = open_connections_until_maxed_out(
                                     PHASE_STEADY_STATE, &oc_args);
 
