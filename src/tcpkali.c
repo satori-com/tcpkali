@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <math.h>
 #include <sys/types.h>
@@ -242,10 +243,11 @@ main(int argc, char **argv) {
                 warning("--header=\"\" value is empty, ignored\n");
                 break;
             }
-            if(hdrbuf[0] == '-') {
+            if(!isalpha(hdrbuf[0])) {
                 warning(
-                    "--header=%s starts with '-', are you sure?\n",
-                    printable_data(buffer, sizeof(buffer), hdrbuf, hdrlen, 1));
+                    "--header=%s starts with '%c', are you sure?\n",
+                    printable_data(buffer, sizeof(buffer), hdrbuf, hdrlen, 1),
+                    hdrbuf[0]);
             }
             char *lf = memchr(hdrbuf, '\n', hdrlen);
             if(lf) {
@@ -265,7 +267,7 @@ main(int argc, char **argv) {
                 conf.http_headers.offset += hdrlen;
                 memcpy(conf.http_headers.buffer + conf.http_headers.offset,
                        "\r\n", sizeof("\r\n"));
-                conf.http_headers.offset += sizeof("\r\n");
+                conf.http_headers.offset += sizeof("\r\n") - 1;
                 free(hdrbuf);
             }
             } break;
