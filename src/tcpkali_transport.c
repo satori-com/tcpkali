@@ -70,6 +70,10 @@ message_collection_finalize(struct message_collection *mc, int as_websocket,
     assert(mc->state == MC_EMBRYONIC);
 
     if(as_websocket) {
+        if(!hostport) hostport = "";
+        if(!path) path = "";
+        if(!headers) headers = "";
+
         ssize_t estimated_size = sizeof(ws_http_headers_fmt) + strlen(hostport)
                                  + strlen(path) + strlen(headers);
         char http_headers[estimated_size];
