@@ -29,11 +29,11 @@ check() {
     PORT=$((PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    "$@" ${rest_opts} | egrep "$togrep"
+    "$@" ${rest_opts} 2>&1 | egrep "$togrep"
     PORT=$((PORT+1))
     local rest_opts="-T1s -l${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    "$@" ${rest_opts} | egrep "$togrep"
+    "$@" ${rest_opts} 2>&1 | egrep "$togrep"
 }
 
 
