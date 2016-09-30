@@ -1,10 +1,10 @@
 
-dist_check_SCRIPTS = check-tcpkali.sh check-tcpkali.py
+dist_check_SCRIPTS = check-tcpkali-operation.sh check-tcpkali-traffic.py
 
 if HAVE_PYTHON
-TESTS = check-tcpkali.sh check-tcpkali.py
+TESTS = check-tcpkali-operation.sh check-tcpkali-traffic.py
 else
-TESTS = check-tcpkali.sh
+TESTS = check-tcpkali-operation.sh
 endif
 
 TESTS_ENVIRONMENT= TCPKALI="$(top_builddir)/src/tcpkali"
