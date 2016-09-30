@@ -83,7 +83,8 @@ static struct option cli_long_options[] = {
     {"dump-all-out", 0, 0, CLI_DUMP + 'O'},
     {"first-message", 1, 0, '1'},
     {"first-message-file", 1, 0, 'F'},
-    {"help", 0, 0, 'H'},
+    {"help", 0, 0, 'E'},
+    {"header", 1, 0, 'H'},
     {"latency-connect", 0, 0, CLI_LATENCY + 'c'},
     {"latency-first-byte", 0, 0, CLI_LATENCY + 'f'},
     {"latency-marker", 1, 0, CLI_LATENCY + 'm'},
@@ -125,6 +126,10 @@ static struct tcpkali_config {
     int listen_port;      /* Port on which to listen. */
     char *first_hostport; /* A single (first) host:port specification */
     char *first_path;     /* A /path specification from the first host */
+    struct http_headers {
+        size_t offset;
+        char buffer[1024];
+    } http_headers;
 } default_config = {.max_connections = 1,
                     .connect_rate = 100.0,
                     .test_duration = 10.0,
@@ -201,7 +206,7 @@ main(int argc, char **argv) {
         char *option = argv[optind];
         int longindex = -1;
         int c;
-        c = getopt_long(argc, argv, "dhc:e1:m:f:r:l:vw:T:", cli_long_options,
+        c = getopt_long(argc, argv, "dhc:e1:m:f:r:l:vw:T:H:", cli_long_options,
                         &longindex);
         if(c == -1) break;
         switch(c) {
@@ -217,7 +222,7 @@ main(int argc, char **argv) {
         case 'h':
             usage_short(argv[0]);
             exit(EX_USAGE);
-        case 'H':
+        case 'E':
             usage_long(argv[0], &default_config);
             exit(EX_USAGE);
         case 'v': /* -v */
@@ -228,6 +233,42 @@ main(int argc, char **argv) {
             if(engine_params.verbosity_level >= DBG_DATA)
                 engine_params.dump_setting = DS_DUMP_ALL;
             break;
+        case 'H': {
+            char *hdrbuf = strdup(optarg);
+            size_t hdrlen = strlen(optarg);
+            if(unescape_message_data) unescape_data(hdrbuf, &hdrlen);
+            char buffer[PRINTABLE_DATA_SUGGESTED_BUFFER_SIZE(hdrlen)];
+            if(hdrlen == 0) {
+                warning("--header=\"\" value is empty, ignored\n");
+                break;
+            }
+            if(hdrbuf[0] == '-') {
+                warning(
+                    "--header=%s starts with '-', are you sure?\n",
+                    printable_data(buffer, sizeof(buffer), hdrbuf, hdrlen, 1));
+            }
+            char *lf = memchr(hdrbuf, '\n', hdrlen);
+            if(lf) {
+                fprintf(stderr,
+                    "--header=%s should not contain '\\n'\n",
+                    printable_data(buffer, sizeof(buffer), hdrbuf, hdrlen, 1));
+                exit(EX_USAGE);
+            }
+
+            if(conf.http_headers.offset + hdrlen + 2
+               >= sizeof(conf.http_headers.buffer)) {
+                fprintf(stderr, "--header adds too many HTTP headers\n");
+                exit(EX_USAGE);
+            } else {
+                memcpy(conf.http_headers.buffer + conf.http_headers.offset,
+                       hdrbuf, hdrlen);
+                conf.http_headers.offset += hdrlen;
+                memcpy(conf.http_headers.buffer + conf.http_headers.offset,
+                       "\r\n", sizeof("\r\n"));
+                conf.http_headers.offset += sizeof("\r\n");
+                free(hdrbuf);
+            }
+            } break;
         case CLI_VERBOSE_OFFSET + 'v': /* --verbose <level> */
             engine_params.verbosity_level = atoi(optarg);
             if((int)engine_params.verbosity_level < 0
@@ -607,6 +648,12 @@ main(int argc, char **argv) {
         }
     }
 
+    /* Check that -H,--header is not given without --ws,--websocket */
+    if(conf.http_headers.offset > 0 && !engine_params.websocket_enable) {
+        fprintf(stderr, "--header option ignored without --websocket\n");
+        exit(EX_USAGE);
+    }
+
     if(rate_modulator.latency_target > 1) {
         char *end = 0;
         strtod(rate_modulator.latency_target_s, &end);
@@ -728,9 +775,9 @@ main(int argc, char **argv) {
      * Add final touches to the collection:
      * add websocket headers if needed, etc.
      */
-    message_collection_finalize(&engine_params.message_collection,
-                                engine_params.websocket_enable,
-                                conf.first_hostport, conf.first_path);
+    message_collection_finalize(
+        &engine_params.message_collection, engine_params.websocket_enable,
+        conf.first_hostport, conf.first_path, conf.http_headers.buffer);
 
     int no_message_to_send =
         (0 == message_collection_estimate_size(
@@ -1092,6 +1139,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"
+    "  -H, --header <string>        Add HTTP header into WebSocket handshake\n"
     "  -c, --connections <N=%d>      Connections to keep open to the destinations\n"
     "  --connect-rate <Rate=%g>    Limit number of new connections per second\n"
     "  --connect-timeout <Time=1s>  Limit time spent in a connection attempt\n"

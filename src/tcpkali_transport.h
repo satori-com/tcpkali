@@ -98,7 +98,8 @@ void message_collection_add_expr(struct message_collection *mc,
  * and adding websocket related messages details.
  */
 void message_collection_finalize(struct message_collection *, int as_websocket,
-                                 const char *hostport, const char *path);
+                                 const char *hostport, const char *path,
+                                 const char *headers);
 
 /*
  * Estimate the size of the snippets of the specified kind (and mask).

@@ -57,7 +57,7 @@ snippet_compare_cb(const void *ap, const void *bp) {
 
 void
 message_collection_finalize(struct message_collection *mc, int as_websocket,
-                            const char *hostport, const char *path) {
+                            const char *hostport, const char *path, const char *headers) {
     const char ws_http_headers_fmt[] =
         "GET /%s HTTP/1.1\r\n"
         "Host: %s\r\n"
@@ -65,18 +65,17 @@ message_collection_finalize(struct message_collection *mc, int as_websocket,
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
         "Sec-WebSocket-Version: 13\r\n"
-        "\r\n";
+        "%s\r\n";
 
     assert(mc->state == MC_EMBRYONIC);
 
     if(as_websocket) {
-        ssize_t estimated_size =
-            snprintf("", 0, ws_http_headers_fmt, path, hostport);
-        assert(estimated_size >= (ssize_t)sizeof(ws_http_headers_fmt));
-        char http_headers[estimated_size + 1];
-        ssize_t h_size = snprintf(http_headers, estimated_size + 1,
-                                  ws_http_headers_fmt, path, hostport);
-        assert(h_size == estimated_size);
+        ssize_t estimated_size = sizeof(ws_http_headers_fmt) + strlen(hostport)
+                                 + strlen(path) + strlen(headers);
+        char http_headers[estimated_size];
+        ssize_t h_size = snprintf(http_headers, estimated_size,
+                                  ws_http_headers_fmt, path, hostport, headers);
+        assert(h_size < estimated_size);
 
         const int NO_UNESCAPE = 0;
         const int PERFORM_EXPR_PARSING = 1;
