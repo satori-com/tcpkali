@@ -61,7 +61,7 @@ check 17 "." ${TCPKALI} -m '\{ws.binary < "/dev/null" >}'
 check 18 "." ${TCPKALI} -m '\{ws.binary < /dev/null >}'
 
 check 19 "." ${TCPKALI} -m '\{connection.uid%10}'
-check 20 "\[GET" ${TCPKALI} -r3 -m '\{connection.uid%10}' -d
+check 20 "\[PFX-1\]" ${TCPKALI} -r3 -m 'PFX-\{connection.uid%10}' -d
 check 21 "." ${TCPKALI} -c10 -m '\{re [a-z]+}'
 
 # Test 22
