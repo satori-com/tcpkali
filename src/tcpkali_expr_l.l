@@ -108,6 +108,9 @@ WSP [\t\r\v\f\n ]
         }
     "."             return '.';
     "..."           return TOK_ellipsis;
+    "rsv1"          { yylval.tv_long = 0x4; return TOK_ws_reserved_flag; }
+    "rsv2"          { yylval.tv_long = 0x2; return TOK_ws_reserved_flag; }
+    "rsv3"          { yylval.tv_long = 0x1; return TOK_ws_reserved_flag; }
     "%"             return '%';
 
 

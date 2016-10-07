@@ -40,6 +40,7 @@ int yyerror(tk_expr_t **, const char *);
 
 %token              TOK_ws           "ws"
 %token <tv_opcode>  TOK_ws_opcode    "text, binary, close, ping, pong, continuation"
+%token <tv_long>    TOK_ws_reserved_flag "rsv1, rsv2, rsv3"
 %token              TOK_global       "global"
 %token              TOK_connection   "connection"
 %token              TOK_ptr          " ptr"
@@ -176,9 +177,14 @@ NumericExpr:
 WSFrameFinalized:
     WSFrameWithData
     /* \{ws.ping ...} (yes, tree dots!) */
-    | WSFrameWithData TOK_ellipsis {
+    | WSFrameFinalized TOK_ellipsis {
         $$ = $1;
         $$->u.ws_frame.fin = 0; /* Expect continuation. */
+    }
+    /* \{ws.ping rsv1} */
+    | WSFrameFinalized TOK_ws_reserved_flag {
+        $$ = $1;
+        $$->u.ws_frame.rsvs |= $2;
     }
 
 WSFrameWithData:

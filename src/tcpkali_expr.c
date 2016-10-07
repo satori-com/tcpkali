@@ -134,8 +134,8 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
             size_t hdr_size = websocket_frame_header(
                 (uint8_t *)buf, size,
                 client_mode ? WS_SIDE_CLIENT : WS_SIDE_SERVER,
-                expr->u.ws_frame.opcode, expr->u.ws_frame.fin,
-                expr->u.ws_frame.size);
+                expr->u.ws_frame.opcode, expr->u.ws_frame.rsvs,
+                expr->u.ws_frame.fin, expr->u.ws_frame.size);
             memcpy(buf + hdr_size, expr->u.ws_frame.data,
                    expr->u.ws_frame.size);
             return (hdr_size + expr->u.ws_frame.size);

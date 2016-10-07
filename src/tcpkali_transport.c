@@ -377,7 +377,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                    && snip->flags & MSK_FRAMING_REQUESTED) {
                     estimate_ws_frame_size = websocket_frame_header(
                         tptr, data_spec->allocated_size - data_spec->total_size,
-                        ws_side, WS_OP_TEXT_FRAME, 1,
+                        ws_side, WS_OP_TEXT_FRAME, 0, 1,
                         snip->expr->estimate_size);
                     tptr += estimate_ws_frame_size;
                 }
@@ -413,7 +413,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                         ws_frame_size = websocket_frame_header(
                             tptr,
                             data_spec->allocated_size - data_spec->total_size,
-                            ws_side, WS_OP_TEXT_FRAME, 1, size);
+                            ws_side, WS_OP_TEXT_FRAME, 0, 1, size);
                         /*
                          * Most of the time websocket frame will have the
                          * same length as the estimated one
@@ -435,7 +435,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                         ws_frame_size = websocket_frame_header(
                             (uint8_t *)data_spec->ptr + data_spec->total_size,
                             data_spec->allocated_size - data_spec->total_size,
-                            ws_side, WS_OP_TEXT_FRAME, 1, size);
+                            ws_side, WS_OP_TEXT_FRAME, 0, 1, size);
                     }
                 }
             }

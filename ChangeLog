@@ -1,4 +1,7 @@
 
+1.x:
+    * Support rsv1, rsv2, rsv3 reserved flags in in \{ws.* <reserved-flag>}.
+
 1.0:  2016-Sep-29
     * Export --latency-connect and --latency-first-bytes to statsd.
     * --latency-percentiles now affect --statsd reporting as well.
