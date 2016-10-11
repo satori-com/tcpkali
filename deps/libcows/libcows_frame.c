@@ -45,7 +45,7 @@ libcows_ws_frame_fill(struct libcows_ws_frame *frame, void *buf, size_t size) {
         switch(extra_payload_len) {
         case 0: frame->payload_length = len7; break;
         case 2: frame->payload_length = (b[2] << 8) | b[3]; break;
-        case 4:
+        case 8:
             frame->payload_length =
                   ((uint64_t)b[2] << 56) | ((uint64_t)b[3] << 48)
                 | ((uint64_t)b[4] << 40) | ((uint64_t)b[5] << 32)
