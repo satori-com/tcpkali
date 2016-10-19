@@ -9,10 +9,12 @@ if GNU_STYLE_OPTIONAL_INCLUDE
 ##
 PKG_NAME=@PACKAGE@
 PKG_VERSION=@PACKAGE_VERSION@
-PKG_PREFIX=/usr/local/bin
+PKG_PREFIX=/usr/local
+.PHONY: pkgroot
 pkgroot:: src
 	rm -rf pkgroot
-	mkdir pkgroot
-	cp $(builddir)/src/tcpkali pkgroot
+	mkdir -p pkgroot/bin pkgroot/share/man/man1
+	cp $(builddir)/src/tcpkali pkgroot/bin
+	cp $(srcdir)/doc/tcpkali.1 pkgroot/share/man/man1
 -include mz-rpm.mk
 endif
