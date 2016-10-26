@@ -182,9 +182,13 @@ unescape_data(void *data, size_t *initial_data_size) {
                     *w = (l & 0xff);
                 }
             } break;
-            default:
+            case '\\':
                 *w++ = '\\';
                 *w = *r;
+                break;
+            default:
+                *w = *r;
+                break;
             }
         }
     }

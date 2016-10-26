@@ -1181,6 +1181,7 @@ YY_RULE_SETUP
                     char *new_str = malloc(new_size + 1);
                     memcpy(new_str, yytext + 1, new_size);
                     new_str[new_size] = '\0';
+                    unescape_data(new_str, &new_size);
                     yylval.tv_string.buf = new_str;
                     yylval.tv_string.len = new_size;
                     return quoted_string;
