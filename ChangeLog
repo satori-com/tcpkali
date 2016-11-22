@@ -2,6 +2,7 @@
 1.x:
     * Support rsv1, rsv2, rsv3 reserved flags in in \{ws.* <reserved-flag>}.
     * Fix statsd output for connections.opened.
+    * Support for \{raw Expression}, which removes ws framing.
 
 1.0:  2016-Sep-29
     * Export --latency-connect and --latency-first-bytes to statsd.

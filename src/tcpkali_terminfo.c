@@ -124,7 +124,7 @@ tcpkali_disable_cursor(void) {
 
 int
 tcpkali_init_terminal(void) {
-    const int NOT_INITIALIZED = 1;
+#define NOT_INITIALIZED 1   /**/
     static int terminal_init_response = NOT_INITIALIZED;
     int errret = 0;
 

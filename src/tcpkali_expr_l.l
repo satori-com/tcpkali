@@ -82,9 +82,11 @@ WSP [\t\r\v\f\n ]
 
 <in_expression>{
     "<"             { yy_push_state(in_filename); return '<'; }
+    "{"             { yy_push_state(in_expression); return '{'; }
     "}"             { yy_pop_state(); return '}'; }
     {WSP}+          /* Ignore whitespace */
     "ws"            return TOK_ws;
+    "raw"           return TOK_raw; /* Do not wrap in WS frame */
     "cont""inuation"?  { yylval.tv_opcode = WS_OP_CONTINUATION;
                       return TOK_ws_opcode; }
     "text"          { yylval.tv_opcode = WS_OP_TEXT_FRAME;
@@ -125,7 +127,7 @@ WSP [\t\r\v\f\n ]
                     return quoted_string;
                 }
 
-    [^"<} .%]+     {
+    [^"<{} .%]+     {
                     fprintf(stderr,
                         "Unexpected token in message expression: %s\n",
                         yytext);

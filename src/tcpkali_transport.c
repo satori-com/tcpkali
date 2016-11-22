@@ -255,6 +255,13 @@ message_collection_add_expr(struct message_collection *mc,
 
         if(result.esw_websocket_frame) {
             snip->expr = result.esw_websocket_frame;
+            if(snip->expr->type == EXPR_RAW
+               && snip->expr->u.raw.expr->type != EXPR_DATA) {
+                snip->flags |= MSK_EXPRESSION_FOUND;
+            }
+            if(mc->most_dynamic_expression < snip->expr->dynamic_scope) {
+                mc->most_dynamic_expression = snip->expr->dynamic_scope;
+            }
             /* Disallow framing of websocket frames. */
             snip->flags = kind;
             snip->flags &= (~MSK_FRAMING_REQUESTED);

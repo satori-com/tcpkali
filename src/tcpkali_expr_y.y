@@ -39,6 +39,7 @@ int yyerror(tk_expr_t **, const char *);
 };
 
 %token              TOK_ws           "ws"
+%token              TOK_raw          "raw"
 %token <tv_opcode>  TOK_ws_opcode    "text, binary, close, ping, pong, continuation"
 %token <tv_long>    TOK_ws_reserved_flag "rsv1, rsv2, rsv3"
 %token              TOK_global       "global"
@@ -63,7 +64,8 @@ int yyerror(tk_expr_t **, const char *);
 %type   <tv_expr>   WSBasicFrame WSFrameWithData WSFrameFinalized
 %type   <tv_expr>   ByteSequenceOrExpr          "some string or \\{expression}"
 %type   <tv_expr>   ByteSequencesAndExpressions "data and expressions"
-%type   <tv_expr>   Expression      "ws, connection, global, re, or <filename.ext>"
+%type   <tv_expr>   NonWSExpression      "connection, global, re, or <filename.ext>"
+%type   <tv_expr>   WSExpression      "ws"
 
 %%
 
@@ -109,11 +111,16 @@ ByteSequenceOrExpr:
         expr->estimate_size = ($1).len;
         $$ = expr;
     }
-    | '{' Expression '}' {
+    | '{' WSExpression '}' {
+        $$ = $2;
+    }
+    | '{' NonWSExpression '}' {
         $$ = $2;
     }
 
-Expression:
+WSExpression: WSFrameFinalized
+
+NonWSExpression:
     File {    /* \{<filename.txt>} */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -126,7 +133,24 @@ Expression:
         $$ = $1;
         $$->dynamic_scope = DS_PER_CONNECTION;
     }
-    | WSFrameFinalized
+    | TOK_raw FileOrQuoted {
+        tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
+        expr->type = EXPR_DATA;
+        expr->u.data.data = ($2).buf;
+        expr->u.data.size = ($2).len;
+        expr->estimate_size = ($2).len;
+        $$ = calloc(1, sizeof(tk_expr_t));
+        $$->type = EXPR_RAW;
+        $$->u.raw.expr = expr;
+        $$->estimate_size = expr->estimate_size;
+    }
+    | TOK_raw '{' NonWSExpression '}' {
+        $$ = calloc(1, sizeof(tk_expr_t));
+        $$->type = EXPR_RAW;
+        $$->u.raw.expr = $3;
+        $$->estimate_size = $3->estimate_size;
+        $$->dynamic_scope = $3->dynamic_scope;
+    }
     | TOK_global '.' TOK_regex CompleteRegex {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;

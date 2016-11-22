@@ -56,6 +56,9 @@ free_expression(tk_expr_t *expr) {
         case EXPR_DATA:
             free((void *)expr->u.data.data);
             break;
+        case EXPR_RAW:
+            free_expression((void *)expr->u.raw.expr);
+            break;
         case EXPR_WS_FRAME:
             free((void *)expr->u.ws_frame.data);
             break;
@@ -127,6 +130,9 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         if(size < expr->u.data.size) return -1;
         memcpy(buf, expr->u.data.data, expr->u.data.size);
         return expr->u.data.size;
+    case EXPR_RAW:
+        return eval_expression(buf_p, size, expr->u.raw.expr, cb, key, value,
+                               client_mode);
     case EXPR_WS_FRAME:
         if(size < expr->estimate_size) {
             return -1;
@@ -215,6 +221,7 @@ expression_split_by_websocket_frame(tk_expr_t *expr) {
         result.esw_prefix = expr;
         return result;
     case EXPR_WS_FRAME:
+    case EXPR_RAW:
         result.esw_websocket_frame = expr;
         return result;
     case EXPR_CONCAT: {
@@ -257,6 +264,9 @@ unescape_expression(tk_expr_t *expr) {
     case EXPR_DATA:
         unescape_data((char *)expr->u.data.data, &expr->u.data.size);
         expr->estimate_size = expr->u.data.size;
+        return;
+    case EXPR_RAW:
+        unescape_expression(expr->u.raw.expr);
         return;
     case EXPR_CONCAT:
         unescape_expression(expr->u.concat.expr[0]);

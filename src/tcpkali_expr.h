@@ -33,6 +33,7 @@
 typedef struct tk_expr {
     enum {
         EXPR_DATA,
+        EXPR_RAW,      /* 'raw' */
         EXPR_WS_FRAME, /* 'ws.ping', 'ws.pong', etc */
         EXPR_CONCAT,
         EXPR_MODULO,         /* '%' */
@@ -45,6 +46,10 @@ typedef struct tk_expr {
             const char *data;
             size_t size;
         } data;
+        struct {
+            /* Do not add framing around expr: */
+            struct tk_expr *expr;
+        } raw;
         struct {
             const char *data;
             size_t size;

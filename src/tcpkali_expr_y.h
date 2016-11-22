@@ -48,39 +48,41 @@ extern int yydebug;
    enum yytokentype {
      END = 0,
      TOK_ws = 258,
-     TOK_ws_opcode = 259,
-     TOK_ws_reserved_flag = 260,
-     TOK_global = 261,
-     TOK_connection = 262,
-     TOK_ptr = 263,
-     TOK_uid = 264,
-     TOK_regex = 265,
-     TOK_ellipsis = 266,
-     string_token = 267,
-     class_range_token = 268,
-     repeat_range_token = 269,
-     quoted_string = 270,
-     filename = 271,
-     integer = 272
+     TOK_raw = 259,
+     TOK_ws_opcode = 260,
+     TOK_ws_reserved_flag = 261,
+     TOK_global = 262,
+     TOK_connection = 263,
+     TOK_ptr = 264,
+     TOK_uid = 265,
+     TOK_regex = 266,
+     TOK_ellipsis = 267,
+     string_token = 268,
+     class_range_token = 269,
+     repeat_range_token = 270,
+     quoted_string = 271,
+     filename = 272,
+     integer = 273
    };
 #endif
 /* Tokens.  */
 #define END 0
 #define TOK_ws 258
-#define TOK_ws_opcode 259
-#define TOK_ws_reserved_flag 260
-#define TOK_global 261
-#define TOK_connection 262
-#define TOK_ptr 263
-#define TOK_uid 264
-#define TOK_regex 265
-#define TOK_ellipsis 266
-#define string_token 267
-#define class_range_token 268
-#define repeat_range_token 269
-#define quoted_string 270
-#define filename 271
-#define integer 272
+#define TOK_raw 259
+#define TOK_ws_opcode 260
+#define TOK_ws_reserved_flag 261
+#define TOK_global 262
+#define TOK_connection 263
+#define TOK_ptr 264
+#define TOK_uid 265
+#define TOK_regex 266
+#define TOK_ellipsis 267
+#define string_token 268
+#define class_range_token 269
+#define repeat_range_token 270
+#define quoted_string 271
+#define filename 272
+#define integer 273
 
 
 
@@ -110,7 +112,7 @@ typedef union YYSTYPE
 
 
 /* Line 2058 of yacc.c  */
-#line 114 "tcpkali_expr_y.h"
+#line 116 "tcpkali_expr_y.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
