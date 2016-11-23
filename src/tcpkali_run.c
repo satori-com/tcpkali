@@ -253,7 +253,6 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     pacefier_init(&keepup_pace, now);
 
     ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
-    size_t opened_until_reported = 0;
 
     statsd_report_latency_types requested_latency_types =
             engine_params(args->eng)->latency_setting;
@@ -284,8 +283,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
         if(to_start > (size_t)conn_deficit) {
             to_start = conn_deficit;
         }
-        opened_until_reported += to_start;
-        engine_initiate_new_connections(args->eng, to_start);
+        args->connections_opened_tally += engine_initiate_new_connections(args->eng, to_start);
         pacefier_moved(&keepup_pace, args->connect_rate, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
@@ -309,14 +307,14 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
         engine_prepare_latency_snapshot(args->eng);
         struct latency_snapshot *latency = engine_collect_latency_snapshot(args->eng);
 
-        statsd_feedback feedback = {.opened = opened_until_reported,
+        statsd_feedback feedback = {.opened = args->connections_opened_tally,
                                     .conns_in = conns_in,
                                     .conns_out = conns_out,
                                     .bps_in = bps_in,
                                     .bps_out = bps_out,
                                     .traffic_delta = traffic_delta,
                                     .latency = NULL};
-        opened_until_reported = 0;
+        args->connections_opened_tally = 0;
 
         if(requested_latency_types && args->latency_window) {
             /*
