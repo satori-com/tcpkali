@@ -212,7 +212,7 @@ main(int argc, char **argv) {
 #ifdef HAVE_SRANDOMDEV
     srandomdev();
 #else
-    srandom(portable_srandomdev());
+    portable_srandomdev();
 #endif
 
     struct percentile_values latency_percentiles = {
