@@ -179,6 +179,22 @@ static struct multiplier bw_multiplier[] = {
 };
 /* clang-format on */
 
+#ifndef  HAVE_SRANDOMDEV
+void portable_srandomdev() {
+    FILE *f = fopen("/dev/urandom", "rb");
+    if(f) {
+        unsigned int r;
+        if(fread(&r, sizeof(r), 1, f) == 1) {
+            fclose(f);
+            srandom(r);
+            return;
+        }
+    }
+    /* No usable /dev/urandom, too bad. */
+    srandom(getpid() ^ time(NULL) ^ atol(getenv("TCPKALI_RANDOM")?:"0"));
+}
+#endif
+
 /*
  * Parse command line options and kick off the engine.
  */
@@ -196,7 +212,7 @@ main(int argc, char **argv) {
 #ifdef HAVE_SRANDOMDEV
     srandomdev();
 #else
-    srandom(time(NULL));
+    srandom(portable_srandomdev());
 #endif
 
     struct percentile_values latency_percentiles = {
