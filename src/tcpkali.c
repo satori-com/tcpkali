@@ -189,6 +189,7 @@ void portable_srandomdev() {
             srandom(r);
             return;
         }
+        fclose(f);
     }
     /* No usable /dev/urandom, too bad. */
     srandom(getpid() ^ time(NULL) ^ atol(getenv("TCPKALI_RANDOM")?:"0"));
