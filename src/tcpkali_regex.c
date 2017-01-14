@@ -247,8 +247,16 @@ tregex_free(tregex *re) {
     }
 }
 
+/* Slow-ish. Avoid using in performance-critical code. */
 ssize_t
 tregex_eval(tregex *re, char *buf, size_t size) {
+    pcg32_random_t rng;
+    pcg32_srandom_r(&rng, random(), 0);
+    return tregex_eval_rng(re, buf, size, &rng);
+}
+
+ssize_t
+tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
     const char *bold = buf;
     const char *bend = buf + size;
 
@@ -264,25 +272,24 @@ tregex_eval(tregex *re, char *buf, size_t size) {
     case TRegexClass:
         assert(re->oneof.size >= 1);
         if(bend - buf) {
-            *buf++ = re->oneof.table[random() % re->oneof.size];
+            *buf++ = re->oneof.table[pcg32_boundedrand_r(rng, re->oneof.size)];
         }
         break;
     case TRegexRepeat: {
         size_t cycles = re->repeat.minimum
-                        + (re->repeat.range ? random() % re->repeat.range : 0);
+                        + (re->repeat.range ? pcg32_boundedrand_r(rng, re->repeat.range) : 0);
         for(unsigned i = 0; i < cycles; i++) {
-            buf += tregex_eval(re->repeat.what, buf, bend - buf);
+            buf += tregex_eval_rng(re->repeat.what, buf, bend - buf, rng);
         }
     } break;
     case TRegexSequence:
         for(size_t i = 0; i < re->sequence.pieces; i++) {
-            buf += tregex_eval(re->sequence.piece[i], buf, bend - buf);
+            buf += tregex_eval_rng(re->sequence.piece[i], buf, bend - buf, rng);
         }
         break;
     case TRegexAlternative:
-        buf += tregex_eval(
-            re->alternative.branch[random() % re->alternative.branches], buf,
-            bend - buf);
+        buf += tregex_eval_rng(
+            re->alternative.branch[pcg32_boundedrand_r(rng, re->alternative.branches)], buf, bend - buf, rng);
         break;
     }
 

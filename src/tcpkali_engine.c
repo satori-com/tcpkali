@@ -50,6 +50,7 @@
 
 #include <StreamBoyerMooreHorspool.h>
 #include <hdr_histogram.h>
+#include <pcg_basic.h>
 
 #include "tcpkali.h"
 #include "tcpkali_ring.h"
@@ -158,6 +159,8 @@ struct loop_arguments {
     /* Per-worker scratch buffer allows debugging the last received data */
     char scratch_recv_buf[16384];
     size_t scratch_recv_last_size;
+
+    pcg32_random_t rng;
 
     /*******************************************
      * WORKER DATA SHARED WITH OTHER PROCESSES *
@@ -440,6 +443,7 @@ engine_start(struct engine_params params) {
         largs->private_control_pipe_wr = private_pipe[1];
         largs->global_control_pipe_rd_nbio = gctl_pipe_rd;
         largs->global_feedback_pipe_wr = gfbk_pipe_wr;
+        pcg32_srandom_r(&largs->rng, random(), n);
 
         rc = pthread_create(&eng->threads[n], 0, single_engine_loop_thread,
                             largs);

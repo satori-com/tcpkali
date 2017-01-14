@@ -8,9 +8,11 @@ tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
                    -I$(top_srcdir)/deps/libstatsd/src \
                    -I$(top_srcdir)/deps/HdrHistogram \
-                   -I$(top_srcdir)/deps/boyer-moore-horspool
+                   -I$(top_srcdir)/deps/boyer-moore-horspool \
+                   -I$(top_srcdir)/deps/pcg-c-basic
 tcpkali_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 tcpkali_SOURCES = \
+                $(top_srcdir)/deps/pcg-c-basic/pcg_basic.c\
                 tcpkali_iface.c tcpkali_iface.h           \
                 tcpkali_dns.c tcpkali_dns.h               \
                 tcpkali_engine.c tcpkali_engine.h         \
