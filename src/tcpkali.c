@@ -950,8 +950,8 @@ main(int argc, char **argv) {
         .latency_percentiles = &latency_percentiles,
         .print_stats = print_stats
     };
-    mavg_init(&oc_args.traffic_mavgs[0], tk_now(TK_DEFAULT), 3.0);
-    mavg_init(&oc_args.traffic_mavgs[1], tk_now(TK_DEFAULT), 3.0);
+    mavg_init(&oc_args.traffic_mavgs[0], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
+    mavg_init(&oc_args.traffic_mavgs[1], tk_now(TK_DEFAULT), 1.0 / 8, 3.0);
 
     /*
      * Convert SIGINT into change of a flag.

@@ -93,8 +93,7 @@ format_latency(char *buf, size_t size, const char *prefix,
     if(hist) {
         if(hist->total_count) {
             return snprintf(buf, size, "%s%.1f ", prefix,
-                hdr_value_at_percentile(hist, 95.0)
-                    / 10.0);
+                            hdr_value_at_percentile(hist, 95.0) / 10.0);
         } else {
             return snprintf(buf, size, "%s? ", prefix);
         }
@@ -236,7 +235,6 @@ static enum {
 
 enum oc_return_value
 open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
-
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
 
@@ -255,11 +253,12 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
 
     statsd_report_latency_types requested_latency_types =
-            engine_params(args->eng)->latency_setting;
+        engine_params(args->eng)->latency_setting;
     if(requested_latency_types && args->latency_window
        && !args->previous_window_latency) {
         engine_prepare_latency_snapshot(args->eng);
-        args->previous_window_latency = engine_collect_latency_snapshot(args->eng);
+        args->previous_window_latency =
+            engine_collect_latency_snapshot(args->eng);
     }
 
     while(now < args->epoch_end && !args->term_flag
@@ -298,8 +297,10 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
         non_atomic_traffic_stats traffic_delta =
             subtract_traffic_stats(args->checkpoint.last_traffic_stats, _last);
 
-        mavg_bump(&args->traffic_mavgs[0], now, (double)traffic_delta.bytes_rcvd);
-        mavg_bump(&args->traffic_mavgs[1], now, (double)traffic_delta.bytes_sent);
+        mavg_add(&args->traffic_mavgs[0], now,
+                 (double)traffic_delta.bytes_rcvd);
+        mavg_add(&args->traffic_mavgs[1], now,
+                 (double)traffic_delta.bytes_sent);
 
         double bps_in = 8 * mavg_per_second(&args->traffic_mavgs[0], now);
         double bps_out = 8 * mavg_per_second(&args->traffic_mavgs[1], now);
@@ -338,8 +339,8 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
         } else {
             /* Latencies are sent in-line with byte stats, few times a second */
             feedback.latency = latency;
-            report_to_statsd(args->statsd, &feedback,
-                             requested_latency_types, args->latency_percentiles);
+            report_to_statsd(args->statsd, &feedback, requested_latency_types,
+                             args->latency_percentiles);
         }
 
         if(args->print_stats) {
