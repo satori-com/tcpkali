@@ -47,8 +47,8 @@ check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
 check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
 check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
 
-check_tcpkali_regex_SOURCES = tcpkali_regex.c tcpkali_regex.h
-check_tcpkali_regex_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_REGEX_UNIT_TEST
+check_tcpkali_regex_SOURCES = tcpkali_regex.c tcpkali_regex.h $(top_srcdir)/deps/pcg-c-basic/pcg_basic.c
+check_tcpkali_regex_CFLAGS = -std=gnu99 $(TK_CFLAGS) -I$(top_srcdir)/deps/pcg-c-basic -DTCPKALI_REGEX_UNIT_TEST
 
 check_tcpkali_iface_SOURCES = tcpkali_iface.c tcpkali_iface.h tcpkali_logging.c tcpkali_logging.h tcpkali_terminfo.c tcpkali_terminfo.h
 check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST
