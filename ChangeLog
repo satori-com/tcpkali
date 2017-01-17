@@ -4,6 +4,7 @@
     * Fix statsd output for connections.opened.
     * Support for \{raw Expression}, which removes ws framing.
     * '-vvv' option does not dump the traffic. Use -d or --dump-* options.
+    * Added units (ms) to latency percentiles output.
 
 1.0:  2016-Sep-29
     * Export --latency-connect and --latency-first-bytes to statsd.

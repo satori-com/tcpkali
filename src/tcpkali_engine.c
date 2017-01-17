@@ -470,7 +470,7 @@ print_latency_hdr_histrogram_percentiles(
         printf("%.1f%s", hdr_value_at_percentile(histogram, per_d) / 10.0,
                i == size - 1 ? "" : "/");
     }
-    printf(" (");
+    printf(" ms (");
     for(size_t i = 0; i < size; i++) {
         printf("%s%s", report_percentiles->values[i].value_s,
                i == size - 1 ? "" : "/");
