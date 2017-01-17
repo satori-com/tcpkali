@@ -248,8 +248,6 @@ main(int argc, char **argv) {
             if(engine_params.verbosity_level >= _DBG_MAX) {
                 engine_params.verbosity_level = (_DBG_MAX - 1);
             }
-            if(engine_params.verbosity_level >= DBG_DATA)
-                engine_params.dump_setting = DS_DUMP_ALL;
             break;
         case 'H': {
             char *hdrbuf = strdup(optarg);
@@ -295,8 +293,6 @@ main(int argc, char **argv) {
                 fprintf(stderr, "Expecting --verbose=[0..%d]\n", _DBG_MAX - 1);
                 exit(EX_USAGE);
             }
-            if(engine_params.verbosity_level >= DBG_DATA)
-                engine_params.dump_setting = DS_DUMP_ALL;
             break;
         case 'd': /* -d */
         /* FALL THROUGH */

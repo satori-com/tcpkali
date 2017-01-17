@@ -35,7 +35,7 @@ enum verbosity_level {
     DBG_NORMAL = 1,  /* Default verbosity level */
     DBG_WARNING = 1, /* Deliberately the same as "normal" */
     DBG_DETAIL = 2,  /* Increased verbosity */
-    DBG_DATA = 3,    /* Dump incoming and outgoing data as well */
+    DBG_DEBUG = 3,   /* Dump latency tables */
     _DBG_MAX
 };
 

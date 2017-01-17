@@ -1079,7 +1079,7 @@ single_engine_loop_thread(void *argp) {
               hdr_value_at_percentile(hist, 99.0) / 10.0,
               hdr_value_at_percentile(hist, 99.5) / 10.0, hdr_mean(hist) / 10.0,
               hdr_max(hist) / 10.0);
-        if(largs->params.verbosity_level >= DBG_DATA)
+        if(largs->params.verbosity_level >= DBG_DEBUG)
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
     if(largs->marker_histogram_local) {
@@ -1095,7 +1095,7 @@ single_engine_loop_thread(void *argp) {
               hdr_value_at_percentile(hist, 99.0) / 10.0,
               hdr_value_at_percentile(hist, 99.5) / 10.0, hdr_mean(hist) / 10.0,
               hdr_max(hist) / 10.0);
-        if(largs->params.verbosity_level >= DBG_DATA)
+        if(largs->params.verbosity_level >= DBG_DEBUG)
             hdr_percentiles_print(hist, stderr, 5, 10, CLASSIC);
     }
 
