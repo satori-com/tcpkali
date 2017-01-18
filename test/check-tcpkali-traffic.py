@@ -318,8 +318,8 @@ def main():
         arcv = Analyze(receiver.results())
         asnd = Analyze(sender.results())
         transfer = ((100 * 1024 // 8) * 11)
-        trans_min = 0.9 * transfer
-        trans_max = 1.1 * transfer
+        trans_min = 0.85 * transfer
+        trans_max = 1.10 * transfer
         assert((arcv.total_sent_bytes < 1000 and
                 arcv.total_received_bytes > trans_min and
                 arcv.total_received_bytes < trans_max) or
