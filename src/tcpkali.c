@@ -124,6 +124,7 @@ static struct tcpkali_config {
     char *statsd_host;
     int statsd_port;
     char *statsd_namespace;
+    char *listen_host;    /* Address on which to listen. Can be NULL */
     int listen_port;      /* Port on which to listen. */
     char *first_hostport; /* A single (first) host:port specification */
     char *first_path;     /* A /path specification from the first host */
@@ -556,12 +557,22 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case 'l':
-            conf.listen_port = atoi(optarg);
+        case 'l': {
+            const char *port = optarg;
+            const char *colon = strchr(optarg, ':');
+            if(colon) {
+                port = colon + 1;
+                free(conf.listen_host);
+                conf.listen_host = strdup(optarg);
+                assert(conf.listen_host);
+                conf.listen_host[colon - optarg] = '\0';
+            }
+            conf.listen_port = atoi(port);
             if(conf.listen_port <= 0 || conf.listen_port >= 65535) {
                 fprintf(stderr, "--listen-port=%d is not in [1..65535]\n",
                         conf.listen_port);
                 exit(EX_USAGE);
+            }
             }
             break;
         case 'M': /* --listen-mode={silent|active} */
@@ -783,7 +794,7 @@ main(int argc, char **argv) {
     }
     if(conf.listen_port > 0) {
         engine_params.listen_addresses =
-            detect_listen_addresses(conf.listen_port);
+            detect_listen_addresses(conf.listen_host, conf.listen_port);
     }
 
     /*

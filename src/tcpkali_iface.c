@@ -169,7 +169,7 @@ format_sockaddr(struct sockaddr_storage *ss, char *buf, size_t size) {
  * Given a port, detect which addresses we can listen on, using this port.
  */
 struct addresses
-detect_listen_addresses(int listen_port) {
+detect_listen_addresses(const char *local_hostname, int listen_port) {
     struct addresses addresses = {0, 0};
     struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
@@ -180,7 +180,7 @@ detect_listen_addresses(int listen_port) {
     snprintf(service, sizeof(service), "%d", listen_port);
 
     struct addrinfo *res;
-    int err = getaddrinfo(NULL, service, &hints, &res);
+    int err = getaddrinfo(local_hostname, service, &hints, &res);
     if(err != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
         exit(EXIT_FAILURE);

@@ -71,7 +71,7 @@ const char *format_sockaddr(struct sockaddr_storage *, char *, size_t);
 /*
  * Detect IPs on which we can listen.
  */
-struct addresses detect_listen_addresses(int listen_port);
+struct addresses detect_listen_addresses(const char *local_hostname, int listen_port);
 
 /*
  * Parse the specified IP as it were a source IP, and add it to the list.
