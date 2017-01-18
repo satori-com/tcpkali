@@ -993,6 +993,7 @@ single_engine_loop_thread(void *argp) {
         }
     }
 
+    const int stats_flush_interval_ms = 42;
 #ifdef USE_LIBUV
     if(limit_channel_lifetime(largs)) {
         uv_timer_init(TK_A_ & largs->channel_lifetime_timer);
@@ -1000,7 +1001,7 @@ single_engine_loop_thread(void *argp) {
                        0, 0);
     }
     uv_timer_init(TK_A_ & largs->stats_timer);
-    uv_timer_start(&largs->stats_timer, stats_timer_cb_uv, 250, 250);
+    uv_timer_start(&largs->stats_timer, stats_timer_cb_uv, stats_flush_interval_ms, stats_flush_interval_ms);
     uv_poll_init(TK_A_ & global_control_watcher,
                  largs->global_control_pipe_rd_nbio);
     uv_poll_init(TK_A_ & private_control_watcher,
@@ -1016,7 +1017,7 @@ single_engine_loop_thread(void *argp) {
         ev_timer_init(&largs->channel_lifetime_timer, expire_channel_lives, 0,
                       0);
     }
-    ev_timer_init(&largs->stats_timer, stats_timer_cb, 0.25, 0.25);
+    ev_timer_init(&largs->stats_timer, stats_timer_cb, stats_flush_interval_ms / 1000.0, stats_flush_interval_ms / 1000.0);
     ev_timer_start(TK_A_ & largs->stats_timer);
     ev_io_init(&global_control_watcher, control_cb,
                largs->global_control_pipe_rd_nbio, TK_READ);
