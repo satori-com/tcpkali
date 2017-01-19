@@ -85,7 +85,7 @@ mavg_init(mavg *m, double start_time, double aggregate_window,
 }
 
 static double __attribute__((unused))
-mavg_smoothing_window_s(mavg *m) {
+mavg_smoothing_window_s(const mavg *m) {
     return m->aggregate_window / m->storage.decay_factor;
 }
 
@@ -135,7 +135,7 @@ mavg_add(mavg *m, double now, double new_events) {
     mavg_add(m, now, new_events - old_events);
 }
 
-static double __attribute__((unused)) mavg_per_second(mavg *m, double now) {
+static double __attribute__((unused)) mavg_per_second(const mavg *m, double now) {
     double elapsed = now - m->update_ts;
     if(elapsed > mavg_smoothing_window_s(m)) {
         /*
