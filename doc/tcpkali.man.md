@@ -174,6 +174,8 @@ Expression          Description
 
  re                 Randomized expression, for each message.
 
+ message.marker     Indicate a message boundary for latency measurement.
+
  ws.continuation,   Specify WebSocket frame types.
  ws.ping, ws.pong,  Refer to RFC 6455, section 11.8.
  ws.text, ws.binary
