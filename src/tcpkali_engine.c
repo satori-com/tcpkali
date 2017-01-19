@@ -2065,11 +2065,19 @@ update_io_interest(TK_P_ struct connection *conn) {
 }
 
 static void
-latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
+latency_record_outgoing_ts(TK_P_ struct connection *conn, const void *new_position, size_t wrote) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     if(largs->params.message_marker) {
-        conn->traffic_ongoing.msgs_sent++;
+        const void *token = conn->data.marker_token_ptr;
+        const void *position = new_position - wrote;
+        if(token) {
+            if(position <= token && token < position + wrote) {
+                conn->traffic_ongoing.msgs_sent++;
+            }
+        } else {
+                conn->traffic_ongoing.msgs_sent++;
+        }
         return;
     }
 
@@ -2578,7 +2586,7 @@ process_WRITE:
                     available_body -= wrote;
 
                     /* Record latencies for the body only, not headers */
-                    latency_record_outgoing_ts(TK_A_ conn, wrote);
+                    latency_record_outgoing_ts(TK_A_ conn, position, wrote);
                 }
             }
         } while(available_body);
