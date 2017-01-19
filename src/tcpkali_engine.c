@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2015, 2016  Machine Zone, Inc.
+ * Copyright (c) 2014, 2015, 2016, 2017  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -124,6 +124,13 @@ struct connection {
         struct StreamBMH_Occ *sbmh_occ;
         const uint8_t *sbmh_data;
         size_t sbmh_size;
+        struct message_marker_parser_state {
+            enum {
+                MP_DISENGAGED,
+                MP_SLURPING_DIGITS
+            } state;
+            uint64_t collected_digits;
+        } marker_parser;
     } latency;
     struct StreamBMH *sbmh_stop_ctx;
 };
@@ -383,7 +390,7 @@ engine_start(struct engine_params params) {
      * if it can be shared between connections. It can only be shared
      * if it is trivial (does not depend on dynamic \{expressions}).
      */
-    if(params.latency_marker_expr   /* --latency-marker */
+    if(params.latency_marker_expr   /* --latency-marker, --message-marker */
        && EXPR_IS_TRIVIAL(params.latency_marker_expr)) {
         sbmh_init(NULL, &params.sbmh_shared_marker_occ,
                   (void *)params.latency_marker_expr->u.data.data,
@@ -1273,9 +1280,11 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
         if(v) *v = (long)conn->connection_unique_id;
         break;
     case EXPR_MESSAGE_MARKER: {
-        struct timeval tp;
-        gettimeofday(&tp, NULL);
-        s = snprintf(buf, size, MESSAGE_MARKER_TOKEN "%016llx!", (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec);
+#define MZEROS   "0000000000000000"
+        const size_t tok_size = sizeof(MESSAGE_MARKER_TOKEN MZEROS "!")-1;
+        assert(size >= tok_size);
+        memcpy(buf, MESSAGE_MARKER_TOKEN MZEROS "!", tok_size);
+        s = tok_size;
         if(v) *v = (long)0;
         break;
     }
@@ -2106,6 +2115,16 @@ latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
     }
 }
 
+static unsigned nibble(const unsigned char c) {
+    switch(c) {
+    case '0' ... '9': return (c - '0');
+    case 'a' ... 'f': return (c - 'a') + 10;
+    case 'A' ... 'F': return (c - 'A') + 10;
+    default:
+        return 0;
+    }
+}
+
 static void
 latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
                            size_t size) {
@@ -2118,6 +2137,34 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
     unsigned num_markers_found = 0;
 
     for(; size > 0;) {
+        switch(conn->latency.marker_parser.state) {
+        case MP_DISENGAGED:
+            break;
+        case MP_SLURPING_DIGITS:
+            if(*buf != '!') {
+                conn->latency.marker_parser.collected_digits <<= 4;
+                conn->latency.marker_parser.collected_digits |= nibble(*buf);
+                //printf("Adding nibble %x\n", nibble(*buf));
+                buf++;
+                size--;
+                continue;
+            } else {
+                conn->latency.marker_parser.state = MP_DISENGAGED;
+                conn->traffic_ongoing.msgs_rcvd++;
+                struct timeval tp;
+                gettimeofday(&tp, NULL);
+                int64_t latency = (int64_t)tp.tv_sec * 1000000 + tp.tv_usec
+                        - (int64_t)conn->latency.marker_parser.collected_digits;
+                latency /= 100; // 1/10 ms
+                if(hdr_record_value(conn->latency.marker_histogram, latency)
+                        == false) {
+                    fprintf(stderr,
+                            "Latency value %g is too large, "
+                            "can't record.\n",
+                            (double) (latency / 10000));
+                }
+            }
+        }
         size_t analyzed =
             sbmh_feed(conn->latency.sbmh_marker_ctx, conn->latency.sbmh_occ, lm,
                       lm_size, (unsigned char *)buf, size);
@@ -2125,21 +2172,8 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
             buf += analyzed;
             size -= analyzed;
             if(largs->params.message_marker) {
-                conn->traffic_ongoing.msgs_rcvd++;
-                if(size >= 16+1) { // otherwise ignore
-                    unsigned long long ts = (unsigned long long) strtoll(buf, NULL, 16);
-                    struct timeval tp;
-                    gettimeofday(&tp, NULL);
-                    int64_t latency = (int64_t) tp.tv_sec * 1000000 + tp.tv_usec - (int64_t) ts;
-                    latency /= 100; // 1/10 ms
-                    if(hdr_record_value(conn->latency.marker_histogram, latency)
-                            == false) {
-                        fprintf(stderr,
-                                "Latency value %g is too large, "
-                                "can't record.\n",
-                                (double) (latency / 10000));
-                    }
-                }
+                conn->latency.marker_parser.state = MP_SLURPING_DIGITS;
+                conn->latency.marker_parser.collected_digits = 0;
             } else {
                 num_markers_found++;
             }
@@ -2295,8 +2329,9 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *current_offset = off;
     }
 
-    if(largs->params.message_marker)
+    if(largs->params.message_marker) {
         update_timestamps((char*) *position, *available_body);
+    }
 }
 
 static void
@@ -2598,6 +2633,7 @@ connection_free_internals(struct connection *conn) {
 
     /* Remove Boyer-Moore-Horspool string search context. */
     if(conn->latency.sbmh_marker_ctx) {
+        /* Receive side of --latency-marker or --message-marker */
         free(conn->latency.sbmh_marker_ctx);
         if(conn->latency.sbmh_shared == 0) {
             free(conn->latency.sbmh_occ);
