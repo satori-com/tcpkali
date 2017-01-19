@@ -132,6 +132,7 @@ struct transport_data_spec {
     size_t total_size;
     size_t allocated_size;
     size_t single_message_size;
+    void *marker_token_ptr;
     enum transport_data_flags {
         TDS_FLAG_NONE = 0x00,
         TDS_FLAG_PTR_SHARED = 0x01, /* Disallow freeing .ptr field */

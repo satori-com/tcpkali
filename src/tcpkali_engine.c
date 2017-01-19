@@ -2255,17 +2255,28 @@ scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
 }
 
 
-void update_timestamps(char *ptr, size_t size) {
+static void override_timestamp(char *ptr, size_t size, unsigned long long ts) {
+    assert(size >= (sizeof(MESSAGE_MARKER_TOKEN)-1) + 16 + 1);
+    assert(ptr[0] == MESSAGE_MARKER_TOKEN[0]);
+    ptr += sizeof(MESSAGE_MARKER_TOKEN) - 1;
+    snprintf(ptr, size, "%016llx", ts);
+    ptr[16] = '!';
+}
+
+static void update_timestamps(char *ptr, size_t size) {
     struct timeval tp;
     gettimeofday(&tp, NULL);
     unsigned long long ts = (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec;
     char *end = ptr + size;
     while((ptr = memmem(ptr, end - ptr, MESSAGE_MARKER_TOKEN, sizeof(MESSAGE_MARKER_TOKEN) - 1))) {
-        if(end - ptr < 15 + 16 + 1) break;
-        ptr += sizeof(MESSAGE_MARKER_TOKEN) - 1;
-        sprintf(ptr, "%016llx", ts);
-        ptr += 16;
-        *ptr++ = '!';
+        size_t remaining = end - ptr;
+        const size_t full_marker = (sizeof(MESSAGE_MARKER_TOKEN)-1) + 16 + 1;
+        if(remaining >= full_marker) {
+            override_timestamp(ptr, remaining, ts);
+            ptr += full_marker;
+        } else {
+            break;
+        }
     }
 }
 
@@ -2330,7 +2341,19 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
     }
 
     if(largs->params.message_marker) {
-        update_timestamps((char*) *position, *available_body);
+        if(conn->data.marker_token_ptr >= *position) {
+            /* Short-circquit search: we know where marker is, directly. */
+            struct timeval tp;
+            gettimeofday(&tp, NULL);
+            unsigned long long ts =
+                (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec;
+            size_t offset = conn->data.marker_token_ptr - *position;
+            override_timestamp(conn->data.marker_token_ptr,
+                               (*available_body) - offset, ts);
+        } else {
+            /* Do a string search to find our markers and update timestamps */
+            update_timestamps((char *)*position, *available_body);
+        }
     }
 }
 

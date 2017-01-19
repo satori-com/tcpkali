@@ -105,6 +105,7 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
     size_t payload_size = data->total_size - data->once_size;
 
     assert(!(data->flags & TDS_FLAG_REPLICATED));
+    assert(data->marker_token_ptr == 0);    /* Can't be replicated */
 
     if(!payload_size) {
         /* Can't blow up an empty buffer. */
@@ -327,6 +328,31 @@ message_collection_has(const struct message_collection *mc, enum tk_expr_type t)
     return 0;
 }
 
+typedef struct {
+    expr_callback_f *original_callback;
+    void *original_key;
+    void **marker_ptr_ptr;
+    int multiple_message_markers;
+} callback_wrapper_key_t;
+static ssize_t
+callback_wrapper(char *buf, size_t size, tk_expr_t *expr, void *key,
+                 long *output_value) {
+    callback_wrapper_key_t *wkey = key;
+
+    if(expr->type == EXPR_MESSAGE_MARKER) {
+        if(!*wkey->marker_ptr_ptr && !wkey->multiple_message_markers) {
+            *wkey->marker_ptr_ptr = buf;
+        } else {
+            /* Use more generic (slow) scanning algorithm later */
+            wkey->multiple_message_markers = 1;
+            *wkey->marker_ptr_ptr = 0;
+        }
+    }
+
+    return wkey->original_callback(buf, size, expr, wkey->original_key,
+                                  output_value);
+}
+
 
 struct transport_data_spec *
 transport_spec_from_message_collection(struct transport_data_spec *out_spec,
@@ -361,6 +387,9 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
         data_spec->total_size = data_spec->once_size;
     }
 
+    callback_wrapper_key_t callback_key = {.original_callback = optional_cb,
+                                           .original_key = expr_cb_key};
+
     enum websocket_side ws_side =
         (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
 
@@ -383,6 +412,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
             }
 
             size_t estimate_ws_frame_size = 0;
+            void *marker_ptr = 0;
 
             if(snip->flags & MSK_EXPRESSION_FOUND) {
                 ssize_t reified_size;
@@ -402,12 +432,25 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                         snip->expr->estimate_size);
                     tptr += estimate_ws_frame_size;
                 }
+                callback_key.marker_ptr_ptr = &marker_ptr;
                 reified_size = eval_expression(
                     (char **)&tptr,
                     data_spec->allocated_size
                         - (data_spec->total_size + estimate_ws_frame_size),
-                    snip->expr, optional_cb, expr_cb_key, 0,
+                    snip->expr, callback_wrapper, &callback_key, 0,
                     (tws_side == TWS_SIDE_CLIENT));
+                if(callback_key.multiple_message_markers) {
+                    data_spec->marker_token_ptr = 0;
+                    marker_ptr = 0;
+                } else if(marker_ptr) {
+                    if(data_spec->marker_token_ptr) {
+                        callback_key.multiple_message_markers = 1;
+                        data_spec->marker_token_ptr = 0;
+                        marker_ptr = 0;
+                    } else {
+                        data_spec->marker_token_ptr = marker_ptr;
+                    }
+                }
                 assert(reified_size >= 0);
                 data = 0;
                 size = reified_size;
@@ -451,6 +494,10 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                                         + data_spec->total_size
                                         + estimate_ws_frame_size,
                                     size);
+                            if(marker_ptr) {
+                                marker_ptr -= estimate_ws_frame_size - ws_frame_size;
+                                data_spec->marker_token_ptr = marker_ptr;
+                            }
                         }
                     } else {
                         ws_frame_size = websocket_frame_header(
