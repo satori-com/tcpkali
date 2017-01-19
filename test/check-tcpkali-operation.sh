@@ -77,3 +77,4 @@ for size_k in 63 65 1000; do
 done
 rm_testfile
 
+check 24 "Packet rate estimate: (19|20)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
