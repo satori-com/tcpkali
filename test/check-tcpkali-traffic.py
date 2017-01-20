@@ -326,7 +326,7 @@ def main():
                not arcv.sockopt_works)
         assert((asnd.total_received_bytes < 1000 and
                 asnd.total_sent_bytes > trans_min and
-                asnd.total_sent_bytes < 2 * trans_max) or
+                asnd.total_sent_bytes < 3 * trans_max) or
                not asnd.sockopt_works)
 
     print("FINISHED")
