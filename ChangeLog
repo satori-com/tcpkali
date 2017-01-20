@@ -1,4 +1,7 @@
 
+1.1.1:  2017-Jan-20
+    * Release distribution fix.
+
 1.1:    2017-Jan-19
     * Support rsv1, rsv2, rsv3 reserved flags in in \{ws.* <reserved-flag>}.
     * Fix statsd output for connections.opened.
