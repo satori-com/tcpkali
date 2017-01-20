@@ -144,6 +144,7 @@ AC_CONFIG_FILES([Makefile
                  deps/libstatsd/Makefile
                  deps/libstatsd/man/Makefile
                  deps/libstatsd/src/Makefile
+                 deps/pcg-c-basic/Makefile
                  deps/HdrHistogram/Makefile
                  deps/boyer-moore-horspool/Makefile
                 ])
