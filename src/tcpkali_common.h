@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2015, 2016, 2017  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -43,7 +43,7 @@ typedef enum {
     SLT_MARKER = (1 << 2)
 } statsd_report_latency_types;
 
-#define MESSAGE_MARKER_TOKEN "TCPKaliM$gMARKR"
+#define MESSAGE_MARKER_TOKEN "TCPKaliMsgTS-"
 
 /*
  * Snapshot of the current latency.

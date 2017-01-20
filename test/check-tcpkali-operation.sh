@@ -27,7 +27,7 @@ check() {
     fi
 
     PORT=$((PORT+1))
-    local rest_opts="-T1s --source-ip 127.1 -l${PORT} 127.1:${PORT}"
+    local rest_opts="-T1s --source-ip 127.1 -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
     "$@" ${rest_opts} 2>&1 | egrep "$togrep"
     PORT=$((PORT+1))
