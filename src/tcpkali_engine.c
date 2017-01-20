@@ -1281,9 +1281,9 @@ expr_callback(char *buf, size_t size, tk_expr_t *expr, void *key, long *v) {
         break;
     case EXPR_MESSAGE_MARKER: {
 #define MZEROS   "0000000000000000"
-        const size_t tok_size = sizeof(MESSAGE_MARKER_TOKEN MZEROS "!")-1;
+        const size_t tok_size = sizeof(MESSAGE_MARKER_TOKEN MZEROS ".")-1;
         assert(size >= tok_size);
-        memcpy(buf, MESSAGE_MARKER_TOKEN MZEROS "!", tok_size);
+        memcpy(buf, MESSAGE_MARKER_TOKEN MZEROS ".", tok_size);
         s = tok_size;
         if(v) *v = (long)0;
         break;
@@ -2149,10 +2149,9 @@ latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
         case MP_DISENGAGED:
             break;
         case MP_SLURPING_DIGITS:
-            if(*buf != '!') {
+            if(*buf != '.') {
                 conn->latency.marker_parser.collected_digits <<= 4;
                 conn->latency.marker_parser.collected_digits |= nibble(*buf);
-                //printf("Adding nibble %x\n", nibble(*buf));
                 buf++;
                 size--;
                 continue;
@@ -2268,7 +2267,7 @@ static void override_timestamp(char *ptr, size_t size, unsigned long long ts) {
     assert(ptr[0] == MESSAGE_MARKER_TOKEN[0]);
     ptr += sizeof(MESSAGE_MARKER_TOKEN) - 1;
     snprintf(ptr, size, "%016llx", ts);
-    ptr[16] = '!';
+    ptr[16] = '.';
 }
 
 static void update_timestamps(char *ptr, size_t size) {
