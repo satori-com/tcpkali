@@ -1,5 +1,5 @@
 
-1.x:
+1.1:    2017-Jan-19
     * Support rsv1, rsv2, rsv3 reserved flags in in \{ws.* <reserved-flag>}.
     * Fix statsd output for connections.opened.
     * Support for \{raw Expression}, which removes ws framing.
@@ -8,7 +8,7 @@
     * Add ability to specify host in -l [host:]port.
     * \{message.marker} inserts a detectable timestamp to count messages/s.
 
-1.0:  2016-Sep-29
+1.0:    2016-Sep-29
     * Export --latency-connect and --latency-first-bytes to statsd.
     * --latency-percentiles now affect --statsd reporting as well.
     * Added -H, --header to add HTTP headers to WebSocket handshake.
