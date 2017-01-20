@@ -296,7 +296,7 @@ T}
 T{
 message.marker
 T}@T{
-Indicate a message boundary for latency measurement.
+Produce a message timestamp for message rate and latency measurements.
 T}
 T{
 ws.continuation, ws.ping, ws.pong, ws.text, ws.binary
@@ -367,6 +367,16 @@ The option takes a comma\-separated list of floating point values.
 Mean and maximum values can be reported using
 \f[B]\-\-latency\-percentiles 50,100\f[].
 Default is \f[C]95,99,99.5\f[].
+.RS
+.RE
+.TP
+.B \-\-message\-marker
+Passive mode detection or message markers.
+Given this option, tcpkali will detect the \\{message.marker} byte
+sequences and will calculate message rate (in messages per second) and
+message arrival latency.
+In the active mode, message rate calculation is implicitly enabled by
+using the \\{message.marker} expression.
 .RS
 .RE
 .SS STATSD OPTIONS

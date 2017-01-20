@@ -174,7 +174,8 @@ Expression          Description
 
  re                 Randomized expression, for each message.
 
- message.marker     Indicate a message boundary for latency measurement.
+ message.marker     Produce a message timestamp for message rate and latency
+                    measurements.
 
  ws.continuation,   Specify WebSocket frame types.
  ws.ping, ws.pong,  Refer to RFC 6455, section 11.8.
@@ -224,6 +225,13 @@ and the time the latency marker is observed in the downstream traffic
     The option takes a comma-separated list of floating point values.
     Mean and maximum values can be reported using **--latency-percentiles 50,100**.
     Default is `95,99,99.5`.
+
+--message-marker
+:   Passive mode detection or message markers. Given this option, tcpkali
+    will detect the \\{message.marker} byte sequences and will calculate
+    message rate (in messages per second) and message arrival latency.
+    In the active mode, message rate calculation is implicitly enabled by
+    using the \\{message.marker} expression.
 
 ## STATSD OPTIONS
 
