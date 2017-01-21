@@ -15,6 +15,16 @@ if [ -n "$1" ]; then
     echo "Selected test ${use_test_no}"
 fi
 
+TMPFILE=/tmp/check-tcpkali-output.$$
+rmtmp() {
+    echo "Last tcpkali output lines:"
+    tail -50 ${TMPFILE}
+    echo "Removing temporary file ${TMPFILE}."
+    rm -f ${TMPFILE}
+}
+trap rmtmp EXIT
+touch ${TMPFILE}
+
 PORT=1230
 
 check() {
@@ -29,13 +39,14 @@ check() {
     PORT=$((PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    "$@" ${rest_opts} 2>&1 | egrep "$togrep"
+    > ${TMPFILE}
+    "$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep "$togrep"
     PORT=$((PORT+1))
     local rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    "$@" ${rest_opts} 2>&1 | egrep "$togrep"
+    > ${TMPFILE}
+    "$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep "$togrep"
 }
-
 
 check 1 "." ${TCPKALI} --connections=20 --duration=1
 check 2 "." ${TCPKALI} --connections=10 --duration=1 -m Z
@@ -79,3 +90,5 @@ rm_testfile
 
 check 24 "Packet rate estimate: (19|20)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
 check 25 "Packet rate estimate: (19|20)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
+
+trap "rm -f ${TMPFILE}" EXIT
