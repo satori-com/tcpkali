@@ -360,7 +360,8 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                                        expr_callback_f optional_cb,
                                        void *expr_cb_key,
                                        enum transport_websocket_side tws_side,
-                                       enum transport_conversion tconv) {
+                                       enum transport_conversion tconv,
+                                       pcg32_random_t *rng) {
     /*
      * If expressions found we can not create a transport data specification
      * from this collection directly. Need to go through expression evaluator.
@@ -438,7 +439,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
                     data_spec->allocated_size
                         - (data_spec->total_size + estimate_ws_frame_size),
                     snip->expr, callback_wrapper, &callback_key, 0,
-                    (tws_side == TWS_SIDE_CLIENT));
+                    (tws_side == TWS_SIDE_CLIENT), rng);
                 if(callback_key.multiple_message_markers) {
                     data_spec->marker_token_ptr = 0;
                     marker_ptr = 0;

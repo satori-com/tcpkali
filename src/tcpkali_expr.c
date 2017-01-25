@@ -115,7 +115,7 @@ parse_expression(tk_expr_t **expr_p, const char *buf, size_t size, int debug) {
 
 ssize_t
 eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
-                void *key, long *value, int client_mode) {
+                void *key, long *value, int client_mode, pcg32_random_t *rng) {
     char *buf;
 
     if(!*buf_p) {
@@ -133,7 +133,7 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
         return expr->u.data.size;
     case EXPR_RAW:
         return eval_expression(buf_p, size, expr->u.raw.expr, cb, key, value,
-                               client_mode);
+                               client_mode, rng);
     case EXPR_WS_FRAME:
         if(size < expr->estimate_size) {
             return -1;
@@ -150,7 +150,7 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
     case EXPR_MODULO: {
         long v = 0;
         (void)eval_expression(&buf, size, expr->u.modulo.expr, cb, key, &v,
-                              client_mode);
+                              client_mode, rng);
         v %= expr->u.modulo.modulo_value;
         ssize_t s = snprintf(buf, size, "%ld", v);
         if(s < 0 || s > (ssize_t)size) return -1;
@@ -163,12 +163,12 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
            > size)
             return -1;
         ssize_t size1 = eval_expression(&buf, size, expr->u.concat.expr[0], cb,
-                                        key, value, client_mode);
+                                        key, value, client_mode, rng);
         if(size1 < 0) return -1;
         char *buf2 = buf + size1;
         ssize_t size2 =
             eval_expression(&buf2, size - size1, expr->u.concat.expr[1], cb,
-                            key, value, client_mode);
+                            key, value, client_mode, rng);
         if(size1 < 0) return -1;
         return size1 + size2;
     }
@@ -177,7 +177,7 @@ eval_expression(char **buf_p, size_t size, tk_expr_t *expr, expr_callback_f cb,
     case EXPR_MESSAGE_MARKER:
         return cb(buf, size, expr, key, value);
     case EXPR_REGEX:
-        return tregex_eval(expr->u.regex.re, buf, size);
+        return tregex_eval_rng(expr->u.regex.re, buf, size, rng);
     }
 
     return -1;

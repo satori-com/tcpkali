@@ -60,8 +60,8 @@ size_t tregex_max_size(tregex *);
  * Returns -1 if the expression can't fit into the provided buffer in full.
  * Returns the actual size of the data put into the buffer otherwise.
  */
-ssize_t tregex_eval_rng(tregex *, char *buf, size_t size, pcg32_random_t *rng);
 ssize_t tregex_eval(tregex *, char *buf, size_t size);
+ssize_t tregex_eval_rng(tregex *, char *buf, size_t size, pcg32_random_t *);
 
 void tregex_free(tregex *);
 

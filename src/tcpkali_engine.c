@@ -358,10 +358,12 @@ engine_start(struct engine_params params) {
     enum transport_websocket_side tws_side;
     for(tws_side = TWS_SIDE_CLIENT; tws_side <= TWS_SIDE_SERVER; tws_side++) {
         assert(params.data_templates[tws_side] == NULL);
+        pcg32_random_t rng;
+        pcg32_srandom_r(&rng, random(), tws_side);
         params.data_templates[tws_side] =
             transport_spec_from_message_collection(
                 0, &params.message_collection, 0, 0, tws_side,
-                TS_CONVERSION_INITIAL);
+                TS_CONVERSION_INITIAL, &rng);
         assert(params.data_templates[tws_side]
                || params.message_collection.most_dynamic_expression
                       != DS_GLOBAL_FIXED);
@@ -1322,7 +1324,7 @@ explode_data_template(struct message_collection *mc,
 
         struct transport_data_spec *new_data_ptr;
         new_data_ptr = transport_spec_from_message_collection(
-            out_data, mc, expr_callback, conn, tws_side, TS_CONVERSION_INITIAL);
+            out_data, mc, expr_callback, conn, tws_side, TS_CONVERSION_INITIAL, &largs->rng);
         assert(new_data_ptr == out_data);
 
         switch(mc->most_dynamic_expression) {
@@ -1344,24 +1346,24 @@ static void
 explode_data_template_override(struct message_collection *mc,
                                enum transport_websocket_side tws_side,
                                struct transport_data_spec *out_data,
-                               struct loop_arguments *largs UNUSED,
+                               struct loop_arguments *largs,
                                struct connection *conn) {
     assert(mc->most_dynamic_expression == DS_PER_MESSAGE);
 
     struct transport_data_spec *new_data_ptr;
     new_data_ptr = transport_spec_from_message_collection(
         out_data, mc, expr_callback, conn, tws_side,
-        TS_CONVERSION_OVERRIDE_MESSAGES);
+        TS_CONVERSION_OVERRIDE_MESSAGES, &largs->rng);
     assert(new_data_ptr == out_data);
 }
 
 static void
 explode_string_expression(char **buf_p, size_t *size, tk_expr_t *expr,
-                          struct loop_arguments *largs UNUSED,
+                          struct loop_arguments *largs,
                           struct connection *conn) {
     *buf_p = 0;
     ssize_t s = eval_expression(buf_p, 0, expr, expr_callback, conn, 0,
-                                conn->conn_type == CONN_OUTGOING);
+                                conn->conn_type == CONN_OUTGOING, &largs->rng);
     assert(s >= 0);
     *size = s;
 }

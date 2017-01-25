@@ -101,7 +101,7 @@ typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
  * Returns the size of the data placed into *buf_p otherwise.
  */
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
-                        void *key, long *output_value, int client_mode);
+                        void *key, long *output_value, int client_mode, pcg32_random_t *rng);
 
 /*
  * Concatenate expressions. One or both expressions can be NULL.

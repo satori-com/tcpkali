@@ -157,7 +157,8 @@ enum transport_conversion {
 struct transport_data_spec *transport_spec_from_message_collection(
     struct transport_data_spec *out_spec, struct message_collection *,
     expr_callback_f optional_cb, void *expr_cb_key,
-    enum transport_websocket_side, enum transport_conversion);
+    enum transport_websocket_side, enum transport_conversion,
+    pcg32_random_t *rng);
 
 /*
  * To be able to efficiently transfer small payloads, we replicate
