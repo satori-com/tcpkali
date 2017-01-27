@@ -893,7 +893,7 @@ main(int argc, char **argv) {
         case NSET_UNSET:
             fprintf(stderr,
                     "NOTE: --write-combine=off presumes --nagle=off.\n");
-            engine_params.nagle_setting = NSET_NODELAY_OFF;
+            engine_params.nagle_setting = NSET_NODELAY_ON;
             break;
         case NSET_NODELAY_OFF: /* --nagle=on */
             warning(
