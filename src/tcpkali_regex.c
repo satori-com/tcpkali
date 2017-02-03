@@ -1,7 +1,9 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
+#include <pcg_basic.h>
 
 #include "tcpkali_common.h"
 #include "tcpkali_regex.h"
@@ -15,6 +17,9 @@ struct tregex {
         TRegexAlternative,
         TRegexRepeat
     } kind;
+    struct {
+        size_t bits;
+    } randomness;
     size_t min_size;
     size_t max_size;
     union {
@@ -81,6 +86,7 @@ tregex_string(const char *str, ssize_t len) {
     if(len < 0) len = strlen(str);
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexChars;
+    re->randomness.bits = 0;
     re->min_size = len;
     re->max_size = len;
     re->chars.data = calloc(1, len + 1);
@@ -97,7 +103,7 @@ tregex_join(tregex *re, tregex *rhs) {
             memcpy(&re->sequence.piece[re->sequence.pieces],
                    &rhs->sequence.piece[0],
                    rhs->sequence.pieces * sizeof(re->sequence.piece[0]));
-            re->sequence.pieces += rhs->sequence.pieces;
+            re->randomness.bits += rhs->randomness.bits;
             rhs->sequence.pieces = 0;
             re->min_size += rhs->min_size;
             re->max_size += rhs->max_size;
@@ -111,6 +117,7 @@ tregex_join(tregex *re, tregex *rhs) {
     if(re->kind == TRegexSequence && rhs->kind != TRegexSequence) {
         if(re->sequence.pieces < TREGEX_ELEMENTS) {
             re->sequence.piece[re->sequence.pieces++] = rhs;
+            re->randomness.bits += rhs->randomness.bits;
             re->min_size += rhs->min_size;
             re->max_size += rhs->max_size;
             return re;
@@ -131,10 +138,16 @@ tregex_join(tregex *re, tregex *rhs) {
     assert(!"Unreachable");
 }
 
+static size_t bits_in(size_t n) {
+    if(n) return floor(log2(n) + 1);
+    return 0;
+}
+
 tregex *
 tregex_range(unsigned char from, unsigned char to) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexClass;
+    re->randomness.bits = bits_in(to-from);
     re->min_size = 1;
     re->max_size = 1;
     for(unsigned i = from; i <= to; i++) {
@@ -160,6 +173,7 @@ tregex_range_from_string(const char *str, ssize_t len) {
             re->oneof.table[re->oneof.size++] = c;
         }
     }
+    re->randomness.bits = bits_in(re->oneof.size);
     return re;
 }
 
@@ -185,6 +199,7 @@ tregex *
 tregex_alternative(tregex *rhs) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexAlternative;
+    re->randomness.bits = rhs->randomness.bits;
     re->min_size = rhs->min_size;
     re->max_size = rhs->max_size;
     re->alternative.branch[0] = rhs;
@@ -196,7 +211,10 @@ tregex *
 tregex_alternative_add(tregex *re, tregex *rhs) {
     assert(re->kind == TRegexAlternative);
     if(re->alternative.branches < TREGEX_ELEMENTS) {
+        re->randomness.bits -= ceil(log2(re->alternative.branches));
         re->alternative.branch[re->alternative.branches++] = rhs;
+        re->randomness.bits += ceil(log2(re->alternative.branches));
+        re->randomness.bits += rhs->randomness.bits;
     } else {
         assert(!"FIXME: Too many alternatives");
         return NULL;
@@ -215,6 +233,8 @@ tregex_repeat(tregex *what, unsigned start, unsigned stop) {
     }
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexRepeat;
+    re->randomness.bits = ceil(log2(1 + stop - start));
+    re->randomness.bits += what->randomness.bits * stop;
     re->repeat.what = what;
     re->repeat.minimum = start;
     re->repeat.range = 1 + stop - start;
@@ -247,16 +267,29 @@ tregex_free(tregex *re) {
     }
 }
 
-/* Slow-ish. Avoid using in performance-critical code. */
-ssize_t
-tregex_eval(tregex *re, char *buf, size_t size) {
-    pcg32_random_t rng;
-    pcg32_srandom_r(&rng, random(), 0);
-    return tregex_eval_rng(re, buf, size, &rng);
+struct randomness_source {
+    uint8_t *randomness;
+    size_t used;
+    size_t bits;
+};
+
+/*
+ * Get some randomness bits.
+ */
+static size_t rs_get(struct randomness_source *rs, size_t bound) {
+    assert(bound >= 1);
+    if(bound == 1) return 0;
+    size_t bits = ceil(log2(bound));
+    //printf("rs_get(bound=%zu); bits = %zu\n", bound, bits);
+    assert(rs->bits - rs->used >= bits);
+    size_t shift = (rs->used & 7);
+    uint32_t r = (*(uint32_t *)(&rs->randomness[rs->used/8])) << shift;
+    rs->used += bits;
+    return (r % bound);
 }
 
-ssize_t
-tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
+static ssize_t
+tregex_eval_rs(tregex *re, char *buf, size_t size, struct randomness_source *rs) {
     const char *bold = buf;
     const char *bend = buf + size;
 
@@ -272,24 +305,24 @@ tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
     case TRegexClass:
         assert(re->oneof.size >= 1);
         if(bend - buf) {
-            *buf++ = re->oneof.table[pcg32_boundedrand_r(rng, re->oneof.size)];
+            *buf++ = re->oneof.table[rs_get(rs, re->oneof.size)];
         }
         break;
     case TRegexRepeat: {
         size_t cycles = re->repeat.minimum
-                        + (re->repeat.range ? pcg32_boundedrand_r(rng, re->repeat.range) : 0);
+                        + (re->repeat.range ? rs_get(rs, re->repeat.range) : 0);
         for(unsigned i = 0; i < cycles; i++) {
-            buf += tregex_eval_rng(re->repeat.what, buf, bend - buf, rng);
+            buf += tregex_eval_rs(re->repeat.what, buf, bend - buf, rs);
         }
     } break;
     case TRegexSequence:
         for(size_t i = 0; i < re->sequence.pieces; i++) {
-            buf += tregex_eval_rng(re->sequence.piece[i], buf, bend - buf, rng);
+            buf += tregex_eval_rs(re->sequence.piece[i], buf, bend - buf, rs);
         }
         break;
     case TRegexAlternative:
-        buf += tregex_eval_rng(
-            re->alternative.branch[pcg32_boundedrand_r(rng, re->alternative.branches)], buf, bend - buf, rng);
+        buf += tregex_eval_rs(
+            re->alternative.branch[rs_get(rs, re->alternative.branches)], buf, bend - buf, rs);
         break;
     }
 
@@ -297,6 +330,31 @@ tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
     if(bold > buf) *buf = '\0';
 
     return (buf - bold);
+}
+
+ssize_t
+tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
+    size_t bytes = ((re->randomness.bits | 63) + 1) / 8;
+    assert((bytes & 3) == 0);   /* Aligned to 8 bytes */
+    uint8_t randomness_buffer[bytes];
+    for(size_t n = 0; n < sizeof(randomness_buffer); n += 4) {
+        *(uint32_t *)(&randomness_buffer[n]) = pcg32_random_r(rng);
+    }
+
+    struct randomness_source rs;
+    rs.randomness = randomness_buffer;
+    rs.bits = re->randomness.bits;
+    rs.used = 0;
+    //printf("Evaluating with randomness bits %zu (%zu bytes)\n", rs.bits, bytes);
+    return tregex_eval_rs(re, buf, size, &rs);
+}
+
+/* Slow-ish. Avoid using in performance-critical code. */
+ssize_t
+tregex_eval(tregex *re, char *buf, size_t size) {
+    pcg32_random_t rng;
+    pcg32_srandom_r(&rng, random(), 0);
+    return tregex_eval_rng(re, buf, size, &rng);
 }
 
 size_t
