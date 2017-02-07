@@ -108,14 +108,14 @@ int
 tcpkali_terminal_width(void) {
     if(terminal_width_changed) {
         terminal_width_changed = 0;
-        tcpkali_init_terminal();
+        tcpkali_init_terminal(NULL);
     }
     return terminal_width;
 }
 
 void
 tcpkali_disable_cursor(void) {
-    if(tcpkali_init_terminal() == 0) {
+    if(tcpkali_init_terminal(NULL) == 0) {
         /* Disable cursor */
         printf("%s", cap("vi"));
         atexit(enable_cursor);
@@ -123,17 +123,38 @@ tcpkali_disable_cursor(void) {
 }
 
 int
-tcpkali_init_terminal(void) {
+tcpkali_init_terminal(const char **note) {
 #define NOT_INITIALIZED 1   /**/
     static int terminal_init_response = NOT_INITIALIZED;
-    int errret = 0;
+    static char *error_note = NULL;
 
     if(terminal_init_response != NOT_INITIALIZED) {
+        if(note) *note = error_note;
         return terminal_init_response;
     }
 
+    int errret = 0;
     if(setupterm(NULL, 1, &errret) == ERR) {
         terminal_init_response = -1;
+        switch(errret) { /* man setupterm specifies 1,0,-1. */
+        case 1:
+            error_note = "(setupterm() says terminal is hardcopy)";
+            break;
+        case 0:
+            error_note = "(setupterm() failed to find a terminal)";
+            break;
+        case -1:
+        default:
+            if(getenv("TERM")) {
+                error_note = "(setupterm() failed)";
+            } else {
+                error_note = "(no \"TERM\" environment)";
+            }
+            break;
+        }
+        if(note) {
+            *note = error_note;
+        }
         return -1;
     } else {
         setvbuf(stdout, 0, _IONBF, 0);
@@ -183,7 +204,8 @@ tcpkali_init_terminal(void) {
 #else /* !HAVE_LIBNCURSES */
 
 int
-tcpkali_init_terminal(void) {
+tcpkali_init_terminal(const char **note) {
+    if(note) *note = "(not compiled with ncurses library)";
     return -1;
 }
 

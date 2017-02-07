@@ -30,8 +30,9 @@
 /*
  * Initialize smart terminal.
  * RETURN VALUES: -1 for error (dumb terminal), 0 for OK.
+ * In case of -1, the (*note) will contain an explanation note.
  */
-int tcpkali_init_terminal(void);
+int tcpkali_init_terminal(const char **note);
 
 void tcpkali_disable_cursor(void);
 

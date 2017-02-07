@@ -683,8 +683,9 @@ main(int argc, char **argv) {
 
     int print_stats = isatty(1);
     if(print_stats) {
-        if(tcpkali_init_terminal() == -1) {
-            warning("Dumb terminal, expect unglorified output.\n");
+        const char *note = 0;
+        if(tcpkali_init_terminal(&note) == -1) {
+            warning("Dumb terminal %s, expect unglorified output.\n", note);
             print_stats = 0;
         }
     }
@@ -1250,7 +1251,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
 static void
 usage_short(char *argv0) {
     if(isatty(fileno(stdout))) {
-        tcpkali_init_terminal();
+        tcpkali_init_terminal(NULL);
     }
 
     fprintf(stdout, "Usage: %s [OPTIONS] [-l <port>] [<host:port>...]\n",
