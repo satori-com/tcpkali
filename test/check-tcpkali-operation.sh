@@ -17,9 +17,17 @@ fi
 
 TMPFILE=/tmp/check-tcpkali-output.$$
 rmtmp() {
-    echo "Last tcpkali output lines:"
-    tail -50 ${TMPFILE}
-    echo "Removing temporary file ${TMPFILE}."
+    echo "First tcpkali output lines:"
+    local lines=$(wc -l ${TMPFILE} | awk '{print $1}')
+    if [ $lines -gt 150 ]; then
+        head -50 ${TMPFILE}
+        echo "Last tcpkali output lines:"
+        tail -50 ${TMPFILE}
+        echo "Removing temporary file ${TMPFILE}."
+    else
+        echo "Full tcpkali output:"
+        cat ${TMPFILE}
+    fi
     rm -f ${TMPFILE}
 }
 trap rmtmp EXIT
