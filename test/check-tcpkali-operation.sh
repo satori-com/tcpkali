@@ -47,13 +47,15 @@ check() {
     PORT=$((PORT+1))
     local rest_opts="-T1s --source-ip 127.1 -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    > ${TMPFILE}
-    "$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep "$togrep"
+    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" > ${TMPFILE}
+    local out=$("$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep -c "$togrep")
+    [ $out -ne 0 ] || exit 1
     PORT=$((PORT+1))
     local rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    > ${TMPFILE}
-    "$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep "$togrep"
+    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" > ${TMPFILE}
+    local out=$("$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep -c "$togrep")
+    [ $out -ne 0 ] || exit 1
 }
 
 check 1 "." ${TCPKALI} -vv --connections=20 --duration=1
