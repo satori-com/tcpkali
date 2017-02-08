@@ -1,14 +1,12 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
+set -o pipefail
+set -e
 
 if [ -z "${TCPKALI}" ]; then
     echo "WARNING: Use \`make check\` instead of running $0 directly."
     TCPKALI=../src/tcpkali
 fi
-
-if [ -z "${CONTINUOUS_INTEGRATION}" ]; then
-    set -o pipefail
-fi
-set -e
 
 use_test_no="$1"
 if [ -n "$1" ]; then
