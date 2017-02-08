@@ -1,14 +1,15 @@
 #!/bin/sh
 
-if [ -z "${CONTINUOUS_INTEGRATION}" ]; then
-    set -o pipefail
-fi
-set -e
-
 if [ -z "${TCPKALI}" ]; then
     echo "WARNING: Use \`make check\` instead of running $0 directly."
     TCPKALI=../src/tcpkali
 fi
+
+if [ -z "${CONTINUOUS_INTEGRATION}" ]; then
+    set -o pipefail
+fi
+set -o pipefail
+set -e
 
 use_test_no="$1"
 if [ -n "$1" ]; then
@@ -45,16 +46,10 @@ check() {
     fi
 
     PORT=$((PORT+1))
-    local rest_opts="-T1s --source-ip 127.1 -l127.1:${PORT} 127.1:${PORT}"
-    echo "Test ${testno}.srcip: $* ${rest_opts}" >&2
-    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" > ${TMPFILE}
-    local out=$("$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep -c "$togrep")
-    [ $out -ne 0 ] || exit 1
-    PORT=$((PORT+1))
     local rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
-    echo "Test ${testno}.autoip: $* ${rest_opts}" >&2
-    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" > ${TMPFILE}
-    local out=$("$@" ${rest_opts} 2>&1 | tee ${TMPFILE} | egrep -c "$togrep")
+    echo "Test ${testno}.autoip: $* ${rest_opts}" | tee ${TMPFILE} >&2
+    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" >> ${TMPFILE}
+    local out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | egrep -c "$togrep")
     [ $out -ne 0 ] || exit 1
 }
 
