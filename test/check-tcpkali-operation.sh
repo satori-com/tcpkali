@@ -8,7 +8,6 @@ fi
 if [ -z "${CONTINUOUS_INTEGRATION}" ]; then
     set -o pipefail
 fi
-set -o pipefail
 set -e
 
 use_test_no="$1"
