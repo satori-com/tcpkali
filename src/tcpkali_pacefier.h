@@ -29,11 +29,13 @@
 
 struct pacefier {
     double previous_ts;
+    double events_per_second;
 };
 
 static inline void
-pacefier_init(struct pacefier *p, double now) {
+pacefier_init(struct pacefier *p, double events_per_second, double now) {
     p->previous_ts = now;
+    p->events_per_second = events_per_second;
 }
 
 /*
@@ -41,9 +43,9 @@ pacefier_init(struct pacefier *p, double now) {
  * forward a little.
  */
 static inline size_t
-pacefier_allow(struct pacefier *p, double events_per_second, double now) {
+pacefier_allow(struct pacefier *p, double now) {
     double elapsed = now - p->previous_ts;
-    ssize_t move_events = elapsed * events_per_second; /* Implicit rounding */
+    ssize_t move_events = elapsed * p->events_per_second; /* Implicit rounding */
     if(move_events > 0)
         return move_events;
     else
@@ -54,14 +56,14 @@ pacefier_allow(struct pacefier *p, double events_per_second, double now) {
  * Get the delay until the time we're allowed to move (need_events).
  */
 static inline double
-pacefier_when_allowed(struct pacefier *p, double events_per_second, double now,
+pacefier_when_allowed(struct pacefier *p, double now,
                       size_t need_events) {
     double elapsed = now - p->previous_ts;
-    double move_events = elapsed * events_per_second;
+    double move_events = elapsed * p->events_per_second;
     if(move_events >= need_events) {
         return 0.0;
     } else {
-        return (need_events - move_events) / events_per_second;
+        return (need_events - move_events) / p->events_per_second;
     }
 }
 
@@ -69,20 +71,27 @@ pacefier_when_allowed(struct pacefier *p, double events_per_second, double now,
  * Record the actually moved events.
  */
 static inline void
-pacefier_moved(struct pacefier *p, double events_per_second, size_t moved,
-               double now) {
+pacefier_moved(struct pacefier *p, size_t moved, double now) {
     /*
      * The number of allowed events is almost always less
      * than what's actually computed.
      */
-    p->previous_ts += moved / events_per_second;
+    p->previous_ts += moved / p->events_per_second;
     /*
      * If the process cannot keep up with the pace, it will result in
      * previous_ts shifting in the past more and more with time.
-     * We don't allow more than 5 seconds skew to prevent too sudden
+     * We don't allow more than 2/Rate seconds skew to prevent too sudden
      * bursts of events and to avoid overfilling the integers.
      */
-    if((now - p->previous_ts) > 5) p->previous_ts = now - 5;
+    double wiggle_seconds;
+    if(p->events_per_second > 1.0) {
+        wiggle_seconds = 2.0;
+    } else {
+        wiggle_seconds = 2.0 / p->events_per_second;
+    }
+    if((now - p->previous_ts) > wiggle_seconds) {
+        p->previous_ts = now - wiggle_seconds;
+    }
 }
 
 

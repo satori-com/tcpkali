@@ -261,7 +261,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     if(timeout_us > 250000) timeout_us = 250000;
 
     struct pacefier keepup_pace;
-    pacefier_init(&keepup_pace, now);
+    pacefier_init(&keepup_pace, args->connect_rate, now);
 
     ssize_t conn_deficit = 1; /* Assume connections still have to be est. */
 
@@ -287,7 +287,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
                                     &conns_counter);
         conn_deficit = args->max_connections - (connecting + conns_out);
 
-        size_t allowed = pacefier_allow(&keepup_pace, args->connect_rate, now);
+        size_t allowed = pacefier_allow(&keepup_pace, now);
         size_t to_start = allowed;
         if(conn_deficit <= 0) {
             to_start = 0;
@@ -296,7 +296,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
             to_start = conn_deficit;
         }
         args->connections_opened_tally += engine_initiate_new_connections(args->eng, to_start);
-        pacefier_moved(&keepup_pace, args->connect_rate, allowed, now);
+        pacefier_moved(&keepup_pace, allowed, now);
 
         /* Do not update/print checkpoint stats too often. */
         if(!every(0.25, now, &args->checkpoint.last_update)) continue;

@@ -992,8 +992,8 @@ single_engine_loop_thread(void *argp) {
             struct connection *conn = calloc(1, sizeof(*conn));
             conn->conn_type = CONN_ACCEPTOR;
             /* avoid TAILQ_INSERT_TAIL(&largs->open_conns, conn, hook); */
-            pacefier_init(&conn->send_pace, tk_now(TK_A));
-            pacefier_init(&conn->recv_pace, tk_now(TK_A));
+            pacefier_init(&conn->send_pace, -1.0, tk_now(TK_A));
+            pacefier_init(&conn->recv_pace, -1.0, tk_now(TK_A));
 #ifdef USE_LIBUV
             uv_poll_init(TK_A_ & conn->watcher, lsock);
             uv_poll_start(&conn->watcher, TK_READ | TK_WRITE, accept_cb_uv);
@@ -1630,8 +1630,8 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
      * Set up downstream bandwidth regardless of the type of connection.
      */
 
-    pacefier_init(&conn->recv_pace, now);
     conn->recv_limit = compute_bandwidth_limit(largs->params.channel_recv_rate);
+    pacefier_init(&conn->recv_pace, conn->recv_limit.bytes_per_second, now);
 
     /*
      * If we're going to send data, establish bandwidth control for upstream.
@@ -1640,7 +1640,6 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
     int active_socket = conn_type == CONN_OUTGOING
                         || (largs->params.listen_mode & _LMODE_SND_MASK);
     if(active_socket || largs->params.message_marker) {
-        pacefier_init(&conn->send_pace, now);
 
         enum transport_websocket_side tws_side =
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
@@ -1649,6 +1648,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                               &conn->data, largs, conn);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
             largs->params.channel_send_rate, conn->data.single_message_size);
+        pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
         if(largs->params.message_stop_expr) {
             conn->sbmh_stop_ctx = malloc(SBMH_SIZE(largs->params.message_stop_expr->estimate_size));
             assert(conn->sbmh_stop_ctx);
@@ -1920,7 +1920,7 @@ static enum lb_return_value {
     }
 
     size_t smallest_block_to_move = limit.minimal_move_size;
-    size_t allowed_to_move = pacefier_allow(pace, bw, tk_now(TK_A));
+    size_t allowed_to_move = pacefier_allow(pace, tk_now(TK_A));
 
     if(allowed_to_move < *suggested_move_size) {
         double delay;
@@ -1929,7 +1929,7 @@ static enum lb_return_value {
             if(allowed_to_move < smallest_block_to_move) {
                 /*   allowed     smallest|suggested
                    |------^-----------^-------^-------> */
-                delay = pacefier_when_allowed(pace, bw, tk_now(TK_A), 1460);
+                delay = pacefier_when_allowed(pace, tk_now(TK_A), 1460);
                 *suggested_move_size = 0;
                 rvalue = LB_GO_SLEEP;
             } else {
@@ -2493,9 +2493,7 @@ connection_cb(TK_P_ tk_io *w, int revents) {
                 scan_incoming_bytes(TK_A_ conn, largs->scratch_recv_buf, rd);
 
                 if(record_moved_data) {
-                    pacefier_moved(&conn->recv_pace,
-                                   conn->recv_limit.bytes_per_second, rd,
-                                   tk_now(TK_A));
+                    pacefier_moved(&conn->recv_pace, rd, tk_now(TK_A));
                 }
                 break;
             }
@@ -2572,9 +2570,7 @@ process_WRITE:
                 conn->traffic_ongoing.num_writes++;
                 conn->traffic_ongoing.bytes_sent += wrote;
                 if(record_moved)
-                    pacefier_moved(&conn->send_pace,
-                                   conn->send_limit.bytes_per_second, wrote,
-                                   tk_now(TK_A));
+                    pacefier_moved(&conn->send_pace, wrote, tk_now(TK_A));
                 if(largs->params.dump_setting & DS_DUMP_ALL_OUT
                    || ((largs->params.dump_setting & DS_DUMP_ONE_OUT)
                        && largs->dump_connect_fd == tk_fd(w))) {
