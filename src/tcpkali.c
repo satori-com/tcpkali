@@ -339,9 +339,12 @@ main(int argc, char **argv) {
             conf.test_duration = parse_with_multipliers(
                 option, optarg, s_multiplier,
                 sizeof(s_multiplier) / sizeof(s_multiplier[0]));
-            if(conf.test_duration <= 0) {
+            if(conf.test_duration == 0 || conf.test_duration < -1) {
                 fprintf(stderr, "Expected positive --duration=%s\n", optarg);
                 exit(EX_USAGE);
+            }
+            if(conf.test_duration == -1) {
+                conf.test_duration = INFINITY;
             }
             break;
         case 'e':
