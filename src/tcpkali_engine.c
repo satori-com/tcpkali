@@ -2265,10 +2265,11 @@ scan_incoming_bytes(TK_P_ struct connection *conn, char *buf, size_t size) {
 
 
 static void override_timestamp(char *ptr, size_t size, unsigned long long ts) {
-    assert(size >= (sizeof(MESSAGE_MARKER_TOKEN)-1) + 16 + 1);
+    const size_t mmt_len = sizeof(MESSAGE_MARKER_TOKEN) - 1;
+    assert(size >= mmt_len + 16 + 1);
     assert(ptr[0] == MESSAGE_MARKER_TOKEN[0]);
-    ptr += sizeof(MESSAGE_MARKER_TOKEN) - 1;
-    snprintf(ptr, size, "%016llx", ts);
+    ptr += mmt_len;
+    snprintf(ptr, size - mmt_len, "%016llx", ts);
     ptr[16] = '.';
 }
 
@@ -2350,15 +2351,14 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
     }
 
     if(largs->params.message_marker) {
-        if(conn->data.marker_token_ptr >= *position) {
+        if(*position < conn->data.marker_token_ptr) {
             /* Short-circquit search: we know where marker is, directly. */
             struct timeval tp;
             gettimeofday(&tp, NULL);
             unsigned long long ts =
                 (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec;
-            size_t offset = conn->data.marker_token_ptr - *position;
             override_timestamp(conn->data.marker_token_ptr,
-                               (*available_body) - offset, ts);
+                               (*available_body), ts);
         } else {
             /* Do a string search to find our markers and update timestamps */
             update_timestamps((char *)*position, *available_body);
