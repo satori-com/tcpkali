@@ -1,6 +1,7 @@
 
 1.1.3:
     * Fix for \{message.marker} in presence of -1.
+    * Switch to hexadecimal output of non-printable characters (-d).
 
 1.1.1:  2017-Jan-20
     * Release distribution fix.

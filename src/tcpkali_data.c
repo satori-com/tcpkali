@@ -102,7 +102,7 @@ printable_data_highlight(char *buffer, size_t buf_size, const void *data,
             *b++ = '"';
             break;
         default:
-            b += snprintf(b, buf_size - (b - buffer), "\\%03o", *p);
+            b += snprintf(b, buf_size - (b - buffer), "\\x%02x", *p);
             break;
         }
 
