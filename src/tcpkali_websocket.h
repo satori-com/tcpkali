@@ -68,6 +68,7 @@ typedef enum {
     HDW_TRUNCATED_INPUT,
     HDW_UNEXPECTED_ERROR,
 } http_detect_websocket_rval;
-http_detect_websocket_rval http_detect_websocket(int fd, const char *, size_t);
+http_detect_websocket_rval http_detect_websocket(const char *, size_t, char *,
+                                                 size_t, size_t *);
 
 #endif /* TCPKALI_WEBSOCKET_H */

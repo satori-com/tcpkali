@@ -30,6 +30,7 @@
 #include <config.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <stddef.h>
 
 #define UNUSED __attribute__((unused))
 #define PRINTFLIKE(n, m) __attribute__((format(printf, n, m)))

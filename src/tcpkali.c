@@ -57,6 +57,7 @@
 #include "tcpkali_transport.h"
 #include "tcpkali_syslimits.h"
 #include "tcpkali_logging.h"
+#include "tcpkali_ssl.h"
 
 /*
  * Describe the command line options.
@@ -68,6 +69,7 @@
 #define CLI_SOCKET_OPT (1 << 12)
 #define CLI_LATENCY (1 << 13)
 #define CLI_DUMP (1 << 14)
+#define SSL_OPT (1 << 15)
 static struct option cli_long_options[] = {
     {"channel-lifetime", 1, 0, CLI_CHAN_OFFSET + 't'},
     {"channel-bandwidth-upstream", 1, 0, 'U'},
@@ -75,6 +77,7 @@ static struct option cli_long_options[] = {
     {"connections", 1, 0, 'c'},
     {"connect-rate", 1, 0, 'R'},
     {"connect-timeout", 1, 0, CLI_CONN_OFFSET + 't'},
+    {"delay-sending", 1, 0, CLI_CONN_OFFSET + 'z'},
     {"duration", 1, 0, 'T'},
     {"dump-one", 0, 0, CLI_DUMP + '1'},
     {"dump-one-in", 0, 0, CLI_DUMP + 'i'},
@@ -101,6 +104,9 @@ static struct option cli_long_options[] = {
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
     {"source-ip", 1, 0, 'I'},
+    {"ssl", 0, 0, SSL_OPT},
+    {"ssl-cert", 1, 0, SSL_OPT + 'c'},
+    {"ssl-key", 1, 0, SSL_OPT + 'k'},
     {"statsd", 0, 0, CLI_STATSD_OFFSET + 'e'},
     {"statsd-host", 1, 0, CLI_STATSD_OFFSET + 'h'},
     {"statsd-port", 1, 0, CLI_STATSD_OFFSET + 'p'},
@@ -207,7 +213,11 @@ main(int argc, char **argv) {
     struct engine_params engine_params = {.verbosity_level = DBG_ERROR,
                                           .connect_timeout = 1.0,
                                           .channel_lifetime = INFINITY,
+                                          .delay_sending = 0.0,
                                           .nagle_setting = NSET_UNSET,
+                                          .ssl_cert = 0,
+                                          .ssl_enable = 0,
+                                          .ssl_key = 0,
                                           .write_combine = WRCOMB_ON};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
@@ -233,11 +243,14 @@ main(int argc, char **argv) {
         case 'V':
             printf(PACKAGE_NAME " version " VERSION
 #ifdef USE_LIBUV
-                                " (libuv)"
+                                " (libuv"
 #else
-                                " (libev)"
+                                " (libev"
 #endif
-                                "\n");
+#ifdef HAVE_OPENSSL
+                                ", ssl"
+#endif
+                                ")\n");
             exit(0);
         case 'h':
             usage_short(argv[0]);
@@ -612,6 +625,11 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
+        case CLI_CONN_OFFSET + 'z': /* --delay-sending */
+            engine_params.delay_sending = parse_with_multipliers(
+                option, optarg, s_multiplier,
+                sizeof(s_multiplier) / sizeof(s_multiplier[0]));
+            break;
         case CLI_CHAN_OFFSET + 't':
             engine_params.channel_lifetime = parse_with_multipliers(
                 option, optarg, s_multiplier,
@@ -624,6 +642,39 @@ main(int argc, char **argv) {
             break;
         case 'W': /* --websocket: Enable WebSocket framing */
             engine_params.websocket_enable = 1;
+            break;
+        case SSL_OPT: /* --ssl: Enable SSL/TLS */
+#ifdef HAVE_OPENSSL
+            tcpkali_init_ssl();
+            engine_params.ssl_enable = 1;
+#else
+            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            exit(EX_USAGE);
+#endif
+            break;
+        case SSL_OPT + 'c': /* --ssl-cert: SSL cert file */
+#ifdef HAVE_OPENSSL
+            engine_params.ssl_cert = strdup(optarg);
+            if(access(optarg, F_OK) == -1) {
+                fprintf(stderr, "Can not access SSL cert file %s\n", optarg);
+                exit(EX_USAGE);
+            }
+#else
+            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            exit(EX_USAGE);
+#endif
+            break;
+        case SSL_OPT + 'k': /* --ssl-key: SSL key file */
+#ifdef HAVE_OPENSSL
+            engine_params.ssl_key = strdup(optarg);
+            if(access(optarg, F_OK) == -1) {
+                fprintf(stderr, "Can not access SSL key file %s\n", optarg);
+                exit(EX_USAGE);
+            }
+#else
+            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            exit(EX_USAGE);
+#endif
             break;
         case CLI_LATENCY + 'c': /* --latency-connect */
             engine_params.latency_setting |= SLT_CONNECT;
@@ -1202,9 +1253,12 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"
+    "  --ssl                        Enable SSL/TLS\n"
+    "  --ssl-cert <filename>        SSL certificate file (default: cert.pem)\n"
+    "  --ssl-key <filename>         SSL key file (default: key.pem)\n"
     "  -H, --header <string>        Add HTTP header into WebSocket handshake\n"
     "  -c, --connections <N=%d>      Connections to keep open to the destinations\n"
-    "  --connect-rate <Rate=%g>    Limit number of new connections per second\n"
+    "  --connect-rate <Rate=%g>     Limit number of new connections per second\n"
     "  --connect-timeout <Time=1s>  Limit time spent in a connection attempt\n"
     "  --channel-lifetime <Time>    Shut down each connection after Time seconds\n"
     "  --channel-bandwidth-upstream <Bandwidth>     Limit upstream bandwidth\n"
@@ -1214,6 +1268,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "               \"silent\"        Do not send data, ignore received data (default)\n"
     "               \"active\"        Actively send messages\n"
     "  -T, --duration <Time=10s>    Exit after the specified amount of time\n"
+    "  --delay-sending <Time>       Delay sending data for specified amount of time\n"
     "\n"
     "  -e, --unescape-message-args  Unescape the message data arguments\n"
     "  -1, --first-message <string> Send this message first, once\n"

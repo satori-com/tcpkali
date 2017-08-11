@@ -71,6 +71,9 @@ struct engine_params {
     double channel_lifetime;
     double epoch;
     int websocket_enable; /* Enable Websocket responder on (-l) */
+    int ssl_enable;       /* Enable SSL/TLS */
+    char *ssl_cert;       /* SSL/TLS cert file */
+    char *ssl_key;        /* SSL/TLS key file */
     /* Pre-computed message data template */
     struct message_collection message_collection;  /* A descr. what to send */
     struct transport_data_spec *data_templates[2]; /* client, server tmpls */
@@ -84,7 +87,8 @@ struct engine_params {
     } dump_setting;
     statsd_report_latency_types latency_setting;
     int latency_marker_skip;        /* --latency-marker-skip <N> */
-    int message_marker;     /* \{message.marker} */
+    int message_marker;             /* \{message.marker} */
+    int delay_sending;              /* --delay-sending <Time> */
     tk_expr_t *latency_marker_expr; /* --latency-marker */
     tk_expr_t *message_stop_expr;   /* --message-stop */
 

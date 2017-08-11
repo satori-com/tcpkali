@@ -1,4 +1,4 @@
-AC_INIT([tcpkali],[1.1.3],[lwalkin@machinezone.com])
+AC_INIT([tcpkali],[1.2.0],[lwalkin@machinezone.com])
 
 AC_CONFIG_SRCDIR([src/tcpkali.c])
 AC_CONFIG_AUX_DIR(config)
@@ -113,6 +113,22 @@ AC_ARG_ENABLE([tsan],
                           [], [${TK_CFLAGS}])
     dnl -fsanitize=thread linking must be done with -pie or -shared
     dnl We can't do anything about this message in GCC; use clang.
+  ])
+
+AC_ARG_WITH([openssl],
+    [AS_HELP_STRING([--with-openssl],
+      [Enable support for openssl])],
+    [],
+    [with_openssl=no])
+  AS_IF([test "x$with_openssl" != xno], [
+     AC_CHECK_LIB(crypto, CRYPTO_new_ex_data, [], [AC_MSG_ERROR([library 'crypto' is required for OpenSSL])])
+     FOUND_SSL_LIB="no"
+     AC_CHECK_LIB(ssl, OPENSSL_init_ssl, [FOUND_SSL_LIB="yes"])
+     AC_CHECK_LIB(ssl, SSL_library_init, [FOUND_SSL_LIB="yes"])
+     AS_IF([test "x$FOUND_SSL_LIB" = xno],
+       [AC_MSG_ERROR([library 'ssl' is required for OpenSSL])],
+       [AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])
+        LIBS="-lssl $LIBS"])
   ])
 
 dnl We use pandoc to generate documentation.
