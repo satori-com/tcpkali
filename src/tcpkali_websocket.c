@@ -120,7 +120,8 @@ websocket_frame_header(uint8_t *buf, size_t size, enum websocket_side side,
  * TODO: replace with an efficient but more correct parser.
  */
 http_detect_websocket_rval
-http_detect_websocket(int fd, const char *buf, size_t size) {
+http_detect_websocket(const char *buf, size_t size, char *out_buf,
+                      size_t out_buf_sz, size_t *response_size) {
     const char *keyhdr = "sec-websocket-key:";
     size_t keyhdr_size = sizeof("sec-websocket-key:") - 1;
 
@@ -160,7 +161,6 @@ http_detect_websocket(int fd, const char *buf, size_t size) {
                 char new_key[64];
                 char sha1_buf[20];
                 char base64_output[32];
-                char out_buf[200];
                 size_t new_key_size;
 #define MAGIC "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
                 memcpy(new_key, keyvalue, kvsize);
@@ -169,8 +169,8 @@ http_detect_websocket(int fd, const char *buf, size_t size) {
 
                 SHA1((void *)new_key, new_key_size, (unsigned char *)sha1_buf);
                 size_t base64_output_size = sizeof(base64_output);
-                ssize_t response_size = snprintf(
-                    out_buf, sizeof(out_buf),
+                *response_size = snprintf(
+                    out_buf, out_buf_sz,
                     "HTTP/1.1 101 Switching Protocols\r\n"
                     "Upgrade: websocket\r\n"
                     "Connection: Upgrade\r\n"
@@ -178,11 +178,13 @@ http_detect_websocket(int fd, const char *buf, size_t size) {
                     "\r\n",
                     libcows_base64_encode(sha1_buf, sizeof(sha1_buf),
                                           base64_output, &base64_output_size));
-                assert(response_size < (ssize_t)sizeof(out_buf));
+                assert(*response_size < out_buf_sz);
 
                 /* Write out WebSocket response */
+                /*
                 if(write(fd, out_buf, response_size) != response_size)
                     return HDW_UNEXPECTED_ERROR;
+                */
 
                 return HDW_WEBSOCKET_DETECTED;
             }

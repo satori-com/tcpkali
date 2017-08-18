@@ -33,6 +33,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "tcpkali_common.h"
+
 /*
  * A list of IPv4/IPv6 addresses.
  */

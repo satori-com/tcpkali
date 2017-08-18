@@ -33,6 +33,8 @@ tcpkali_SOURCES = \
                 tcpkali_common.h tcpkali_rate.h           \
                 tcpkali_statsd.c tcpkali_statsd.h         \
                 tcpkali_run.c tcpkali_run.h               \
+                tcpkali_ssl.c tcpkali_ssl.h               \
+                tcpkali_connection.c tcpkali_connection.h \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \

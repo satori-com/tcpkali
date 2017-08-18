@@ -64,76 +64,14 @@
 #include "tcpkali_expr.h"
 #include "tcpkali_data.h"
 #include "tcpkali_traffic_stats.h"
+#include "tcpkali_connection.h"
+#include "tcpkali_ssl.h"
 
 #ifndef TAILQ_FOREACH_SAFE
 #define TAILQ_FOREACH_SAFE(var, head, field, tvar) \
     for((var) = TAILQ_FIRST((head));               \
         (var) && ((tvar) = TAILQ_NEXT((var), field), 1); (var) = (tvar))
 #endif
-
-/*
- * A single connection is described by this structure (about 150 bytes).
- */
-struct connection {
-    tk_io watcher;
-    tk_timer timer;
-    off_t write_offset;
-    struct transport_data_spec data;
-    non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
-    non_atomic_traffic_stats traffic_reported; /* Reported to worker */
-    float channel_eol_point; /* End of life time, since epoch */
-    struct pacefier send_pace;
-    struct pacefier recv_pace;
-    bandwidth_limit_t send_limit;
-    bandwidth_limit_t recv_limit;
-    enum {
-        CW_READ_INTEREST = 0x01,
-        CW_READ_BLOCKED = 0x10,
-        CW_WRITE_INTEREST = 0x02,
-        CW_WRITE_BLOCKED = 0x20,
-    } conn_wish : 8;
-    enum conn_type {
-        CONN_OUTGOING,
-        CONN_INCOMING,
-        CONN_ACCEPTOR,
-    } conn_type : 2;
-    enum conn_state {
-        CSTATE_CONNECTED,
-        CSTATE_CONNECTING,
-    } conn_state : 1;
-    enum {
-        WSTATE_SENDING_HTTP_UPGRADE,
-        WSTATE_WS_ESTABLISHED,
-    } ws_state : 1;
-    int16_t remote_index;                     /* \x ->
-                                                 loop_arguments.params.remote_addresses.addrs[x] */
-    non_atomic_narrow_t connection_unique_id; /* connection.uid */
-    TAILQ_ENTRY(connection) hook;
-    struct sockaddr_storage peer_name; /* For CONN_INCOMING */
-    /* Latency */
-    struct {
-        double connection_initiated;
-        struct ring_buffer *sent_timestamps;
-        struct hdr_histogram *marker_histogram;
-        unsigned message_bytes_credit; /* See (EXPL:1) below. */
-        unsigned lm_occurrences_skip;  /* See --latency-marker-skip */
-        /* Boyer-Moore-Horspool substring search algorithm data */
-        struct StreamBMH *sbmh_marker_ctx;
-        /* The following fields might be shared across connections. */
-        int sbmh_shared;
-        struct StreamBMH_Occ *sbmh_occ;
-        const uint8_t *sbmh_data;
-        size_t sbmh_size;
-        struct message_marker_parser_state {
-            enum {
-                MP_DISENGAGED,
-                MP_SLURPING_DIGITS
-            } state;
-            uint64_t collected_digits;
-        } marker_parser;
-    } latency;
-    struct StreamBMH *sbmh_stop_ctx;
-};
 
 struct loop_arguments {
     /**************************
@@ -950,6 +888,7 @@ single_engine_loop_thread(void *argp) {
 
     signal(SIGPIPE, SIG_IGN);
 
+    tcpkali_ssl_thread_setup();
     /*
      * Open all listening sockets, if they are specified.
      */
@@ -1613,9 +1552,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
 
     double now = tk_now(TK_A);
 
-    if(largs->params.latency_setting != 0) {
-        conn->latency.connection_initiated = now;
-    }
+    conn->latency.connection_initiated = now;
 
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
@@ -1748,7 +1685,6 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
             ev_io_start(TK_A_ & conn->watcher);
 #endif
         }
-        return;
     } else { /* Plain socket */
         int want_write = (conn->data.total_size || want_catch_connect);
         int want_events = TK_READ | (want_write ? TK_WRITE : 0);
@@ -1759,6 +1695,9 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
         ev_io_init(&conn->watcher, connection_cb, sockfd, want_events);
         ev_io_start(TK_A_ & conn->watcher);
 #endif
+    }
+    if(largs->params.ssl_enable != 0) {
+        ssl_setup(conn, sockfd, largs->params.ssl_cert, largs->params.ssl_key);
     }
 }
 
@@ -1986,63 +1925,159 @@ passive_websocket_cb(TK_P_ tk_io *w, int revents) {
     struct loop_arguments *largs = tk_userdata(TK_A);
     struct connection *conn =
         (struct connection *)((char *)w - offsetof(struct connection, watcher));
+    char out_buf[200];
+    size_t response_size = 0;
 
-    if(revents & TK_READ) {
-        for(;;) {
-            ssize_t rd = read(tk_fd(w), largs->scratch_recv_buf,
-                              sizeof(largs->scratch_recv_buf));
-            switch(rd) {
-            case -1:
-                switch(errno) {
-                case EAGAIN:
-                    return;
-                default:
-                    close_connection(TK_A_ conn, CCR_REMOTE);
+    if(conn->conn_blocked & CBLOCKED_ON_INIT) {
+        if(((conn->conn_blocked & CBLOCKED_ON_READ) && (revents & TK_READ)) ||
+           ((conn->conn_blocked & CBLOCKED_ON_WRITE) && (revents & TK_WRITE))) {
+            if(conn->conn_blocked & CBLOCKED_ON_READ) {
+                revents &= ~TK_READ;
+            }
+            if(conn->conn_blocked & CBLOCKED_ON_WRITE) {
+                revents &= ~TK_WRITE;
+            }
+            if(ssl_setup(conn, 0, largs->params.ssl_cert, largs->params.ssl_key)) {
+                if(conn->conn_blocked & CBLOCKED_ON_INIT) {
+                    conn->conn_wish |= CW_READ_INTEREST;
+                    conn->conn_wish |= CW_WRITE_INTEREST;
+                    update_io_interest(TK_A_ conn);
                     return;
                 }
-            /* Fall through */
-            case 0:
+            } else {
                 close_connection(TK_A_ conn, CCR_REMOTE);
                 return;
-            default:
-                largs->scratch_recv_last_size = rd; /* Only update on >0 data */
-                conn->traffic_ongoing.num_reads++;
-                conn->traffic_ongoing.bytes_rcvd += rd;
-                if(largs->params.dump_setting & DS_DUMP_ALL_IN
-                   || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
-                       && largs->dump_connect_fd == tk_fd(w))) {
-                    debug_dump_data("Rcv", tk_fd(w), largs->scratch_recv_buf,
-                                    rd, 0);
-                }
-
-                /*
-                 * Attempt to detect websocket key in HTTP and respond.
-                 */
-                switch(http_detect_websocket(tk_fd(w), largs->scratch_recv_buf,
-                                             rd)) {
-                case HDW_NOT_ENOUGH_DATA:
-                    return;
-                case HDW_WEBSOCKET_DETECTED:
-                    break;
-                case HDW_TRUNCATED_INPUT:
-                case HDW_UNEXPECTED_ERROR:
-                    close_connection(TK_A_ conn, CCR_DATA);
-                    return;
-                }
-                conn->ws_state = WSTATE_WS_ESTABLISHED;
-
-                int want_events = TK_READ | TK_WRITE;
-#ifdef USE_LIBUV
-                uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
-#else
-                ev_io_stop(TK_A_ w);
-                ev_io_init(&conn->watcher, connection_cb, tk_fd(w),
-                           want_events);
-                ev_io_start(TK_A_ & conn->watcher);
-#endif
+            }
+        } else {
+            return;
+        }
+    }
+    if(revents & TK_WRITE) {
+        if(conn->conn_blocked & CBLOCKED_ON_READ) {
+            return;
+        }
+        conn->conn_blocked &= ~CBLOCKED_ON_WRITE;
+    }
+    if(revents & TK_READ) {
+        ssize_t rd = 0;
+        if(largs->params.ssl_enable) {
+#ifdef HAVE_OPENSSL
+            if(conn->conn_blocked & CBLOCKED_ON_WRITE) {
+                return;
+            }
+            conn->conn_blocked &= ~CBLOCKED_ON_READ;
+            rd = SSL_read(conn->ssl_fd, largs->scratch_recv_buf,
+                          sizeof(largs->scratch_recv_buf));
+            switch(SSL_get_error(conn->ssl_fd, rd)) {
+            case SSL_ERROR_NONE:
                 break;
+            case SSL_ERROR_WANT_WRITE:
+                conn->conn_blocked |= CBLOCKED_ON_WRITE;
+                return;
+            case SSL_ERROR_WANT_READ:
+                conn->conn_blocked |= CBLOCKED_ON_READ;
+                return;
+            case SSL_ERROR_ZERO_RETURN:
+            default:
+                rd = -1;  // Close it
+            }
+#endif
+        } else {
+            rd = read(tk_fd(w), largs->scratch_recv_buf,
+                      sizeof(largs->scratch_recv_buf));
+        }
+        switch(rd) {
+        case -1:
+            switch(errno) {
+            case EAGAIN:
+                return;
+            default:
+                close_connection(TK_A_ conn, CCR_REMOTE);
+                return;
+            }
+        /* Fall through */
+        case 0:
+            close_connection(TK_A_ conn, CCR_REMOTE);
+            return;
+        default:
+            largs->scratch_recv_last_size = rd; /* Only update on >0 data */
+            conn->traffic_ongoing.num_reads++;
+            conn->traffic_ongoing.bytes_rcvd += rd;
+            if(largs->params.dump_setting & DS_DUMP_ALL_IN
+               || ((largs->params.dump_setting & DS_DUMP_ONE_IN)
+                   && largs->dump_connect_fd == tk_fd(w))) {
+                debug_dump_data("Rcv", tk_fd(w), largs->scratch_recv_buf, rd,
+                                0);
+            }
+
+            /*
+             * Attempt to detect websocket key in HTTP and respond.
+             */
+            switch(http_detect_websocket(largs->scratch_recv_buf, rd, out_buf,
+                                         sizeof(out_buf), &response_size)) {
+            case HDW_NOT_ENOUGH_DATA:
+                return;
+            case HDW_WEBSOCKET_DETECTED:
+                conn->ws_state = WSTATE_WS_ESTABLISHED;
+                break;
+            case HDW_TRUNCATED_INPUT:
+            case HDW_UNEXPECTED_ERROR:
+                close_connection(TK_A_ conn, CCR_DATA);
+                return;
+            }
+            break;
+        }
+    }
+    if((conn->ws_state == WSTATE_WS_ESTABLISHED) && !conn->conn_blocked) {
+        if(!response_size) {
+            switch(http_detect_websocket(largs->scratch_recv_buf,
+                                  largs->scratch_recv_last_size, out_buf,
+                                  sizeof(out_buf), &response_size)) {
+            case HDW_NOT_ENOUGH_DATA:
+            case HDW_WEBSOCKET_DETECTED:
+                break;
+            case HDW_TRUNCATED_INPUT:
+            case HDW_UNEXPECTED_ERROR:
+                close_connection(TK_A_ conn, CCR_DATA);
+                return;
             }
         }
+        if(largs->params.ssl_enable) {
+#ifdef HAVE_OPENSSL
+            int wrote = SSL_write(conn->ssl_fd, out_buf, response_size);
+            switch(SSL_get_error(conn->ssl_fd, wrote)) {
+            case SSL_ERROR_NONE:
+                break;
+            case SSL_ERROR_WANT_WRITE:
+                conn->conn_blocked |= CBLOCKED_ON_WRITE;
+                return;
+            case SSL_ERROR_WANT_READ:
+                conn->conn_blocked |= CBLOCKED_ON_READ;
+                return;
+            case SSL_ERROR_ZERO_RETURN:
+            default:
+                wrote = -1;  // Close it
+            }
+            if(wrote != (ssize_t)response_size) {
+                close_connection(TK_A_ conn, CCR_DATA);
+                return;
+            }
+#endif
+        } else {
+            if(write(tk_fd(w), out_buf, response_size)
+               != (ssize_t)response_size) {
+                close_connection(TK_A_ conn, CCR_DATA);
+                return;
+            }
+        }
+        int want_events = TK_READ | TK_WRITE;
+#ifdef USE_LIBUV
+        uv_poll_start(&conn->watcher, want_events, connection_cb_uv);
+#else
+        ev_io_stop(TK_A_ w);
+        ev_io_init(&conn->watcher, connection_cb, tk_fd(w), want_events);
+        ev_io_start(TK_A_ & conn->watcher);
+#endif
     }
 }
 
@@ -2376,6 +2411,29 @@ connection_cb(TK_P_ tk_io *w, int revents) {
             ? &largs->params.remote_addresses.addrs[conn->remote_index]
             : &conn->peer_name;
 
+    if(conn->conn_blocked & CBLOCKED_ON_INIT) {
+        if(((conn->conn_blocked & CBLOCKED_ON_READ) && (revents & TK_READ)) ||
+           ((conn->conn_blocked & CBLOCKED_ON_WRITE) && (revents & TK_WRITE))) {
+            if(conn->conn_blocked & CBLOCKED_ON_READ) {
+                revents &= ~TK_READ;
+            }
+            if(conn->conn_blocked & CBLOCKED_ON_WRITE) {
+                revents &= ~TK_WRITE;
+            }
+            if(ssl_setup(conn, 0, largs->params.ssl_cert, largs->params.ssl_key)) {
+                if(conn->conn_blocked & CBLOCKED_ON_INIT) {
+                    conn->conn_wish |= CW_READ_INTEREST;
+                    conn->conn_wish |= CW_WRITE_INTEREST;
+                    update_io_interest(TK_A_ conn);
+                    return;
+                }
+            } else {
+                close_connection(TK_A_ conn, CCR_REMOTE);
+            }
+        } else {
+            return;
+        }
+    }
     if(conn->conn_state == CSTATE_CONNECTING) {
         /*
          * Extended channel lifetimes are managed elsewhere, but zero
@@ -2401,7 +2459,7 @@ connection_cb(TK_P_ tk_io *w, int revents) {
          * If there's nothing to write, we remove the write interest.
          */
         tk_timer_stop(TK_A, &conn->timer);
-        if(conn->data.total_size == 0) {
+        if((conn->data.total_size == 0) && !(conn->conn_blocked & CBLOCKED_ON_WRITE)) {
             conn->conn_wish &= ~CW_WRITE_INTEREST; /* Remove write interest */
             update_io_interest(TK_A_ conn);
             revents &= ~TK_WRITE; /* Don't actually write in this loop */
@@ -2426,14 +2484,45 @@ connection_cb(TK_P_ tk_io *w, int revents) {
                     record_moved_data = 1;
                     break;
                 case LB_GO_SLEEP:
-                    conn->conn_wish |= CW_READ_BLOCKED;
-                    update_io_interest(TK_A_ conn);
-                    goto process_WRITE;
+                    if(!(conn->conn_blocked & CBLOCKED_ON_READ)) {
+                        conn->conn_wish |= CW_READ_BLOCKED;
+                        update_io_interest(TK_A_ conn);
+                        goto process_WRITE;
+                    }
                 }
             }
 
             assert(read_size > 0);
-            ssize_t rd = read(tk_fd(w), largs->scratch_recv_buf, read_size);
+            ssize_t rd = 0;
+            if(largs->params.ssl_enable) {
+#ifdef HAVE_OPENSSL
+                if(conn->conn_blocked & CBLOCKED_ON_WRITE) {
+                    goto process_WRITE;
+                }
+                conn->conn_blocked &= ~CBLOCKED_ON_READ;
+                rd = SSL_read(conn->ssl_fd, largs->scratch_recv_buf, read_size);
+                switch(SSL_get_error(conn->ssl_fd, rd)) {
+                case SSL_ERROR_NONE:
+                    break;
+                case SSL_ERROR_WANT_WRITE:
+                    conn->conn_blocked |= CBLOCKED_ON_WRITE;
+                    conn->conn_wish |= CW_WRITE_INTEREST;
+                    update_io_interest(TK_A_ conn);
+                    goto process_WRITE;
+                    break;
+                case SSL_ERROR_WANT_READ:
+                    conn->conn_blocked |= CBLOCKED_ON_READ;
+                    conn->conn_wish |= CW_READ_INTEREST;
+                    update_io_interest(TK_A_ conn);
+                    return;
+                case SSL_ERROR_ZERO_RETURN:
+                default:
+                    rd = -1;  // Close it
+                }
+#endif
+            } else {
+                rd = read(tk_fd(w), largs->scratch_recv_buf, read_size);
+            }
             switch(rd) {
             case -1:
                 switch(errno) {
@@ -2509,7 +2598,7 @@ process_WRITE:
 
         largest_contiguous_chunk(largs, conn, &position, &available_header,
                                  &available_body);
-        if(!(available_header + available_body)) {
+        if(!(available_header + available_body) && !(conn->conn_blocked & CBLOCKED_ON_WRITE)) {
             /* Only the header was sent. Now, silence. */
             assert(conn->data.total_size == conn->data.once_size
                    || largs->params.websocket_enable);
@@ -2529,12 +2618,17 @@ process_WRITE:
             record_moved = 1;
             break;
         case LB_GO_SLEEP:
-            if(available_header) break;
+            if(available_header || (conn->conn_blocked & CBLOCKED_ON_WRITE)) break;
             conn->conn_wish |= CW_WRITE_BLOCKED;
             update_io_interest(TK_A_ conn);
             return;
         }
 
+        if((tk_now(TK_A) - conn->latency.connection_initiated
+            < largs->params.delay_sending)
+           && !(conn->conn_blocked & CBLOCKED_ON_WRITE)) {
+            return;
+        }
         do { /* Write de-coalescing loop */
             size_t available_write =
                 available_header
@@ -2544,7 +2638,35 @@ process_WRITE:
                              ? available_body
                              : conn->send_limit.minimal_move_size);
 
-            ssize_t wrote = write(tk_fd(w), position, available_write);
+            ssize_t wrote = 0;
+            if(largs->params.ssl_enable) {
+#ifdef HAVE_OPENSSL
+                if(conn->conn_blocked & CBLOCKED_ON_READ) {
+                    return;
+                }
+                conn->conn_blocked &= ~CBLOCKED_ON_WRITE;
+                wrote = SSL_write(conn->ssl_fd, position, available_write);
+                switch(SSL_get_error(conn->ssl_fd, wrote)) {
+                case SSL_ERROR_NONE:
+                    break;
+                case SSL_ERROR_WANT_WRITE:
+                    conn->conn_blocked |= CBLOCKED_ON_WRITE;
+                    conn->conn_wish |= CW_WRITE_INTEREST;
+                    update_io_interest(TK_A_ conn);
+                    return;
+                case SSL_ERROR_WANT_READ:
+                    conn->conn_blocked |= CBLOCKED_ON_READ;
+                    conn->conn_wish |= CW_READ_INTEREST;
+                    update_io_interest(TK_A_ conn);
+                    return;
+                case SSL_ERROR_ZERO_RETURN:
+                default:
+                    wrote = -1;  // Close it
+                }
+#endif
+            } else {
+                wrote = write(tk_fd(w), position, available_write);
+            }
             if(wrote == -1) {
                 char buf[INET6_ADDRSTRLEN + 64];
                 switch(errno) {
@@ -2673,6 +2795,12 @@ connection_free_internals(struct connection *conn) {
     if(conn->sbmh_stop_ctx) {
         free(conn->sbmh_stop_ctx);
     }
+
+#ifdef HAVE_OPENSSL
+    if(conn->ssl_ctx) {
+        SSL_CTX_free(conn->ssl_ctx);
+    }
+#endif
 }
 
 /*
