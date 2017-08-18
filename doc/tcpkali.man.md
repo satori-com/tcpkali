@@ -113,6 +113,9 @@ open more than 64k connections to destinations.
 -T, --duration *Time*
 :   Exit and print final stats after the specified amount of time. Default is 10 seconds (`-T10s`).
 
+--delay-send *Time*
+:   Delay sending bytes by a specified amount of time.
+
 ## TRAFFIC CONTENT OPTIONS
 
 -e, --unescape-message-args

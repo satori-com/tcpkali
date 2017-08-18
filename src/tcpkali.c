@@ -77,7 +77,7 @@ static struct option cli_long_options[] = {
     {"connections", 1, 0, 'c'},
     {"connect-rate", 1, 0, 'R'},
     {"connect-timeout", 1, 0, CLI_CONN_OFFSET + 't'},
-    {"delay-sending", 1, 0, CLI_CONN_OFFSET + 'z'},
+    {"delay-send", 1, 0, CLI_CONN_OFFSET + 'z'},
     {"duration", 1, 0, 'T'},
     {"dump-one", 0, 0, CLI_DUMP + '1'},
     {"dump-one-in", 0, 0, CLI_DUMP + 'i'},
@@ -625,7 +625,7 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
             break;
-        case CLI_CONN_OFFSET + 'z': /* --delay-sending */
+        case CLI_CONN_OFFSET + 'z': /* --delay-send */
             engine_params.delay_sending = parse_with_multipliers(
                 option, optarg, s_multiplier,
                 sizeof(s_multiplier) / sizeof(s_multiplier[0]));
@@ -1268,7 +1268,7 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "               \"silent\"        Do not send data, ignore received data (default)\n"
     "               \"active\"        Actively send messages\n"
     "  -T, --duration <Time=10s>    Exit after the specified amount of time\n"
-    "  --delay-sending <Time>       Delay sending data for specified amount of time\n"
+    "  --delay-send <Time>          Delay sending data by a specified amount of time\n"
     "\n"
     "  -e, --unescape-message-args  Unescape the message data arguments\n"
     "  -1, --first-message <string> Send this message first, once\n"
