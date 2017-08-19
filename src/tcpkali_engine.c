@@ -2625,7 +2625,7 @@ process_WRITE:
         }
 
         if((tk_now(TK_A) - conn->latency.connection_initiated
-            < largs->params.delay_sending)
+            < largs->params.delay_send)
            && !(conn->conn_blocked & CBLOCKED_ON_WRITE)) {
             return;
         }
