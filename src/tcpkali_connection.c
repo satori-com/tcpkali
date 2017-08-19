@@ -32,7 +32,9 @@ ssl_setup(struct connection UNUSED *conn, int UNUSED sockfd,
         exit(1);
     } else {
         if(conn->conn_type == CONN_INCOMING) {
+#ifdef  HAVE_SSL_CTX_SET_ECDH_AUTO
             SSL_CTX_set_ecdh_auto(conn->ssl_ctx, 1);
+#endif
             if(SSL_CTX_use_certificate_file(conn->ssl_ctx,
                                             ssl_cert ? ssl_cert : "cert.pem",
                                             SSL_FILETYPE_PEM)

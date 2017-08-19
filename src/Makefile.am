@@ -4,7 +4,8 @@ bin_PROGRAMS = tcpkali
 AM_YFLAGS = -d
 AM_LFLAGS = -s
 
-tcpkali_CPPFLAGS = -I$(top_srcdir)/deps/libev \
+tcpkali_CPPFLAGS = $(TK_CPPFLAGS) \
+                   -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
                    -I$(top_srcdir)/deps/libstatsd/src \
                    -I$(top_srcdir)/deps/HdrHistogram \
@@ -36,7 +37,7 @@ tcpkali_SOURCES = \
                 tcpkali_ssl.c tcpkali_ssl.h               \
                 tcpkali_connection.c tcpkali_connection.h \
                 tcpkali.c tcpkali.h
-tcpkali_LDFLAGS = -L$(libdir) $(LIBUV)
+tcpkali_LDFLAGS = $(TK_LDFLAGS) $(TK_LIBS) -L$(libdir) $(LIBUV)
 tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
                 $(top_builddir)/deps/libcows/libcows.la \
                 $(top_builddir)/deps/pcg-c-basic/libpcg32.la \
