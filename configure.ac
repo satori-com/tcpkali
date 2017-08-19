@@ -32,6 +32,7 @@ m4_include([deps/libstatsd/libstatsd.m4])
 
 dnl Import locally defined macros.
 m4_include([m4/ax_check_compile_flag.m4])
+m4_include([m4/ax_check_openssl.m4])
 m4_include([m4/ax_make_optional_include.m4])
 
 AX_CHECK_GNU_STYLE_OPTIONAL_INCLUDE()
@@ -115,21 +116,19 @@ AC_ARG_ENABLE([tsan],
     dnl We can't do anything about this message in GCC; use clang.
   ])
 
-AC_ARG_WITH([openssl],
-    [AS_HELP_STRING([--with-openssl],
-      [Enable support for openssl])],
-    [],
-    [with_openssl=no])
-  AS_IF([test "x$with_openssl" != xno], [
-     AC_CHECK_LIB(crypto, CRYPTO_new_ex_data, [], [AC_MSG_ERROR([library 'crypto' is required for OpenSSL])])
-     FOUND_SSL_LIB="no"
-     AC_CHECK_LIB(ssl, OPENSSL_init_ssl, [FOUND_SSL_LIB="yes"])
-     AC_CHECK_LIB(ssl, SSL_library_init, [FOUND_SSL_LIB="yes"])
-     AS_IF([test "x$FOUND_SSL_LIB" = xno],
-       [AC_MSG_ERROR([library 'ssl' is required for OpenSSL])],
-       [AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])
-        LIBS="-lssl $LIBS"])
-  ])
+AX_CHECK_OPENSSL(
+    [AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])
+TK_LIBS="${OPENSSL_LIBS}"
+TK_LDFLAGS="${OPENSSL_LDFLAGS}"
+TK_CPPFLAGS="${OPENSSL_INCLUDES}"
+AC_CHECK_FUNC(SSL_CTX_set_ecdh_auto,
+        [AC_DEFINE([HAVE_SSL_CTX_SET_ECDH_AUTO], [1],
+            [Define to 1 if you have SSL_CTX_set_ecdh_auto function defined in OpenSSL])])
+    ],
+    [])
+AC_SUBST(TK_LIBS)
+AC_SUBST(TK_LDFLAGS)
+AC_SUBST(TK_CPPFLAGS)
 
 dnl We use pandoc to generate documentation.
 AC_PATH_PROG([PANDOC], pandoc)
