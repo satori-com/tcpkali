@@ -129,6 +129,24 @@ Use RFC6455 WebSocket transport.
 .RS
 .RE
 .TP
+.B \-\-ssl
+Enable Transport Layer Security (TLS, formerly known as SSL) for
+client\-side and server\-side connections.
+.RS
+.RE
+.TP
+.B \-\-ssl\-cert \f[I]filename\f[]
+The X.509 certificate file for TLS termination.
+Default is "cert.pem".
+.RS
+.RE
+.TP
+.B \-\-ssl\-key \f[I]filename\f[]
+The private key file for TLS termination.
+Default is "key.pem".
+.RS
+.RE
+.TP
 .B \-H, \-\-header
 Add HTTP header into the WebSocket handshake.
 .RS

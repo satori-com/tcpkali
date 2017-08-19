@@ -215,9 +215,9 @@ main(int argc, char **argv) {
                                           .channel_lifetime = INFINITY,
                                           .delay_sending = 0.0,
                                           .nagle_setting = NSET_UNSET,
-                                          .ssl_cert = 0,
                                           .ssl_enable = 0,
-                                          .ssl_key = 0,
+                                          .ssl_cert = "cert.pem",
+                                          .ssl_key = "key.pem",
                                           .write_combine = WRCOMB_ON};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
@@ -643,36 +643,27 @@ main(int argc, char **argv) {
         case 'W': /* --websocket: Enable WebSocket framing */
             engine_params.websocket_enable = 1;
             break;
-        case SSL_OPT: /* --ssl: Enable SSL/TLS */
+        case SSL_OPT: /* --ssl: Enable TLS */
 #ifdef HAVE_OPENSSL
-            tcpkali_init_ssl();
             engine_params.ssl_enable = 1;
 #else
-            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            fprintf(stderr, "Compiled without TLS support\n");
             exit(EX_USAGE);
 #endif
             break;
-        case SSL_OPT + 'c': /* --ssl-cert: SSL cert file */
+        case SSL_OPT + 'c': /* --ssl-cert: X.509 certificate file */
 #ifdef HAVE_OPENSSL
             engine_params.ssl_cert = strdup(optarg);
-            if(access(optarg, F_OK) == -1) {
-                fprintf(stderr, "Can not access SSL cert file %s\n", optarg);
-                exit(EX_USAGE);
-            }
 #else
-            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            fprintf(stderr, "Compiled without TLS support\n");
             exit(EX_USAGE);
 #endif
             break;
-        case SSL_OPT + 'k': /* --ssl-key: SSL key file */
+        case SSL_OPT + 'k': /* --ssl-key: SSL private key file */
 #ifdef HAVE_OPENSSL
             engine_params.ssl_key = strdup(optarg);
-            if(access(optarg, F_OK) == -1) {
-                fprintf(stderr, "Can not access SSL key file %s\n", optarg);
-                exit(EX_USAGE);
-            }
 #else
-            fprintf(stderr, "Compiled without SSL/TLS support\n");
+            fprintf(stderr, "Compiled without TLS support\n");
             exit(EX_USAGE);
 #endif
             break;
@@ -749,6 +740,27 @@ main(int argc, char **argv) {
         fprintf(stderr, "--header option ignored without --websocket\n");
         exit(EX_USAGE);
     }
+
+#ifdef HAVE_OPENSSL
+    if(engine_params.ssl_enable) {
+            tcpkali_init_ssl();
+
+            /* If server side operation, look into file names */
+            if(conf.listen_port != 0) {
+                if(access(engine_params.ssl_cert, F_OK) == -1) {
+                    fprintf(stderr,
+                            "%s: Can not access X.509 certificate file.\n",
+                            engine_params.ssl_cert);
+                    exit(EX_USAGE);
+                }
+                if(access(engine_params.ssl_key, F_OK) == -1) {
+                    fprintf(stderr, "%s: Can not access SSL private key file\n",
+                            engine_params.ssl_key);
+                    exit(EX_USAGE);
+                }
+            }
+    }
+#endif
 
     if(rate_modulator.latency_target > 1) {
         char *end = 0;
@@ -1253,9 +1265,9 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  -w, --workers <N=%ld>%s         Number of parallel threads to use\n"
     "\n"
     "  --ws, --websocket            Use RFC6455 WebSocket transport\n"
-    "  --ssl                        Enable SSL/TLS\n"
-    "  --ssl-cert <filename>        SSL certificate file (default: cert.pem)\n"
-    "  --ssl-key <filename>         SSL key file (default: key.pem)\n"
+    "  --ssl                        Enable TLS\n"
+    "  --ssl-cert <filename>        X.509 certificate file (default: cert.pem)\n"
+    "  --ssl-key <filename>         Private key file (default: key.pem)\n"
     "  -H, --header <string>        Add HTTP header into WebSocket handshake\n"
     "  -c, --connections <N=%d>      Connections to keep open to the destinations\n"
     "  --connect-rate <Rate=%g>     Limit number of new connections per second\n"

@@ -35,19 +35,17 @@ ssl_setup(struct connection UNUSED *conn, int UNUSED sockfd,
 #ifdef  HAVE_SSL_CTX_SET_ECDH_AUTO
             SSL_CTX_set_ecdh_auto(conn->ssl_ctx, 1);
 #endif
-            if(SSL_CTX_use_certificate_file(conn->ssl_ctx,
-                                            ssl_cert ? ssl_cert : "cert.pem",
+            if(SSL_CTX_use_certificate_file(conn->ssl_ctx, ssl_cert,
                                             SSL_FILETYPE_PEM)
                <= 0) {
-                fprintf(stderr, "%s: %s\n", ssl_cert ? ssl_cert : "cert.pem",
+                fprintf(stderr, "%s: %s\n", ssl_cert,
                         ERR_error_string(ERR_get_error(), NULL));
                 exit(1);
             }
-            if(SSL_CTX_use_PrivateKey_file(conn->ssl_ctx,
-                                           ssl_key ? ssl_key : "key.pem",
+            if(SSL_CTX_use_PrivateKey_file(conn->ssl_ctx, ssl_key,
                                            SSL_FILETYPE_PEM)
                <= 0) {
-                fprintf(stderr, "%s: %s\n", ssl_key ? ssl_key : "key.pem",
+                fprintf(stderr, "%s: %s\n", ssl_key,
                         ERR_error_string(ERR_get_error(), NULL));
                 exit(1);
             }
