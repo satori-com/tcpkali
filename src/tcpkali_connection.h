@@ -34,6 +34,7 @@ struct connection {
         CW_READ_BLOCKED = 0x10,
         CW_WRITE_INTEREST = 0x02,
         CW_WRITE_BLOCKED = 0x20,
+        CW_WRITE_DELAYED = 0x40,
     } conn_wish : 8;
     enum conn_type {
         CONN_OUTGOING,
