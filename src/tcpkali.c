@@ -213,7 +213,7 @@ main(int argc, char **argv) {
     struct engine_params engine_params = {.verbosity_level = DBG_ERROR,
                                           .connect_timeout = 1.0,
                                           .channel_lifetime = INFINITY,
-                                          .delay_sending = 0.0,
+                                          .delay_send = 0.0,
                                           .nagle_setting = NSET_UNSET,
                                           .ssl_enable = 0,
                                           .ssl_cert = "cert.pem",
@@ -626,7 +626,7 @@ main(int argc, char **argv) {
             }
             break;
         case CLI_CONN_OFFSET + 'z': /* --delay-send */
-            engine_params.delay_sending = parse_with_multipliers(
+            engine_params.delay_send = parse_with_multipliers(
                 option, optarg, s_multiplier,
                 sizeof(s_multiplier) / sizeof(s_multiplier[0]));
             break;

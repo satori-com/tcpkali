@@ -88,7 +88,7 @@ struct engine_params {
     statsd_report_latency_types latency_setting;
     int latency_marker_skip;        /* --latency-marker-skip <N> */
     int message_marker;             /* \{message.marker} */
-    int delay_sending;              /* --delay-sending <Time> */
+    double delay_send;              /* --delay-send <Time> */
     tk_expr_t *latency_marker_expr; /* --latency-marker */
     tk_expr_t *message_stop_expr;   /* --message-stop */
 

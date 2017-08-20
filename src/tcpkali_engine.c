@@ -1460,13 +1460,20 @@ conn_timer_cb(TK_P_ tk_timer *w, int UNUSED revents) {
         switch(conn->conn_type) {
         case CONN_INCOMING:
             if((largs->params.listen_mode & _LMODE_SND_MASK) == 0) {
-                conn->conn_wish &= ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED);
+                conn->conn_wish &=
+                    ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED | CW_WRITE_DELAYED);
                 update_io_interest(TK_A_ conn);
                 break;
             }
         /* Fall through */
         case CONN_OUTGOING:
-            conn->conn_wish &= ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED);
+            if(conn->conn_wish & CW_WRITE_DELAYED) {
+                /* Reinitialize the upstream bandwidth limit */
+                pacefier_init(&conn->send_pace,
+                              conn->send_limit.bytes_per_second, tk_now(TK_A));
+            }
+            conn->conn_wish &=
+                ~(CW_READ_BLOCKED | CW_WRITE_BLOCKED | CW_WRITE_DELAYED);
             update_io_interest(TK_A_ conn);
             break;
         case CONN_ACCEPTOR:
@@ -1534,6 +1541,35 @@ maybe_enable_dump(struct loop_arguments *largs, enum conn_type ctype, int fd) {
          * Enable dumping on a chosen file descriptor.
          */
         largs->dump_connect_fd = fd;
+    }
+}
+
+
+static void
+connection_timer_refresh(TK_P_ struct connection *conn, double delay) {
+    struct loop_arguments *largs = tk_userdata(TK_A);
+
+    tk_timer_stop(TK_A, &conn->timer);
+
+    switch(conn->conn_state) {
+    case CSTATE_CONNECTED:
+        /* Use the supplied delay */
+        break;
+    case CSTATE_CONNECTING:
+        delay = largs->params.connect_timeout;
+        break;
+    }
+
+    if(delay > 0.0) {
+#ifdef USE_LIBUV
+        uv_timer_init(TK_A_ & conn->timer);
+        uint64_t uint_delay = 1000 * delay;
+        if(uint_delay == 0) uint_delay = 1;
+        uv_timer_start(&conn->timer, conn_timer_cb_uv, uint_delay, 0);
+#else
+        ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
+        ev_timer_start(TK_A_ & conn->timer);
+#endif
     }
 }
 
@@ -1649,16 +1685,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                               && largs->params.connect_timeout > 0.0);
     if(want_catch_connect) {
         assert(conn_type == CONN_OUTGOING);
-#ifdef USE_LIBUV
-        uv_timer_init(TK_A_ & conn->timer);
-        uint64_t delay = 1000 * largs->params.connect_timeout;
-        if(delay == 0) delay = 1;
-        uv_timer_start(&conn->timer, conn_timer_cb_uv, delay, 0);
-#else
-        ev_timer_init(&conn->timer, conn_timer_cb,
-                      largs->params.connect_timeout, 0.0);
-        ev_timer_start(TK_A_ & conn->timer);
-#endif
+        connection_timer_refresh(TK_A_ conn, 0.0);
     }
 
     conn->conn_wish =
@@ -1905,14 +1932,7 @@ static enum lb_return_value {
 
         if(delay < 0.001) delay = 0.001;
 
-        tk_timer_stop(TK_A, &conn->timer);
-#ifdef USE_LIBUV
-        uv_timer_init(TK_A_ & conn->timer);
-        uv_timer_start(&conn->timer, conn_timer_cb_uv, 1000 * delay, 0.0);
-#else
-        ev_timer_init(&conn->timer, conn_timer_cb, delay, 0.0);
-        ev_timer_start(TK_A_ & conn->timer);
-#endif
+        connection_timer_refresh(TK_A_ conn, delay);
 
         return rvalue;
     }
@@ -2089,7 +2109,8 @@ update_io_interest(TK_P_ struct connection *conn) {
     events |= (conn->conn_wish & CW_WRITE_INTEREST) ? TK_WRITE : 0;
     /* Remove read or write wish, if we are blocked on them */
     events &= ~((conn->conn_wish & CW_READ_BLOCKED) ? TK_READ : 0);
-    events &= ~((conn->conn_wish & CW_WRITE_BLOCKED) ? TK_WRITE : 0);
+    events &= ~((conn->conn_wish & (CW_WRITE_BLOCKED | CW_WRITE_DELAYED))
+                ? TK_WRITE : 0);
 
 #ifdef USE_LIBUV
     (void)loop;
@@ -2624,9 +2645,12 @@ process_WRITE:
             return;
         }
 
-        if((tk_now(TK_A) - conn->latency.connection_initiated
-            < largs->params.delay_sending)
-           && !(conn->conn_blocked & CBLOCKED_ON_WRITE)) {
+        if((largs->params.delay_send > 0.0
+            && largs->params.delay_send
+                   > tk_now(TK_A) - conn->latency.connection_initiated)) {
+            conn->conn_wish |= CW_WRITE_DELAYED;
+            update_io_interest(TK_A_ conn);
+            connection_timer_refresh(TK_A_ conn, largs->params.delay_send);
             return;
         }
         do { /* Write de-coalescing loop */
