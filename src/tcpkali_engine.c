@@ -2134,7 +2134,7 @@ latency_record_outgoing_ts(TK_P_ struct connection *conn, const void *new_positi
                 conn->traffic_ongoing.msgs_sent++;
             }
         } else {
-                conn->traffic_ongoing.msgs_sent++;
+            conn->traffic_ongoing.msgs_sent += wrote / conn->data.single_message_size;
         }
         return;
     }
