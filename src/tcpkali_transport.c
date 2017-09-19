@@ -398,6 +398,11 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
 
     do { /* while(place_multiple_messages) */
 
+        if(tconv == TS_CONVERSION_OVERRIDE_MESSAGES) {
+            /* We'll rebuild the message anew */
+            data_spec->single_message_size = 0;
+        }
+
         size_t i;
         for(i = 0; i < mc->snippets_count; i++) {
             struct message_collection_snippet *snip = &mc->snippets[i];
