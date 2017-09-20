@@ -67,6 +67,7 @@ tregex_debug_print(tregex *re) {
         printf(")");
         break;
     case TRegexRepeat:
+        tregex_debug_print(re->repeat.what);
         if(re->repeat.minimum == 0 && re->repeat.range == 1) {
             printf("?");
         } else {
