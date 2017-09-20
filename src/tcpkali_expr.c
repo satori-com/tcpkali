@@ -191,6 +191,7 @@ concat_expressions(tk_expr_t *expr1, tk_expr_t *expr2) {
         expr->u.concat.expr[0] = expr1;
         expr->u.concat.expr[1] = expr2;
         expr->estimate_size = expr1->estimate_size + expr2->estimate_size;
+        expr->avg_size = expr1->avg_size + expr2->avg_size;
         expr->dynamic_scope = expr1->dynamic_scope > expr2->dynamic_scope
                                   ? expr1->dynamic_scope
                                   : expr2->dynamic_scope;
@@ -286,6 +287,7 @@ unescape_expression(tk_expr_t *expr) {
     case EXPR_DATA:
         unescape_data((char *)expr->u.data.data, &expr->u.data.size);
         expr->estimate_size = expr->u.data.size;
+        expr->avg_size = expr->u.data.size;
         return;
     case EXPR_RAW:
         unescape_expression(expr->u.raw.expr);
@@ -295,6 +297,10 @@ unescape_expression(tk_expr_t *expr) {
         unescape_expression(expr->u.concat.expr[1]);
         expr->estimate_size = expr->u.concat.expr[0]->estimate_size
                               + expr->u.concat.expr[1]->estimate_size;
+        expr->avg_size = expr->u.concat.expr[0]->avg_size
+                              + expr->u.concat.expr[1]->avg_size;
+
+
         return;
     case EXPR_MODULO:
     case EXPR_CONNECTION_PTR:
@@ -307,6 +313,27 @@ unescape_expression(tk_expr_t *expr) {
         unescape_data((char *)expr->u.ws_frame.data, &expr->u.ws_frame.size);
         expr->estimate_size = expr->u.ws_frame.size + overhead;
         return;
+    }
+    }
+}
+
+size_t average_size(tk_expr_t *expr) {
+    switch(expr->type) {
+    case EXPR_CONCAT: {
+        size_t avg_size = average_size(expr->u.concat.expr[0])
+                        + average_size(expr->u.concat.expr[1]);
+        return avg_size;
+    }
+    case EXPR_REGEX:
+        return tregex_avg_size(expr->u.regex.re);
+    case EXPR_DATA:
+    case EXPR_RAW:
+    case EXPR_MODULO:
+    case EXPR_CONNECTION_PTR:
+    case EXPR_CONNECTION_UID:
+    case EXPR_MESSAGE_MARKER:
+    case EXPR_WS_FRAME: {
+        return expr->estimate_size;
     }
     }
 }

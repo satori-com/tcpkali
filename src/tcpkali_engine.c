@@ -1187,7 +1187,7 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
                 hdr_reset(conn->latency.marker_histogram);
                 conn->send_limit = compute_bandwidth_limit_by_message_size(
                     largs->params.channel_send_rate,
-                    conn->data.single_message_size);
+                    conn->avg_message_size);
             }
         }
         break;
@@ -1589,6 +1589,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
     double now = tk_now(TK_A);
 
     conn->latency.connection_initiated = now;
+    conn->bytes_leftovers = 0;
 
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
@@ -1619,8 +1620,14 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
         explode_data_template(&largs->params.message_collection,
                               largs->params.data_templates, tws_side,
                               &conn->data, largs, conn);
+        enum websocket_side ws_side =
+            (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
+        conn->avg_message_size = message_collection_estimate_size(
+            &largs->params.message_collection,
+            MSK_PURPOSE_MESSAGE, MSK_PURPOSE_MESSAGE,
+            MCE_AVERAGE_SIZE, ws_side);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
-            largs->params.channel_send_rate, conn->data.single_message_size);
+            largs->params.channel_send_rate, conn->avg_message_size);
         pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
         if(largs->params.message_stop_expr) {
             conn->sbmh_stop_ctx = malloc(SBMH_SIZE(largs->params.message_stop_expr->estimate_size));
@@ -2123,19 +2130,14 @@ update_io_interest(TK_P_ struct connection *conn) {
 }
 
 static void
-latency_record_outgoing_ts(TK_P_ struct connection *conn, const void *new_position, size_t wrote) {
+latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     if(largs->params.message_marker) {
-        const void *token = conn->data.marker_token_ptr;
-        const void *position = new_position - wrote;
-        if(token) {
-            if(position <= token && token < position + wrote) {
-                conn->traffic_ongoing.msgs_sent++;
+            if (conn->avg_message_size > 0) {
+                conn->traffic_ongoing.msgs_sent += (conn->bytes_leftovers + wrote) / conn->avg_message_size;
+                conn->bytes_leftovers = (conn->bytes_leftovers + wrote) % conn->avg_message_size;
             }
-        } else {
-            conn->traffic_ongoing.msgs_sent += wrote / conn->data.single_message_size;
-        }
         return;
     }
 
@@ -2729,7 +2731,7 @@ process_WRITE:
                     available_body -= wrote;
 
                     /* Record latencies for the body only, not headers */
-                    latency_record_outgoing_ts(TK_A_ conn, position, wrote);
+                    latency_record_outgoing_ts(TK_A_ conn, wrote);
                 }
             }
         } while(available_body);

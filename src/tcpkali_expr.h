@@ -70,6 +70,7 @@ typedef struct tk_expr {
         } regex;
     } u;
     size_t estimate_size;
+    size_t avg_size;
     enum tk_expr_dynamic_scope {
         DS_GLOBAL_FIXED,   /* All connection share data */
         DS_PER_CONNECTION, /* Each connection has its own */
@@ -132,5 +133,12 @@ struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr);
  * Recursively go over all of the parts of the expression and unescape them.
  */
 void unescape_expression(tk_expr_t *expr);
+
+/*
+ * Recursively go over all of the parts of the expression and
+ * callculate average msg size.
+ */
+
+size_t average_size(tk_expr_t *expr);
 
 #endif /* TCPKALI_EXPR_H */

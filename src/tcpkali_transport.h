@@ -112,11 +112,12 @@ int message_collection_has(const struct message_collection *, enum tk_expr_type)
  * Estimate the size of the snippets of the specified kind (and mask).
  * Works on a finalized message collection.
  */
-enum mc_snippet_estimate { MCE_MINIMUM_SIZE, MCE_MAXIMUM_SIZE };
+enum mc_snippet_estimate { MCE_MINIMUM_SIZE, MCE_MAXIMUM_SIZE, MCE_AVERAGE_SIZE };
 size_t message_collection_estimate_size(struct message_collection *mc,
                                         enum mc_snippet_kind kind_and,
                                         enum mc_snippet_kind kind_equal,
-                                        enum mc_snippet_estimate);
+                                        enum mc_snippet_estimate,
+                                        enum websocket_side ws_side);
 
 /*
  * Our send buffer is pre-computed in advance and may be shared

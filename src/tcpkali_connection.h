@@ -23,6 +23,8 @@ struct connection {
     off_t write_offset;
     struct transport_data_spec data;
     non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
+    size_t avg_message_size;
+    size_t bytes_leftovers;
     non_atomic_traffic_stats traffic_reported; /* Reported to worker */
     float channel_eol_point; /* End of life time, since epoch */
     struct pacefier send_pace;
