@@ -202,7 +202,7 @@ NumericExpr:
     | TOK_message '.' TOK_marker {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_MESSAGE_MARKER;
-        $$->estimate_size = sizeof("100000000000000" "1000000000000000" "!");
+        $$->estimate_size = sizeof("1000000000000" "1000000000000000" "!") - 1;
     }
 
 WSFrameFinalized:

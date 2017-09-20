@@ -1541,7 +1541,7 @@ yyreduce:
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_MESSAGE_MARKER;
-        (yyval.tv_expr)->estimate_size = sizeof("100000000000000" "1000000000000000" "!");
+        (yyval.tv_expr)->estimate_size = sizeof("1000000000000" "1000000000000000" "!") - 1;
     }
 #line 1547 "tcpkali_expr_y.c" /* yacc.c:1646  */
     break;
