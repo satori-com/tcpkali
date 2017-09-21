@@ -1188,6 +1188,8 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
                 conn->send_limit = compute_bandwidth_limit_by_message_size(
                     largs->params.channel_send_rate,
                     conn->avg_message_size);
+                double now = tk_now(TK_A);
+                pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
             }
         }
         break;
