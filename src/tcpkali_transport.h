@@ -117,7 +117,8 @@ size_t message_collection_estimate_size(struct message_collection *mc,
                                         enum mc_snippet_kind kind_and,
                                         enum mc_snippet_kind kind_equal,
                                         enum mc_snippet_estimate,
-                                        enum websocket_side ws_side);
+                                        enum websocket_side ws_side,
+                                        int ws_enable);
 
 /*
  * Our send buffer is pre-computed in advance and may be shared
@@ -168,5 +169,14 @@ struct transport_data_spec *transport_spec_from_message_collection(
  */
 void replicate_payload(struct transport_data_spec *data,
                        size_t target_payload_size);
+
+/*
+ * Replicate snippets (need to replicate expressions)
+ * it does not copy data
+ */
+void message_collection_replicate(struct message_collection *mc_from,
+                                  struct message_collection *mc_to);
+
+void message_collection_free(struct message_collection *mc);
 
 #endif /* TCPKALI_TRANSPORT_H */

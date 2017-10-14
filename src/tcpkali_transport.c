@@ -136,6 +136,34 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
     data->flags |= TDS_FLAG_REPLICATED;
 }
 
+void
+message_collection_replicate(struct message_collection *mc_from, struct message_collection *mc_to) {
+    mc_to->snippets = malloc(sizeof(mc_from->snippets[0])*mc_from->snippets_size);
+    for(size_t i = 0; i < mc_from->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc_from->snippets[i];
+        mc_to->snippets[i].data = snip->data;
+        mc_to->snippets[i].size = snip->size;
+        mc_to->snippets[i].expr = replicate_expression(snip->expr);
+        mc_to->snippets[i].flags = snip->flags;
+        mc_to->snippets[i].sort_index =  snip->sort_index;
+    }
+    mc_to->snippets_size = mc_from->snippets_size;
+    mc_to->snippets_count = mc_from->snippets_count;
+    mc_to->most_dynamic_expression = mc_from->most_dynamic_expression;
+    mc_to->state = mc_from->state;
+}
+
+void
+message_collection_free(struct message_collection *mc) {
+    for(size_t i = 0; i < mc->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc->snippets[i];
+        if(snip->flags & MSK_EXPRESSION_FOUND) {
+            free_expression(snip->expr, 0);
+        }
+    }
+    free((void *)mc->snippets);
+}
+
 static void
 message_collection_ensure_space(struct message_collection *mc, size_t need) {
     /* Reallocate snippets array, if needed. */
@@ -208,7 +236,7 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
             snip->data = (char *)expr->u.data.data;
             snip->size = expr->u.data.size;
             expr->u.data.data = 0;
-            free_expression(expr);
+            free_expression(expr, 0);
             /* Just use the snip->data instead. */
             mc->snippets_count++;
         } else {
@@ -287,7 +315,8 @@ message_collection_estimate_size(struct message_collection *mc,
                                  enum mc_snippet_kind kind_and,
                                  enum mc_snippet_kind kind_equal,
                                  enum mc_snippet_estimate mce,
-                                 enum websocket_side ws_side) {
+                                 enum websocket_side ws_side,
+                                 int ws_enable) {
     size_t total_size = 0;
     size_t i;
 
@@ -311,10 +340,10 @@ message_collection_estimate_size(struct message_collection *mc,
         } else {
             snippet_size += snip->size;
         }
-        snippet_size += websocket_frame_header(
+        snippet_size += ws_enable ? websocket_frame_header(
                             NULL, 0,
                             ws_side, WS_OP_TEXT_FRAME, 0, 1,
-                            snippet_size);
+                            snippet_size) : 0;
         total_size += snippet_size;
     }
     return total_size;
@@ -385,7 +414,7 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
 
     if(tconv == TS_CONVERSION_INITIAL) {
         size_t estimate_size =
-            message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE, ws_side);
+            message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE, ws_side, 1);
         if(estimate_size < REPLICATE_MAX_SIZE)
             estimate_size = REPLICATE_MAX_SIZE;
         data_spec->ptr = malloc(estimate_size + 1);

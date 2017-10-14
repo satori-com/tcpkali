@@ -890,7 +890,7 @@ main(int argc, char **argv) {
     int no_message_to_send =
         (0 == message_collection_estimate_size(
                   &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
-                  MSK_PURPOSE_MESSAGE, MCE_MINIMUM_SIZE, WS_SIDE_CLIENT));
+                  MSK_PURPOSE_MESSAGE, MCE_MINIMUM_SIZE, WS_SIDE_CLIENT, 0));
 
     /*
      * Message marker mode can be explicitly enabled via --message-marker,
@@ -938,7 +938,7 @@ main(int argc, char **argv) {
        && no_message_to_send) {
         if(message_collection_estimate_size(
                &engine_params.message_collection, MSK_PURPOSE_MESSAGE,
-               MSK_PURPOSE_MESSAGE, MCE_MAXIMUM_SIZE, WS_SIDE_CLIENT)
+               MSK_PURPOSE_MESSAGE, MCE_MAXIMUM_SIZE, WS_SIDE_CLIENT, 1)
            > 0) {
             fprintf(stderr,
                     "--message may resolve "

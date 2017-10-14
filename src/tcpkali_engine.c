@@ -1615,17 +1615,18 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
                         || (largs->params.listen_mode & _LMODE_SND_MASK);
     if(active_socket || largs->params.message_marker) {
 
+        message_collection_replicate(&largs->params.message_collection, &conn->message_collection);
         enum transport_websocket_side tws_side =
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
-        explode_data_template(&largs->params.message_collection,
+        explode_data_template(&conn->message_collection,
                               largs->params.data_templates, tws_side,
                               &conn->data, largs, conn);
         enum websocket_side ws_side =
             (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
         conn->avg_message_size = message_collection_estimate_size(
-            &largs->params.message_collection,
+            &conn->message_collection,
             MSK_PURPOSE_MESSAGE, MSK_PURPOSE_MESSAGE,
-            MCE_AVERAGE_SIZE, ws_side);
+            MCE_AVERAGE_SIZE, ws_side, largs->params.websocket_enable);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
             largs->params.channel_send_rate, conn->avg_message_size);
         pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
@@ -2390,11 +2391,11 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *available_body = available - *available_header;
     } else {
         /* If we're at the end of the buffer, re-blow it with new messages */
-        if(largs->params.message_collection.most_dynamic_expression
+        if(conn->message_collection.most_dynamic_expression
                == DS_PER_MESSAGE
            && (conn->conn_type == CONN_OUTGOING
                || (largs->params.listen_mode & _LMODE_SND_MASK))) {
-            explode_data_template_override(&largs->params.message_collection,
+            explode_data_template_override(&conn->message_collection,
                                            (conn->conn_type == CONN_OUTGOING)
                                                ? TWS_SIDE_CLIENT
                                                : TWS_SIDE_SERVER,
@@ -2821,6 +2822,8 @@ connection_free_internals(struct connection *conn) {
     if(conn->sbmh_stop_ctx) {
         free(conn->sbmh_stop_ctx);
     }
+
+    message_collection_free(&conn->message_collection);
 
 #ifdef HAVE_OPENSSL
     if(conn->ssl_ctx) {
