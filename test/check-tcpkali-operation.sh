@@ -15,7 +15,8 @@ fi
 
 TMPFILE=/tmp/check-tcpkali-output.$$
 rmtmp() {
-    local lines=$(wc -l ${TMPFILE} | awk '{print $1}')
+    local lines
+    lines=$(wc -l ${TMPFILE} | awk '{print $1}')
     if [ ${lines} -gt 150 ]; then
         echo "First 50 lines of tcpkali output (total ${lines}):"
         head -50 ${TMPFILE}
@@ -38,15 +39,17 @@ check() {
     local togrep="$2"
     shift 2
 
-    if [ -n "${use_test_no}" -a "${testno}" != "${use_test_no}" ]; then
+    if [ -n "${use_test_no}" ] && [ "${testno}" != "${use_test_no}" ]; then
         return
     fi
 
     PORT=$((PORT+1))
-    local rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
+    local rest_opts
+    rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" | tee ${TMPFILE} >&2
     echo "Looking for \"$togrep\" in '$* ${rest_opts}'" >> ${TMPFILE}
-    local out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | egrep -c "$togrep")
+    local out
+    out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | grep -E -c "$togrep")
     [ $out -ne 0 ] || exit 1
 }
 
@@ -95,4 +98,4 @@ check 25 "Packet rate estimate: (9|10|11)" ${TCPKALI} --ws -m '\{message.marker}
 
 check 26 "." ${TCPKALI} ./tcpkali -1 '\{message.marker}' -m '\{message.marker}'
 
-trap "rm -f ${TMPFILE}" EXIT
+trap 'rm -f ${TMPFILE}' EXIT
