@@ -74,8 +74,6 @@ int yyerror(tk_expr_t **, const char *);
 Grammar:
     END {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         expr->type = EXPR_DATA;
         *(tk_expr_t **)param = expr;
         return 0;
@@ -113,8 +111,6 @@ ByteSequenceOrExpr:
         expr->u.data.data = ($1).buf;
         expr->u.data.size = ($1).len;
         expr->estimate_size = ($1).len;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         $$ = expr;
     }
     | '{' WSExpression '}' {
@@ -133,8 +129,6 @@ NonWSExpression:
         expr->u.data.data = ($1).buf;
         expr->u.data.size = ($1).len;
         expr->estimate_size = ($1).len;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         $$ = expr;
     }
     | NumericExpr {
@@ -146,14 +140,10 @@ NonWSExpression:
         expr->u.data.data = ($2).buf;
         expr->u.data.size = ($2).len;
         expr->estimate_size = ($2).len;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         $$ = calloc(1, sizeof(tk_expr_t));
         $$->type = EXPR_RAW;
         $$->u.raw.expr = expr;
         $$->estimate_size = expr->estimate_size;
-        $$->res_buf = NULL;
-        $$->res_size = 0;
     }
     | TOK_raw '{' NonWSExpression '}' {
         $$ = calloc(1, sizeof(tk_expr_t));
@@ -161,8 +151,6 @@ NonWSExpression:
         $$->u.raw.expr = $3;
         $$->estimate_size = $3->estimate_size;
         $$->dynamic_scope = $3->dynamic_scope;
-        $$->res_buf = NULL;
-        $$->res_size = 0;
     }
     | TOK_global '.' TOK_regex CompleteRegex {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
@@ -172,8 +160,6 @@ NonWSExpression:
         expr->u.data.data = data;
         expr->u.data.size = tregex_eval($4, data, tregex_max_size($4)+ 1);
         expr->estimate_size = expr->u.data.size;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         tregex_free($4);
         $$ = expr;
     }
@@ -183,8 +169,6 @@ NonWSExpression:
         expr->u.regex.re = $4;
         expr->estimate_size = tregex_max_size($4);
         expr->dynamic_scope = DS_PER_CONNECTION;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         $$ = expr;
     }
     | TOK_regex CompleteRegex {
@@ -193,8 +177,6 @@ NonWSExpression:
         expr->u.regex.re = $2;
         expr->estimate_size = tregex_max_size($2);
         expr->dynamic_scope = DS_PER_MESSAGE;
-        expr->res_buf = NULL;
-        expr->res_size = 0;
         $$ = expr;
     }
 
@@ -205,32 +187,24 @@ NumericExpr:
         $$->u.modulo.expr = $1;
         $$->u.modulo.modulo_value = $3;
         $$->estimate_size = $1->estimate_size;
-        $$->res_buf = NULL;
-        $$->res_size = 0;
         $$->dynamic_scope = $1->dynamic_scope;
     }
     | TOK_connection '.' TOK_ptr {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_PTR;
         $$->estimate_size = sizeof("100000000000000");
-        $$->res_buf = NULL;
-        $$->res_size = 0;
         $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | TOK_connection '.' TOK_uid {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_UID;
         $$->estimate_size = sizeof("100000000000000");
-        $$->res_buf = NULL;
-        $$->res_size = 0;
         $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | TOK_message '.' TOK_marker {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_MESSAGE_MARKER;
         $$->estimate_size = sizeof("1000000000000" "1000000000000000" "!") - 1;
-        $$->res_buf = NULL;
-        $$->res_size = 0;
         $$->dynamic_scope = DS_PER_MESSAGE;
     }
 
@@ -272,8 +246,6 @@ WSBasicFrame:
         $$->u.ws_frame.opcode = $3;
         $$->u.ws_frame.fin = 1; /* Complete frame */
         $$->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
-        $$->res_buf = NULL;
-        $$->res_size = 0;
     }
 
 FileOrQuoted: quoted_string | File
