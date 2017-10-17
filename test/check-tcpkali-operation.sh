@@ -55,10 +55,10 @@ check 2 "." ${TCPKALI} -vv --connections=10 --duration=1 -m Z
 check 3 "." ${TCPKALI} -vv -c10 --message Z --message-rate=2
 check 4 "." ${TCPKALI} -vv -c10 -m Z --channel-bandwidth-upstream=10kbps
 
-check 5 "Total data sent:[ ]+149 bytes"     ${TCPKALI} -vv --ws -w3
-check 6 "Total data received:[ ]+278 bytes" ${TCPKALI} -vv --ws -w3
-check 7 "Total data sent:[ ]+158 bytes"     ${TCPKALI} -vv --ws --first-message ABC -w3
-check 8 "Total data received:[ ]+287 bytes" ${TCPKALI} -vv --ws -1 ABC -w3
+check 5 "Total data sent:[ ]+149 bytes"     ${TCPKALI} -vv --ws -w2
+check 6 "Total data received:[ ]+278 bytes" ${TCPKALI} -vv --ws -w2
+check 7 "Total data sent:[ ]+158 bytes"     ${TCPKALI} -vv --ws --first-message ABC -w2
+check 8 "Total data received:[ ]+287 bytes" ${TCPKALI} -vv --ws -1 ABC -w2
 
 check 9 "." ${TCPKALI} --ws --message ABC
 check 10 "." ${TCPKALI} --ws --first-message ABC --message foo
