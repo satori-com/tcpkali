@@ -308,7 +308,7 @@ tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
     }
 
     assert(buf <= bend);
-    if(bold > buf) *buf = '\0';
+    if(bold < buf) *buf = '\0';
 
     return (buf - bold);
 }
