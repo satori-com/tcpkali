@@ -90,8 +90,8 @@ for size_k in 63 65 1000; do
 done
 rm_testfile
 
-check 24 "Packet rate estimate: (19|20)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
-check 25 "Packet rate estimate: (19|20)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
+check 24 "Packet rate estimate: (9|10|11)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
+check 25 "Packet rate estimate: (9|10|11)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
 
 check 26 "." ${TCPKALI} ./tcpkali -1 '\{message.marker}' -m '\{message.marker}'
 

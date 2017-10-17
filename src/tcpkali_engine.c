@@ -1613,7 +1613,8 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
 
     int active_socket = conn_type == CONN_OUTGOING
                         || (largs->params.listen_mode & _LMODE_SND_MASK);
-    if(active_socket || largs->params.message_marker) {
+
+    if(active_socket) {
 
         message_collection_replicate(&largs->params.message_collection, &conn->message_collection);
         enum transport_websocket_side tws_side =
@@ -1635,55 +1636,56 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
             assert(conn->sbmh_stop_ctx);
             sbmh_init(conn->sbmh_stop_ctx, NULL, 0, 0);
         }
-        if(largs->params.latency_marker_expr && (conn->data.single_message_size || largs->params.message_marker)) {
-            if(conn->data.single_message_size) {
-                conn->latency.message_bytes_credit /* See (EXPL:1) below. */
-                    = conn->data.single_message_size - 1;
-            }
-            /*
-             * Figure out how many latency markers to skip
-             * before starting to measure latency with them.
-             */
-            conn->latency.lm_occurrences_skip =
-                largs->params.latency_marker_skip;
+    }
 
-            /*
-             * Initialize the Boyer-Moore-Horspool context for substring search.
-             */
-            struct StreamBMH_Occ *init_occ = NULL;
-            if(EXPR_IS_TRIVIAL(largs->params.latency_marker_expr)) {
-                /* Shared search table and expression */
-                conn->latency.sbmh_shared = 1;
-                conn->latency.sbmh_occ = &largs->params.sbmh_shared_marker_occ;
-                conn->latency.sbmh_data =
-                    (uint8_t *)largs->params.latency_marker_expr->u.data.data;
-                conn->latency.sbmh_size =
-                    largs->params.latency_marker_expr->u.data.size;
-            } else {
-                /* Individual search table. */
-                conn->latency.sbmh_shared = 0;
-                conn->latency.sbmh_occ =
-                    malloc(sizeof(*conn->latency.sbmh_occ));
-                assert(conn->latency.sbmh_occ);
-                init_occ = conn->latency.sbmh_occ;
-                explode_string_expression(
-                    (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
-                    largs->params.latency_marker_expr, largs, conn);
-            }
-            conn->latency.sbmh_marker_ctx =
-                malloc(SBMH_SIZE(conn->latency.sbmh_size));
-            assert(conn->latency.sbmh_marker_ctx);
-            sbmh_init(conn->latency.sbmh_marker_ctx, init_occ,
-                      conn->latency.sbmh_data, conn->latency.sbmh_size);
-
-            /*
-             * Initialize the latency histogram by copying out the template
-             * parameter from the loop arguments.
-             */
-            conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-            conn->latency.marker_histogram =
-                hdr_init_similar(largs->marker_histogram_local);
+    if(largs->params.latency_marker_expr && (conn->data.single_message_size || largs->params.message_marker)) {
+        if(conn->data.single_message_size) {
+            conn->latency.message_bytes_credit /* See (EXPL:1) below. */
+                = conn->data.single_message_size - 1;
         }
+        /*
+         * Figure out how many latency markers to skip
+         * before starting to measure latency with them.
+         */
+        conn->latency.lm_occurrences_skip =
+            largs->params.latency_marker_skip;
+
+        /*
+         * Initialize the Boyer-Moore-Horspool context for substring search.
+         */
+        struct StreamBMH_Occ *init_occ = NULL;
+        if(EXPR_IS_TRIVIAL(largs->params.latency_marker_expr)) {
+            /* Shared search table and expression */
+            conn->latency.sbmh_shared = 1;
+            conn->latency.sbmh_occ = &largs->params.sbmh_shared_marker_occ;
+            conn->latency.sbmh_data =
+                (uint8_t *)largs->params.latency_marker_expr->u.data.data;
+            conn->latency.sbmh_size =
+                largs->params.latency_marker_expr->u.data.size;
+        } else {
+            /* Individual search table. */
+            conn->latency.sbmh_shared = 0;
+            conn->latency.sbmh_occ =
+                malloc(sizeof(*conn->latency.sbmh_occ));
+            assert(conn->latency.sbmh_occ);
+            init_occ = conn->latency.sbmh_occ;
+            explode_string_expression(
+                (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
+                largs->params.latency_marker_expr, largs, conn);
+        }
+        conn->latency.sbmh_marker_ctx =
+            malloc(SBMH_SIZE(conn->latency.sbmh_size));
+        assert(conn->latency.sbmh_marker_ctx);
+        sbmh_init(conn->latency.sbmh_marker_ctx, init_occ,
+                  conn->latency.sbmh_data, conn->latency.sbmh_size);
+
+        /*
+         * Initialize the latency histogram by copying out the template
+         * parameter from the loop arguments.
+         */
+        conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
+        conn->latency.marker_histogram =
+            hdr_init_similar(largs->marker_histogram_local);
     }
 
     /*
