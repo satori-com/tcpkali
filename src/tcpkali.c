@@ -923,10 +923,18 @@ main(int argc, char **argv) {
                     optname);
             exit(EX_USAGE);
         }
-    } else if(rate_modulator.mode != RM_UNMODULATED) {
+    }
+
+    /*
+     * If we want to get max rate for specific latency
+     * check that we specified the marker for latency measurement
+     */
+    if(rate_modulator.mode != RM_UNMODULATED
+       && !engine_params.latency_marker_expr
+       && !engine_params.message_marker) {
         fprintf(stderr,
                 "--message-rate @<Latency> requires specifying "
-                "--latency-marker as well.\n");
+                "--latency-marker or --message-marker as well.\n");
         exit(EX_USAGE);
     }
 
