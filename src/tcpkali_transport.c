@@ -307,6 +307,32 @@ message_collection_add_expr(struct message_collection *mc,
     }
 }
 
+size_t
+ws_header_size_estimate(enum mc_snippet_estimate mce,
+                        enum websocket_side ws_side,
+                        size_t data_size) {
+    switch (mce) {
+    case MCE_MAXIMUM_SIZE: {
+        size_t client_size = websocket_frame_header(NULL, 0, WS_SIDE_CLIENT,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        size_t server_size = websocket_frame_header(NULL, 0, WS_SIDE_SERVER,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        return client_size > server_size ? client_size : server_size;
+    };
+    case MCE_AVERAGE_SIZE: {
+        return websocket_frame_header(NULL, 0, ws_side,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+    };
+    case MCE_MINIMUM_SIZE: {
+        size_t client_size = websocket_frame_header(NULL, 0, WS_SIDE_CLIENT,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        size_t server_size = websocket_frame_header(NULL, 0, WS_SIDE_SERVER,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        return client_size < server_size ? client_size : server_size;
+    };
+    }
+}
+
 /*
  * Give the largest size the message can possibly occupy.
  */
@@ -340,10 +366,8 @@ message_collection_estimate_size(struct message_collection *mc,
         } else {
             snippet_size += snip->size;
         }
-        snippet_size += ws_enable ? websocket_frame_header(
-                            NULL, 0,
-                            ws_side, WS_OP_TEXT_FRAME, 0, 1,
-                            snippet_size) : 0;
+        snippet_size += ws_enable ?
+                        ws_header_size_estimate(mce, ws_side, snippet_size) : 0;
         total_size += snippet_size;
     }
     return total_size;
