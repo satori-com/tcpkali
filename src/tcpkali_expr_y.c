@@ -499,10 +499,10 @@ static const yytype_uint8 yytranslate[] =
 static const yytype_uint16 yyrline[] =
 {
        0,    75,    75,    81,    87,    90,    95,    96,   107,   116,
-     119,   123,   126,   134,   138,   149,   156,   167,   175,   185,
-     192,   197,   202,   209,   211,   216,   222,   224,   240,   248,
-     248,   251,   271,   274,   277,   282,   283,   288,   289,   290,
-     291,   292,   293,   296,   299,   302,   307,   308,   313,   316
+     119,   123,   126,   134,   137,   148,   155,   166,   174,   184,
+     192,   198,   204,   212,   214,   219,   225,   227,   243,   251,
+     251,   254,   274,   277,   280,   285,   286,   291,   292,   293,
+     294,   295,   296,   299,   302,   305,   310,   311,   316,   319
 };
 #endif
 
@@ -1333,43 +1333,43 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-#line 75 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 75 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
         *(tk_expr_t **)param = expr;
         return 0;
     }
-#line 1344 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1344 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 3:
-#line 81 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 81 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         *(tk_expr_t **)param = (yyvsp[-1].tv_expr);
         return 0;
     }
-#line 1353 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1353 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 4:
-#line 87 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 87 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[0].tv_expr);
     }
-#line 1361 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1361 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 5:
-#line 90 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 90 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = concat_expressions((yyvsp[-1].tv_expr), (yyvsp[0].tv_expr));
     }
-#line 1369 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1369 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 7:
-#line 96 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 96 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         size_t len = (((yyvsp[-1].tv_string)).len + ((yyvsp[0].tv_string)).len);
         char *p = malloc(len + 1);
@@ -1379,11 +1379,11 @@ yyreduce:
         (yyval.tv_string).buf = p;
         (yyval.tv_string).len = len;
     }
-#line 1383 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1383 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 8:
-#line 107 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 107 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         /* If there's nothing to parse, don't return anything */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
@@ -1393,27 +1393,27 @@ yyreduce:
         expr->estimate_size = ((yyvsp[0].tv_string)).len;
         (yyval.tv_expr) = expr;
     }
-#line 1397 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1397 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 9:
-#line 116 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 116 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
     }
-#line 1405 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1405 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 10:
-#line 119 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 119 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
     }
-#line 1413 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1413 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 12:
-#line 126 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 126 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {    /* \{<filename.txt>} */
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -1422,20 +1422,19 @@ yyreduce:
         expr->estimate_size = ((yyvsp[0].tv_string)).len;
         (yyval.tv_expr) = expr;
     }
-#line 1426 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1426 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 13:
-#line 134 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 134 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[0].tv_expr);
-        (yyval.tv_expr)->dynamic_scope = DS_PER_CONNECTION;
     }
-#line 1435 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1434 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 14:
-#line 138 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 137 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -1447,11 +1446,11 @@ yyreduce:
         (yyval.tv_expr)->u.raw.expr = expr;
         (yyval.tv_expr)->estimate_size = expr->estimate_size;
     }
-#line 1451 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1450 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 15:
-#line 149 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 148 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(tk_expr_t));
         (yyval.tv_expr)->type = EXPR_RAW;
@@ -1459,11 +1458,11 @@ yyreduce:
         (yyval.tv_expr)->estimate_size = (yyvsp[-1].tv_expr)->estimate_size;
         (yyval.tv_expr)->dynamic_scope = (yyvsp[-1].tv_expr)->dynamic_scope;
     }
-#line 1463 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1462 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 16:
-#line 156 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 155 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_DATA;
@@ -1475,11 +1474,11 @@ yyreduce:
         tregex_free((yyvsp[0].tv_regex));
         (yyval.tv_expr) = expr;
     }
-#line 1479 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1478 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 17:
-#line 167 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 166 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
@@ -1488,11 +1487,11 @@ yyreduce:
         expr->dynamic_scope = DS_PER_CONNECTION;
         (yyval.tv_expr) = expr;
     }
-#line 1492 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1491 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 18:
-#line 175 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 174 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
         expr->type = EXPR_REGEX;
@@ -1501,71 +1500,75 @@ yyreduce:
         expr->dynamic_scope = DS_PER_MESSAGE;
         (yyval.tv_expr) = expr;
     }
-#line 1505 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1504 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 19:
-#line 185 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 184 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_MODULO;
         (yyval.tv_expr)->u.modulo.expr = (yyvsp[-2].tv_expr);
         (yyval.tv_expr)->u.modulo.modulo_value = (yyvsp[0].tv_long);
         (yyval.tv_expr)->estimate_size = (yyvsp[-2].tv_expr)->estimate_size;
+        (yyval.tv_expr)->dynamic_scope = (yyvsp[-2].tv_expr)->dynamic_scope;
     }
-#line 1517 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1517 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 20:
-#line 192 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 192 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_PTR;
         (yyval.tv_expr)->estimate_size = sizeof("100000000000000");
+        (yyval.tv_expr)->dynamic_scope = DS_PER_CONNECTION;
     }
-#line 1527 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1528 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 21:
-#line 197 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 198 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_CONNECTION_UID;
         (yyval.tv_expr)->estimate_size = sizeof("100000000000000");
+        (yyval.tv_expr)->dynamic_scope = DS_PER_CONNECTION;
     }
-#line 1537 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1539 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 22:
-#line 202 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 204 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_MESSAGE_MARKER;
-        (yyval.tv_expr)->estimate_size = sizeof("100000000000000" "1000000000000000" "!");
+        (yyval.tv_expr)->estimate_size = sizeof("1000000000000" "1000000000000000" "!") - 1;
+        (yyval.tv_expr)->dynamic_scope = DS_PER_MESSAGE;
     }
-#line 1547 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1550 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 24:
-#line 211 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 214 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
         (yyval.tv_expr)->u.ws_frame.fin = 0; /* Expect continuation. */
     }
-#line 1556 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1559 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 25:
-#line 216 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 219 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
         (yyval.tv_expr)->u.ws_frame.rsvs |= (yyvsp[0].tv_long);
     }
-#line 1565 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1568 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 27:
-#line 224 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 227 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = (yyvsp[-1].tv_expr);
         /* Combine old data with new data. */
@@ -1580,11 +1583,11 @@ yyreduce:
         (yyval.tv_expr)->u.ws_frame.size = total_size;
         (yyval.tv_expr)->estimate_size += ((yyvsp[0].tv_string)).len;
     }
-#line 1584 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1587 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 28:
-#line 240 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 243 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_expr) = calloc(1, sizeof(*((yyval.tv_expr))));
         (yyval.tv_expr)->type = EXPR_WS_FRAME;
@@ -1592,11 +1595,11 @@ yyreduce:
         (yyval.tv_expr)->u.ws_frame.fin = 1; /* Complete frame */
         (yyval.tv_expr)->estimate_size = WEBSOCKET_MAX_FRAME_HDR_SIZE;
     }
-#line 1596 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1599 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 31:
-#line 251 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 254 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         const char *name = (yyvsp[-1].tv_string).buf;
         FILE *fp = fopen(name, "r");
@@ -1615,113 +1618,113 @@ yyreduce:
         fclose(fp);
         (yyval.tv_string).buf[(yyval.tv_string).len] = '\0';
     }
-#line 1619 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1622 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 33:
-#line 274 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 277 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_alternative((yyvsp[0].tv_regex));
     }
-#line 1627 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1630 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 34:
-#line 277 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 280 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_alternative_add((yyvsp[-2].tv_regex), (yyvsp[0].tv_regex));
     }
-#line 1635 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1638 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 36:
-#line 283 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 286 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_join((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
     }
-#line 1643 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1646 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 38:
-#line 289 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 292 "tcpkali_expr_y.y" /* yacc.c:1661  */
     { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 1); }
-#line 1649 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1652 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 39:
-#line 290 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 293 "tcpkali_expr_y.y" /* yacc.c:1661  */
     { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 1, 16); }
-#line 1655 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1658 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 40:
-#line 291 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 294 "tcpkali_expr_y.y" /* yacc.c:1661  */
     { (yyval.tv_regex) = tregex_repeat((yyvsp[-1].tv_regex), 0, 16); }
-#line 1661 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1664 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 41:
-#line 292 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 295 "tcpkali_expr_y.y" /* yacc.c:1661  */
     { (yyval.tv_regex) = tregex_repeat((yyvsp[-3].tv_regex), (yyvsp[-1].tv_long), (yyvsp[-1].tv_long)); }
-#line 1667 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1670 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 42:
-#line 293 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 296 "tcpkali_expr_y.y" /* yacc.c:1661  */
     { (yyval.tv_regex) = tregex_repeat((yyvsp[-5].tv_regex), (yyvsp[-3].tv_long), (yyvsp[-1].tv_long)); }
-#line 1673 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1676 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 43:
-#line 296 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 299 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
     }
-#line 1681 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1684 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 44:
-#line 299 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 302 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = (yyvsp[-1].tv_regex);
     }
-#line 1689 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1692 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 45:
-#line 302 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 305 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = (yyvsp[-1].tv_regex);
     }
-#line 1697 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1700 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 47:
-#line 308 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 311 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_union_ranges((yyvsp[-1].tv_regex), (yyvsp[0].tv_regex));
     }
-#line 1705 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1708 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 48:
-#line 313 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 316 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_range_from_string((yyvsp[0].tv_string).buf, (yyvsp[0].tv_string).len);
     }
-#line 1713 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1716 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
   case 49:
-#line 316 "tcpkali_expr_y.y" /* yacc.c:1646  */
+#line 319 "tcpkali_expr_y.y" /* yacc.c:1661  */
     {
         (yyval.tv_regex) = tregex_range((yyvsp[0].tv_class_range).from, (yyvsp[0].tv_class_range).to);
     }
-#line 1721 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1724 "tcpkali_expr_y.c" /* yacc.c:1661  */
     break;
 
 
-#line 1725 "tcpkali_expr_y.c" /* yacc.c:1646  */
+#line 1728 "tcpkali_expr_y.c" /* yacc.c:1661  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1949,7 +1952,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 320 "tcpkali_expr_y.y" /* yacc.c:1906  */
+#line 323 "tcpkali_expr_y.y" /* yacc.c:1906  */
 
 
 int

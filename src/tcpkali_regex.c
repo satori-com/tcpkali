@@ -16,6 +16,7 @@ struct tregex {
         TRegexRepeat
     } kind;
     size_t min_size;
+    size_t avg_size;
     size_t max_size;
     union {
         struct {
@@ -66,6 +67,7 @@ tregex_debug_print(tregex *re) {
         printf(")");
         break;
     case TRegexRepeat:
+        tregex_debug_print(re->repeat.what);
         if(re->repeat.minimum == 0 && re->repeat.range == 1) {
             printf("?");
         } else {
@@ -82,6 +84,7 @@ tregex_string(const char *str, ssize_t len) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexChars;
     re->min_size = len;
+    re->avg_size = len;
     re->max_size = len;
     re->chars.data = calloc(1, len + 1);
     assert(re->chars.data);
@@ -100,6 +103,7 @@ tregex_join(tregex *re, tregex *rhs) {
             re->sequence.pieces += rhs->sequence.pieces;
             rhs->sequence.pieces = 0;
             re->min_size += rhs->min_size;
+            re->avg_size += rhs->avg_size;
             re->max_size += rhs->max_size;
             return re;
         } else {
@@ -112,6 +116,7 @@ tregex_join(tregex *re, tregex *rhs) {
         if(re->sequence.pieces < TREGEX_ELEMENTS) {
             re->sequence.piece[re->sequence.pieces++] = rhs;
             re->min_size += rhs->min_size;
+            re->avg_size += rhs->avg_size;
             re->max_size += rhs->max_size;
             return re;
         } else {
@@ -136,6 +141,7 @@ tregex_range(unsigned char from, unsigned char to) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexClass;
     re->min_size = 1;
+    re->avg_size = 1;
     re->max_size = 1;
     for(unsigned i = from; i <= to; i++) {
         re->oneof.table[re->oneof.size++] = i;
@@ -149,6 +155,7 @@ tregex_range_from_string(const char *str, ssize_t len) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexClass;
     re->min_size = 1;
+    re->avg_size = 1;
     re->max_size = 1;
     uint8_t used[256];
     memset(used, 0, sizeof(used));
@@ -186,6 +193,7 @@ tregex_alternative(tregex *rhs) {
     tregex *re = calloc(1, sizeof(*re));
     re->kind = TRegexAlternative;
     re->min_size = rhs->min_size;
+    re->avg_size = rhs->avg_size;
     re->max_size = rhs->max_size;
     re->alternative.branch[0] = rhs;
     re->alternative.branches = 1;
@@ -203,6 +211,11 @@ tregex_alternative_add(tregex *re, tregex *rhs) {
     }
     if(re->min_size > rhs->min_size) re->min_size = rhs->min_size;
     if(re->max_size < rhs->max_size) re->max_size = rhs->max_size;
+    size_t size_sum = 0;
+    for (size_t i = 0; i < re->alternative.branches; i++) {
+        size_sum += re->alternative.branch[i]->avg_size;
+    }
+    re->avg_size = size_sum / re->alternative.branches;
     return re;
 }
 
@@ -219,6 +232,7 @@ tregex_repeat(tregex *what, unsigned start, unsigned stop) {
     re->repeat.minimum = start;
     re->repeat.range = 1 + stop - start;
     re->min_size = what->min_size * start;
+    re->avg_size = (what->avg_size * (stop + start)) / 2;
     re->max_size = what->max_size * stop;
     return re;
 }
@@ -294,7 +308,7 @@ tregex_eval_rng(tregex *re, char *buf, size_t size, pcg32_random_t *rng) {
     }
 
     assert(buf <= bend);
-    if(bold > buf) *buf = '\0';
+    if(bold < buf) *buf = '\0';
 
     return (buf - bold);
 }
@@ -303,6 +317,12 @@ size_t
 tregex_min_size(tregex *re) {
     assert(re);
     return re->min_size;
+}
+
+size_t
+tregex_avg_size(tregex *re) {
+    assert(re);
+    return re->avg_size;
 }
 
 size_t

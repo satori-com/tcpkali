@@ -136,6 +136,34 @@ replicate_payload(struct transport_data_spec *data, size_t target_size) {
     data->flags |= TDS_FLAG_REPLICATED;
 }
 
+void
+message_collection_replicate(struct message_collection *mc_from, struct message_collection *mc_to) {
+    mc_to->snippets = malloc(sizeof(mc_from->snippets[0])*mc_from->snippets_size);
+    for(size_t i = 0; i < mc_from->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc_from->snippets[i];
+        mc_to->snippets[i].data = snip->data;
+        mc_to->snippets[i].size = snip->size;
+        mc_to->snippets[i].expr = replicate_expression(snip->expr);
+        mc_to->snippets[i].flags = snip->flags;
+        mc_to->snippets[i].sort_index =  snip->sort_index;
+    }
+    mc_to->snippets_size = mc_from->snippets_size;
+    mc_to->snippets_count = mc_from->snippets_count;
+    mc_to->most_dynamic_expression = mc_from->most_dynamic_expression;
+    mc_to->state = mc_from->state;
+}
+
+void
+message_collection_free(struct message_collection *mc) {
+    for(size_t i = 0; i < mc->snippets_count; i++) {
+        struct message_collection_snippet *snip = &mc->snippets[i];
+        if(snip->flags & MSK_EXPRESSION_FOUND) {
+            free_expression(snip->expr, 0);
+        }
+    }
+    free((void *)mc->snippets);
+}
+
 static void
 message_collection_ensure_space(struct message_collection *mc, size_t need) {
     /* Reallocate snippets array, if needed. */
@@ -208,7 +236,7 @@ message_collection_add(struct message_collection *mc, enum mc_snippet_kind kind,
             snip->data = (char *)expr->u.data.data;
             snip->size = expr->u.data.size;
             expr->u.data.data = 0;
-            free_expression(expr);
+            free_expression(expr, 0);
             /* Just use the snip->data instead. */
             mc->snippets_count++;
         } else {
@@ -279,6 +307,32 @@ message_collection_add_expr(struct message_collection *mc,
     }
 }
 
+size_t
+ws_header_size_estimate(enum mc_snippet_estimate mce,
+                        enum websocket_side ws_side,
+                        size_t data_size) {
+    switch (mce) {
+    case MCE_MAXIMUM_SIZE: {
+        size_t client_size = websocket_frame_header(NULL, 0, WS_SIDE_CLIENT,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        size_t server_size = websocket_frame_header(NULL, 0, WS_SIDE_SERVER,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        return client_size > server_size ? client_size : server_size;
+    };
+    case MCE_AVERAGE_SIZE: {
+        return websocket_frame_header(NULL, 0, ws_side,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+    };
+    case MCE_MINIMUM_SIZE: {
+        size_t client_size = websocket_frame_header(NULL, 0, WS_SIDE_CLIENT,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        size_t server_size = websocket_frame_header(NULL, 0, WS_SIDE_SERVER,
+                                       WS_OP_TEXT_FRAME, 0, 1, data_size);
+        return client_size < server_size ? client_size : server_size;
+    };
+    }
+}
+
 /*
  * Give the largest size the message can possibly occupy.
  */
@@ -286,31 +340,35 @@ size_t
 message_collection_estimate_size(struct message_collection *mc,
                                  enum mc_snippet_kind kind_and,
                                  enum mc_snippet_kind kind_equal,
-                                 enum mc_snippet_estimate mce) {
+                                 enum mc_snippet_estimate mce,
+                                 enum websocket_side ws_side,
+                                 int ws_enable) {
     size_t total_size = 0;
     size_t i;
 
     assert(mc->state != MC_EMBRYONIC);
 
     for(i = 0; i < mc->snippets_count; i++) {
+        size_t snippet_size = 0;
         struct message_collection_snippet *snip = &mc->snippets[i];
 
         /* Match pattern */
         if((snip->flags & kind_and) != kind_equal) continue;
 
         if(snip->flags & MSK_EXPRESSION_FOUND) {
-            if(snip->expr->type == EXPR_REGEX && mce == MCE_MINIMUM_SIZE)
-                total_size += tregex_min_size(snip->expr->u.regex.re);
-            else
-                total_size += snip->expr->estimate_size;
+            if(mce == MCE_AVERAGE_SIZE) {
+                snippet_size += average_size(snip->expr);
+            } else if(snip->expr->type == EXPR_REGEX && mce == MCE_MINIMUM_SIZE) {
+                snippet_size += tregex_min_size(snip->expr->u.regex.re);
+            } else {
+                snippet_size += snip->expr->estimate_size;
+            }
         } else {
-            total_size += snip->size;
+            snippet_size += snip->size;
         }
-        total_size += ((mc->state == MC_FINALIZED_WEBSOCKET
-                        && (snip->flags & MSK_FRAMING_REQUESTED))
-                       || (snip->flags & MSK_FRAMING_ASSERTED))
-                          ? WEBSOCKET_MAX_FRAME_HDR_SIZE
-                          : 0;
+        snippet_size += ws_enable ?
+                        ws_header_size_estimate(mce, ws_side, snippet_size) : 0;
+        total_size += snippet_size;
     }
     return total_size;
 }
@@ -374,9 +432,13 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
     /* out_spec is expected to be 0-filled, if given. */
     data_spec = out_spec ? out_spec : calloc(1, sizeof(*data_spec));
     assert(data_spec);
+
+    enum websocket_side ws_side =
+        (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
+
     if(tconv == TS_CONVERSION_INITIAL) {
         size_t estimate_size =
-            message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE);
+            message_collection_estimate_size(mc, 0, 0, MCE_MAXIMUM_SIZE, ws_side, 1);
         if(estimate_size < REPLICATE_MAX_SIZE)
             estimate_size = REPLICATE_MAX_SIZE;
         data_spec->ptr = malloc(estimate_size + 1);
@@ -390,9 +452,6 @@ transport_spec_from_message_collection(struct transport_data_spec *out_spec,
 
     callback_wrapper_key_t callback_key = {.original_callback = optional_cb,
                                            .original_key = expr_cb_key};
-
-    enum websocket_side ws_side =
-        (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
 
     int place_multiple_messages = 0;
 

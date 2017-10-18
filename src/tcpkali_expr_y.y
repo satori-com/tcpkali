@@ -133,7 +133,6 @@ NonWSExpression:
     }
     | NumericExpr {
         $$ = $1;
-        $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | TOK_raw FileOrQuoted {
         tk_expr_t *expr = calloc(1, sizeof(tk_expr_t));
@@ -188,21 +187,25 @@ NumericExpr:
         $$->u.modulo.expr = $1;
         $$->u.modulo.modulo_value = $3;
         $$->estimate_size = $1->estimate_size;
+        $$->dynamic_scope = $1->dynamic_scope;
     }
     | TOK_connection '.' TOK_ptr {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_PTR;
         $$->estimate_size = sizeof("100000000000000");
+        $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | TOK_connection '.' TOK_uid {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_CONNECTION_UID;
         $$->estimate_size = sizeof("100000000000000");
+        $$->dynamic_scope = DS_PER_CONNECTION;
     }
     | TOK_message '.' TOK_marker {
         $$ = calloc(1, sizeof(*($$)));
         $$->type = EXPR_MESSAGE_MARKER;
-        $$->estimate_size = sizeof("100000000000000" "1000000000000000" "!");
+        $$->estimate_size = sizeof("1000000000000" "1000000000000000" "!") - 1;
+        $$->dynamic_scope = DS_PER_MESSAGE;
     }
 
 WSFrameFinalized:

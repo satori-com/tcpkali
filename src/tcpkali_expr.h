@@ -75,6 +75,13 @@ typedef struct tk_expr {
         DS_PER_CONNECTION, /* Each connection has its own */
         DS_PER_MESSAGE     /* Each message is different */
     } dynamic_scope;
+
+   /*
+    * if it is "per_connection" expr then we evaluate
+    * it only once and save res in res_buf
+    */
+    char *res_buf;
+    size_t res_size;
 } tk_expr_t;
 
 /*
@@ -91,7 +98,7 @@ typedef struct tk_expr {
 int parse_expression(tk_expr_t **, const char *expr_string, size_t size,
                      int debug);
 
-void free_expression(tk_expr_t *expr);
+void free_expression(tk_expr_t *expr, int delete_data);
 
 typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
                                  long *output_value);
@@ -102,6 +109,11 @@ typedef ssize_t(expr_callback_f)(char *buf, size_t size, tk_expr_t *, void *key,
  */
 ssize_t eval_expression(char **buf_p, size_t size, tk_expr_t *, expr_callback_f,
                         void *key, long *output_value, int client_mode, pcg32_random_t *rng);
+
+/*
+ * Replicate expression (copy everything except data)
+ */
+tk_expr_t * replicate_expression(tk_expr_t *expr);
 
 /*
  * Concatenate expressions. One or both expressions can be NULL.
@@ -132,5 +144,12 @@ struct esw_result expression_split_by_websocket_frame(tk_expr_t *expr);
  * Recursively go over all of the parts of the expression and unescape them.
  */
 void unescape_expression(tk_expr_t *expr);
+
+/*
+ * Recursively go over all of the parts of the expression and
+ * callculate average msg size.
+ */
+
+size_t average_size(tk_expr_t *expr);
 
 #endif /* TCPKALI_EXPR_H */

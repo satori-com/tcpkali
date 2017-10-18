@@ -92,7 +92,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 21 "tcpkali_expr_y.y" /* yacc.c:1909  */
+#line 21 "tcpkali_expr_y.y" /* yacc.c:1915  */
 
     tk_expr_t   *tv_expr;
     tregex      *tv_regex;
@@ -112,7 +112,7 @@ union YYSTYPE
     enum ws_frame_opcode tv_opcode;
     char  tv_char;
 
-#line 116 "tcpkali_expr_y.h" /* yacc.c:1909  */
+#line 116 "tcpkali_expr_y.h" /* yacc.c:1915  */
 };
 
 typedef union YYSTYPE YYSTYPE;

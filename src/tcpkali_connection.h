@@ -23,12 +23,15 @@ struct connection {
     off_t write_offset;
     struct transport_data_spec data;
     non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
+    size_t avg_message_size;
+    size_t bytes_leftovers;
     non_atomic_traffic_stats traffic_reported; /* Reported to worker */
     float channel_eol_point; /* End of life time, since epoch */
     struct pacefier send_pace;
     struct pacefier recv_pace;
     bandwidth_limit_t send_limit;
     bandwidth_limit_t recv_limit;
+    struct message_collection message_collection;
     enum {
         CW_READ_INTEREST = 0x01,
         CW_READ_BLOCKED = 0x10,

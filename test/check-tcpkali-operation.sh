@@ -15,7 +15,8 @@ fi
 
 TMPFILE=/tmp/check-tcpkali-output.$$
 rmtmp() {
-    local lines=$(wc -l ${TMPFILE} | awk '{print $1}')
+    local lines
+    lines=$(wc -l ${TMPFILE} | awk '{print $1}')
     if [ ${lines} -gt 150 ]; then
         echo "First 50 lines of tcpkali output (total ${lines}):"
         head -50 ${TMPFILE}
@@ -38,15 +39,17 @@ check() {
     local togrep="$2"
     shift 2
 
-    if [ -n "${use_test_no}" -a "${testno}" != "${use_test_no}" ]; then
+    if [ -n "${use_test_no}" ] && [ "${testno}" != "${use_test_no}" ]; then
         return
     fi
 
     PORT=$((PORT+1))
-    local rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
+    local rest_opts
+    rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" | tee ${TMPFILE} >&2
     echo "Looking for \"$togrep\" in '$* ${rest_opts}'" >> ${TMPFILE}
-    local out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | egrep -c "$togrep")
+    local out
+    out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | grep -E -c "$togrep")
     [ $out -ne 0 ] || exit 1
 }
 
@@ -55,10 +58,10 @@ check 2 "." ${TCPKALI} -vv --connections=10 --duration=1 -m Z
 check 3 "." ${TCPKALI} -vv -c10 --message Z --message-rate=2
 check 4 "." ${TCPKALI} -vv -c10 -m Z --channel-bandwidth-upstream=10kbps
 
-check 5 "Total data sent:[ ]+149 bytes"     ${TCPKALI} -vv --ws -w3
-check 6 "Total data received:[ ]+278 bytes" ${TCPKALI} -vv --ws -w3
-check 7 "Total data sent:[ ]+158 bytes"     ${TCPKALI} -vv --ws --first-message ABC -w3
-check 8 "Total data received:[ ]+287 bytes" ${TCPKALI} -vv --ws -1 ABC -w3
+check 5 "Total data sent:[ ]+149 bytes"     ${TCPKALI} -vv --ws -w2
+check 6 "Total data received:[ ]+278 bytes" ${TCPKALI} -vv --ws -w2
+check 7 "Total data sent:[ ]+158 bytes"     ${TCPKALI} -vv --ws --first-message ABC -w2
+check 8 "Total data received:[ ]+287 bytes" ${TCPKALI} -vv --ws -1 ABC -w2
 
 check 9 "." ${TCPKALI} --ws --message ABC
 check 10 "." ${TCPKALI} --ws --first-message ABC --message foo
@@ -90,9 +93,9 @@ for size_k in 63 65 1000; do
 done
 rm_testfile
 
-check 24 "Packet rate estimate: (19|20)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
-check 25 "Packet rate estimate: (19|20)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
+check 24 "Packet rate estimate: (9|10|11)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
+check 25 "Packet rate estimate: (9|10|11)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
 
-check 26 "." ${TCPKALI} ./tcpkali -1 '\{message.marker}' -m '\{message.marker}'
+check 26 "." ${TCPKALI} -1 '\{message.marker}' -m '\{message.marker}'
 
-trap "rm -f ${TMPFILE}" EXIT
+trap 'rm -f ${TMPFILE}' EXIT

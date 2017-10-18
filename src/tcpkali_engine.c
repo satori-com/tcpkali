@@ -1187,7 +1187,7 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
                 hdr_reset(conn->latency.marker_histogram);
                 conn->send_limit = compute_bandwidth_limit_by_message_size(
                     largs->params.channel_send_rate,
-                    conn->data.single_message_size);
+                    conn->avg_message_size);
             }
         }
         break;
@@ -1589,6 +1589,7 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
     double now = tk_now(TK_A);
 
     conn->latency.connection_initiated = now;
+    conn->bytes_leftovers = 0;
 
     if(limit_channel_lifetime(largs)) {
         if(TAILQ_FIRST(&largs->open_conns) == NULL) {
@@ -1612,70 +1613,79 @@ common_connection_init(TK_P_ struct connection *conn, enum conn_type conn_type,
 
     int active_socket = conn_type == CONN_OUTGOING
                         || (largs->params.listen_mode & _LMODE_SND_MASK);
-    if(active_socket || largs->params.message_marker) {
 
+    if(active_socket) {
+
+        message_collection_replicate(&largs->params.message_collection, &conn->message_collection);
         enum transport_websocket_side tws_side =
             (conn_type == CONN_OUTGOING) ? TWS_SIDE_CLIENT : TWS_SIDE_SERVER;
-        explode_data_template(&largs->params.message_collection,
+        explode_data_template(&conn->message_collection,
                               largs->params.data_templates, tws_side,
                               &conn->data, largs, conn);
+        enum websocket_side ws_side =
+            (tws_side == TWS_SIDE_CLIENT) ? WS_SIDE_CLIENT : WS_SIDE_SERVER;
+        conn->avg_message_size = message_collection_estimate_size(
+            &conn->message_collection,
+            MSK_PURPOSE_MESSAGE, MSK_PURPOSE_MESSAGE,
+            MCE_AVERAGE_SIZE, ws_side, largs->params.websocket_enable);
         conn->send_limit = compute_bandwidth_limit_by_message_size(
-            largs->params.channel_send_rate, conn->data.single_message_size);
+            largs->params.channel_send_rate, conn->avg_message_size);
         pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
         if(largs->params.message_stop_expr) {
             conn->sbmh_stop_ctx = malloc(SBMH_SIZE(largs->params.message_stop_expr->estimate_size));
             assert(conn->sbmh_stop_ctx);
             sbmh_init(conn->sbmh_stop_ctx, NULL, 0, 0);
         }
-        if(largs->params.latency_marker_expr && (conn->data.single_message_size || largs->params.message_marker)) {
-            if(conn->data.single_message_size) {
-                conn->latency.message_bytes_credit /* See (EXPL:1) below. */
-                    = conn->data.single_message_size - 1;
-            }
-            /*
-             * Figure out how many latency markers to skip
-             * before starting to measure latency with them.
-             */
-            conn->latency.lm_occurrences_skip =
-                largs->params.latency_marker_skip;
+    }
 
-            /*
-             * Initialize the Boyer-Moore-Horspool context for substring search.
-             */
-            struct StreamBMH_Occ *init_occ = NULL;
-            if(EXPR_IS_TRIVIAL(largs->params.latency_marker_expr)) {
-                /* Shared search table and expression */
-                conn->latency.sbmh_shared = 1;
-                conn->latency.sbmh_occ = &largs->params.sbmh_shared_marker_occ;
-                conn->latency.sbmh_data =
-                    (uint8_t *)largs->params.latency_marker_expr->u.data.data;
-                conn->latency.sbmh_size =
-                    largs->params.latency_marker_expr->u.data.size;
-            } else {
-                /* Individual search table. */
-                conn->latency.sbmh_shared = 0;
-                conn->latency.sbmh_occ =
-                    malloc(sizeof(*conn->latency.sbmh_occ));
-                assert(conn->latency.sbmh_occ);
-                init_occ = conn->latency.sbmh_occ;
-                explode_string_expression(
-                    (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
-                    largs->params.latency_marker_expr, largs, conn);
-            }
-            conn->latency.sbmh_marker_ctx =
-                malloc(SBMH_SIZE(conn->latency.sbmh_size));
-            assert(conn->latency.sbmh_marker_ctx);
-            sbmh_init(conn->latency.sbmh_marker_ctx, init_occ,
-                      conn->latency.sbmh_data, conn->latency.sbmh_size);
-
-            /*
-             * Initialize the latency histogram by copying out the template
-             * parameter from the loop arguments.
-             */
-            conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
-            conn->latency.marker_histogram =
-                hdr_init_similar(largs->marker_histogram_local);
+    if(largs->params.latency_marker_expr && (conn->data.single_message_size || largs->params.message_marker)) {
+        if(conn->data.single_message_size) {
+            conn->latency.message_bytes_credit /* See (EXPL:1) below. */
+                = conn->data.single_message_size - 1;
         }
+        /*
+         * Figure out how many latency markers to skip
+         * before starting to measure latency with them.
+         */
+        conn->latency.lm_occurrences_skip =
+            largs->params.latency_marker_skip;
+
+        /*
+         * Initialize the Boyer-Moore-Horspool context for substring search.
+         */
+        struct StreamBMH_Occ *init_occ = NULL;
+        if(EXPR_IS_TRIVIAL(largs->params.latency_marker_expr)) {
+            /* Shared search table and expression */
+            conn->latency.sbmh_shared = 1;
+            conn->latency.sbmh_occ = &largs->params.sbmh_shared_marker_occ;
+            conn->latency.sbmh_data =
+                (uint8_t *)largs->params.latency_marker_expr->u.data.data;
+            conn->latency.sbmh_size =
+                largs->params.latency_marker_expr->u.data.size;
+        } else {
+            /* Individual search table. */
+            conn->latency.sbmh_shared = 0;
+            conn->latency.sbmh_occ =
+                malloc(sizeof(*conn->latency.sbmh_occ));
+            assert(conn->latency.sbmh_occ);
+            init_occ = conn->latency.sbmh_occ;
+            explode_string_expression(
+                (char **)&conn->latency.sbmh_data, &conn->latency.sbmh_size,
+                largs->params.latency_marker_expr, largs, conn);
+        }
+        conn->latency.sbmh_marker_ctx =
+            malloc(SBMH_SIZE(conn->latency.sbmh_size));
+        assert(conn->latency.sbmh_marker_ctx);
+        sbmh_init(conn->latency.sbmh_marker_ctx, init_occ,
+                  conn->latency.sbmh_data, conn->latency.sbmh_size);
+
+        /*
+         * Initialize the latency histogram by copying out the template
+         * parameter from the loop arguments.
+         */
+        conn->latency.sent_timestamps = ring_buffer_new(sizeof(double));
+        conn->latency.marker_histogram =
+            hdr_init_similar(largs->marker_histogram_local);
     }
 
     /*
@@ -2123,19 +2133,14 @@ update_io_interest(TK_P_ struct connection *conn) {
 }
 
 static void
-latency_record_outgoing_ts(TK_P_ struct connection *conn, const void *new_position, size_t wrote) {
+latency_record_outgoing_ts(TK_P_ struct connection *conn, size_t wrote) {
     struct loop_arguments *largs = tk_userdata(TK_A);
 
     if(largs->params.message_marker) {
-        const void *token = conn->data.marker_token_ptr;
-        const void *position = new_position - wrote;
-        if(token) {
-            if(position <= token && token < position + wrote) {
-                conn->traffic_ongoing.msgs_sent++;
+            if (conn->avg_message_size > 0) {
+                conn->traffic_ongoing.msgs_sent += (conn->bytes_leftovers + wrote) / conn->avg_message_size;
+                conn->bytes_leftovers = (conn->bytes_leftovers + wrote) % conn->avg_message_size;
             }
-        } else {
-                conn->traffic_ongoing.msgs_sent++;
-        }
         return;
     }
 
@@ -2388,11 +2393,11 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *available_body = available - *available_header;
     } else {
         /* If we're at the end of the buffer, re-blow it with new messages */
-        if(largs->params.message_collection.most_dynamic_expression
+        if(conn->message_collection.most_dynamic_expression
                == DS_PER_MESSAGE
            && (conn->conn_type == CONN_OUTGOING
                || (largs->params.listen_mode & _LMODE_SND_MASK))) {
-            explode_data_template_override(&largs->params.message_collection,
+            explode_data_template_override(&conn->message_collection,
                                            (conn->conn_type == CONN_OUTGOING)
                                                ? TWS_SIDE_CLIENT
                                                : TWS_SIDE_SERVER,
@@ -2729,7 +2734,7 @@ process_WRITE:
                     available_body -= wrote;
 
                     /* Record latencies for the body only, not headers */
-                    latency_record_outgoing_ts(TK_A_ conn, position, wrote);
+                    latency_record_outgoing_ts(TK_A_ conn, wrote);
                 }
             }
         } while(available_body);
@@ -2819,6 +2824,8 @@ connection_free_internals(struct connection *conn) {
     if(conn->sbmh_stop_ctx) {
         free(conn->sbmh_stop_ctx);
     }
+
+    message_collection_free(&conn->message_collection);
 
 #ifdef HAVE_OPENSSL
     if(conn->ssl_ctx) {
