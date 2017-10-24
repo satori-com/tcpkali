@@ -34,6 +34,10 @@
 
 #ifdef HAVE_CURSES_H
 #include <curses.h>
+
+#include <unistd.h>
+#include <fcntl.h>
+
 #endif
 #ifdef HAVE_TERM_H
 #include <term.h>
@@ -51,6 +55,7 @@ static char tka_rcvbrace[16];
 static char tka_warn[16];
 static char tka_highlight[16];
 static char tka_normal[16];
+static struct termios initial_term_attr;
 
 const char *
 tk_attr(enum tk_attribute tka) {
@@ -120,6 +125,11 @@ tcpkali_disable_cursor(void) {
         printf("%s", cap("vi"));
         atexit(enable_cursor);
     }
+}
+
+int
+tcpkali_terminal_initialized(void) {
+    return terminal_initialized;
 }
 
 int
@@ -196,9 +206,24 @@ tcpkali_init_terminal(const char **note) {
 
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
 
+    struct termios oldt, newt;
+    int oldf;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    initial_term_attr = oldt;
+
     terminal_init_response = 0;
     terminal_initialized = 1;
     return 0;
+}
+
+void
+tcpkali_teardown_terminal() {
+    if(terminal_initialized) tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
 }
 
 #else /* !HAVE_LIBNCURSES */
@@ -207,6 +232,10 @@ int
 tcpkali_init_terminal(const char **note) {
     if(note) *note = "(not compiled with ncurses library)";
     return -1;
+}
+
+void
+tcpkali_teardown_terminal() {
 }
 
 void

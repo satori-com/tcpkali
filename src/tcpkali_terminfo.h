@@ -33,8 +33,11 @@
  * In case of -1, the (*note) will contain an explanation note.
  */
 int tcpkali_init_terminal(const char **note);
+void tcpkali_teardown_terminal();
 
 void tcpkali_disable_cursor(void);
+
+int tcpkali_terminal_initialized(void);
 
 /*
  * Capability "clr_eol":

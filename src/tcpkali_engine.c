@@ -458,15 +458,27 @@ estimate_pps(double duration, non_atomic_wide_t ops, non_atomic_wide_t bytes) {
 }
 
 void
-engine_update_message_send_rate(struct engine *eng, double msg_rate) {
+engine_update_workers_send_rate(struct engine *eng, rate_spec_t rate_spec) {
     /*
      * Ask workers to recompute per-connection rates.
      */
-    eng->params.channel_send_rate = RATE_MPS(msg_rate);
+    eng->params.channel_send_rate = rate_spec;
     for(int n = 0; n < eng->n_workers; n++) {
         int rc = write(eng->loops[n].private_control_pipe_wr, "r", 1);
         assert(rc == 1);
     }
+}
+
+void
+engine_set_message_send_rate(struct engine *eng, double msg_rate) {
+    engine_update_workers_send_rate(eng, RATE_MPS(msg_rate));
+}
+
+void
+engine_update_send_rate(struct engine *eng, double multiplier) {
+    rate_spec_t new_rate = eng->params.channel_send_rate;
+    new_rate.value = new_rate.value * multiplier;
+    engine_update_workers_send_rate(eng, new_rate);
 }
 
 /*
@@ -1176,20 +1188,25 @@ control_cb(TK_P_ tk_io *w, int UNUSED revents) {
     case 'r': /* Recompute message rate on live connections */
         largs->params.channel_send_rate =
             largs->shared_eng_params->channel_send_rate;
-        if(largs->params.channel_send_rate.value_base
-           == RS_MESSAGES_PER_SECOND) {
-            struct connection *conn;
+
+        struct connection *conn;
+        TAILQ_FOREACH(conn, &largs->open_conns, hook) {
+            conn->send_limit = compute_bandwidth_limit_by_message_size(
+                largs->params.channel_send_rate,
+                conn->avg_message_size);
+            double now = tk_now(TK_A);
+            if(conn->conn_type == CONN_OUTGOING
+                    || (largs->params.listen_mode & _LMODE_SND_MASK)) {
+                pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
+            }
+        }
+        if(largs->marker_histogram_local && largs->marker_histogram_shared) {
             pthread_mutex_lock(&largs->shared_histograms_lock);
             hdr_reset(largs->marker_histogram_local);
             hdr_reset(largs->marker_histogram_shared);
             pthread_mutex_unlock(&largs->shared_histograms_lock);
             TAILQ_FOREACH(conn, &largs->open_conns, hook) {
                 hdr_reset(conn->latency.marker_histogram);
-                conn->send_limit = compute_bandwidth_limit_by_message_size(
-                    largs->params.channel_send_rate,
-                    conn->avg_message_size);
-                double now = tk_now(TK_A);
-                pacefier_init(&conn->send_pace, conn->send_limit.bytes_per_second, now);
             }
         }
         break;

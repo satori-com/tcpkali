@@ -49,6 +49,7 @@ signal_handler(int __attribute__((unused)) sig) {
      * don't attempt to rectify it here. Partial write is ok.
      */
     (void)write(STDERR_FILENO, ctrlc_message.buf, ctrlc_message.len);
+    tcpkali_teardown_terminal();
 
     *flagvar = 1;
 }

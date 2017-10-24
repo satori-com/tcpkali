@@ -726,15 +726,6 @@ main(int argc, char **argv) {
         }
     }
 
-    int print_stats = isatty(1);
-    if(print_stats) {
-        const char *note = 0;
-        if(tcpkali_init_terminal(&note) == -1) {
-            warning("Dumb terminal %s, expect unglorified output.\n", note);
-            print_stats = 0;
-        }
-    }
-
     /* Check that -H,--header is not given without --ws,--websocket */
     if(conf.http_headers.offset > 0 && !engine_params.websocket_enable) {
         fprintf(stderr, "--header option ignored without --websocket\n");
@@ -1040,9 +1031,16 @@ main(int argc, char **argv) {
         statsd = 0;
     }
 
-    /* Stop flashing cursor in the middle of status reporting. */
-    if(print_stats)
+    int print_stats = isatty(1);
+    if(print_stats) {
+        const char *note = 0;
+        if(tcpkali_init_terminal(&note) == -1) {
+            warning("Dumb terminal %s, expect unglorified output.\n", note);
+            print_stats = 0;
+        }
+        /* Stop flashing cursor in the middle of status reporting. */
         tcpkali_disable_cursor();
+    }
 
     /* Block term signals so they're not scheduled in the worker threads. */
     block_term_signals();
@@ -1094,6 +1092,9 @@ main(int argc, char **argv) {
                     conf.test_duration);
             /* Level down graphs/charts. */
             report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
+            if(print_stats) {
+                tcpkali_teardown_terminal();
+            }
             exit(1);
         }
     }
@@ -1118,6 +1119,10 @@ main(int argc, char **argv) {
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
+
+    if(print_stats) {
+        tcpkali_teardown_terminal();
+    }
 
     switch(orv) {
     case OC_CONNECTED:

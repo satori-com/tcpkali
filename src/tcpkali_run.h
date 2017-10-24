@@ -96,4 +96,12 @@ struct oc_args {
 enum oc_return_value open_connections_until_maxed_out(enum work_phase phase,
                                                       struct oc_args *);
 
+enum keyboard_event {
+    KE_NOTHING,
+    KE_UP_ARROW,
+    KE_DOWN_ARROW,
+    KE_ENTER,
+    KE_Q
+};
+
 #endif /* TCPKALI_RUN_H */
