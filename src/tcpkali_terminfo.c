@@ -128,11 +128,6 @@ tcpkali_disable_cursor(void) {
 }
 
 int
-tcpkali_terminal_initialized(void) {
-    return terminal_initialized;
-}
-
-int
 tcpkali_init_terminal(const char **note) {
 #define NOT_INITIALIZED 1   /**/
     static int terminal_init_response = NOT_INITIALIZED;
@@ -227,6 +222,20 @@ tcpkali_teardown_terminal() {
     if(terminal_initialized) tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
 }
 
+enum keyboard_event
+tcpkali_kbhit(void)
+{
+    if(!terminal_initialized) return KE_NOTHING;
+
+    switch(getchar()) {
+    case 'j': return KE_UP_ARROW;
+    case 'k': return KE_DOWN_ARROW;
+    case '\n': return KE_ENTER;
+    case 'q': return KE_Q;
+    }
+    return KE_NOTHING;
+}
+
 #else /* !HAVE_LIBNCURSES */
 
 int
@@ -247,6 +256,12 @@ tcpkali_disable_cursor(void) {
 int
 tcpkali_terminal_width(void) {
     return terminal_width;
+}
+
+enum keyboard_event
+tcpkali_kbhit(void)
+{
+    return KE_NOTHING;
 }
 
 #endif /* HAVE_LIBNCURSES */

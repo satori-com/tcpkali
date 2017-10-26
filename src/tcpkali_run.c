@@ -246,36 +246,19 @@ static enum {
     return MRR_ONGOING;
 }
 
-enum keyboard_event
-kbhit(void)
-{
-    int ch = getchar();
-    switch(ch) {
-    case '\033': { // when arrow is pressed we get 3 characters
-        if(getchar() == '[') {
-            switch(getchar()) {
-            case 'A': return KE_UP_ARROW;
-            case 'B': return KE_DOWN_ARROW;
-            }
-        }
-        break;
-    };
-    case '\012': return KE_ENTER;
-    case 'q': return KE_Q;
-    }
-    return KE_NOTHING;
-}
+/* 1.148698 ^ 5 == 2, so 5 key-ups give increase by factor of 2 */
+#define UP_FACTOR 1.148698
+/* 0.870551 ^ 5 == 0.5, so 5 key-downs give decrease by factor of 2 */
+#define DOWN_FACTOR 0.870551
 
 int
 process_keyboard_events(struct oc_args *args) {
-    if(!tcpkali_terminal_initialized()) return 1;
-
-    switch(kbhit()) {
+    switch(tcpkali_kbhit()) {
     case KE_UP_ARROW:
-        engine_update_send_rate(args->eng, 1.1);
+        engine_update_send_rate(args->eng, UP_FACTOR);
         break;
     case KE_DOWN_ARROW:
-        engine_update_send_rate(args->eng, 0.9);
+        engine_update_send_rate(args->eng, DOWN_FACTOR);
         break;
     case KE_Q:
         return 0;
