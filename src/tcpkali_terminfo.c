@@ -228,8 +228,8 @@ tcpkali_kbhit(void)
     if(!terminal_initialized) return KE_NOTHING;
 
     switch(getchar()) {
-    case 'j': return KE_UP_ARROW;
-    case 'k': return KE_DOWN_ARROW;
+    case 'k': return KE_UP_ARROW;
+    case 'j': return KE_DOWN_ARROW;
     case '\n': return KE_ENTER;
     case 'q': return KE_Q;
     }
