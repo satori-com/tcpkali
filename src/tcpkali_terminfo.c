@@ -34,6 +34,10 @@
 
 #ifdef HAVE_CURSES_H
 #include <curses.h>
+
+#include <unistd.h>
+#include <fcntl.h>
+
 #endif
 #ifdef HAVE_TERM_H
 #include <term.h>
@@ -51,6 +55,7 @@ static char tka_rcvbrace[16];
 static char tka_warn[16];
 static char tka_highlight[16];
 static char tka_normal[16];
+static struct termios initial_term_attr;
 
 const char *
 tk_attr(enum tk_attribute tka) {
@@ -196,9 +201,39 @@ tcpkali_init_terminal(const char **note) {
 
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
 
+    struct termios oldt, newt;
+    int oldf;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    initial_term_attr = oldt;
+    atexit(tcpkali_teardown_terminal);
+
     terminal_init_response = 0;
     terminal_initialized = 1;
     return 0;
+}
+
+void
+tcpkali_teardown_terminal() {
+    if(terminal_initialized) tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
+}
+
+enum keyboard_event
+tcpkali_kbhit(void)
+{
+    if(!terminal_initialized) return KE_NOTHING;
+
+    switch(getchar()) {
+    case 'j': return KE_UP_ARROW;
+    case 'k': return KE_DOWN_ARROW;
+    case '\n': return KE_ENTER;
+    case 'q': return KE_Q;
+    }
+    return KE_NOTHING;
 }
 
 #else /* !HAVE_LIBNCURSES */
@@ -210,6 +245,10 @@ tcpkali_init_terminal(const char **note) {
 }
 
 void
+tcpkali_teardown_terminal() {
+}
+
+void
 tcpkali_disable_cursor(void) {
     return;
 }
@@ -217,6 +256,12 @@ tcpkali_disable_cursor(void) {
 int
 tcpkali_terminal_width(void) {
     return terminal_width;
+}
+
+enum keyboard_event
+tcpkali_kbhit(void)
+{
+    return KE_NOTHING;
 }
 
 #endif /* HAVE_LIBNCURSES */

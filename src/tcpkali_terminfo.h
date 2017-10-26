@@ -33,8 +33,11 @@
  * In case of -1, the (*note) will contain an explanation note.
  */
 int tcpkali_init_terminal(const char **note);
+void tcpkali_teardown_terminal();
 
 void tcpkali_disable_cursor(void);
+
+int tcpkali_terminal_initialized(void);
 
 /*
  * Capability "clr_eol":
@@ -58,5 +61,15 @@ int tcpkali_terminal_width();
  */
 enum tk_attribute { TKA_NORMAL, TKA_WARNING, TKA_HIGHLIGHT, TKA_SndBrace, TKA_RcvBrace };
 const char *tk_attr(enum tk_attribute);
+
+enum keyboard_event {
+    KE_NOTHING,
+    KE_UP_ARROW,
+    KE_DOWN_ARROW,
+    KE_ENTER,
+    KE_Q
+};
+
+enum keyboard_event tcpkali_kbhit(void);
 
 #endif /* TCPKALI_TERMINFO_H */

@@ -219,7 +219,7 @@ static enum {
             rm->suggested_rate_value =
                 (rm->rate_max_bound + rm->rate_min_bound) / 2.0;
         }
-        engine_update_message_send_rate(eng, rm->suggested_rate_value);
+        engine_set_message_send_rate(eng, rm->suggested_rate_value);
         fprintf(stderr, "Attempting --message-rate %g (in range %g..%g)%s\n",
                 rm->suggested_rate_value, rm->rate_min_bound,
                 rm->rate_max_bound, tcpkali_clear_eol());
@@ -244,6 +244,31 @@ static enum {
     }
 
     return MRR_ONGOING;
+}
+
+/* 1.148698 ^ 5 == 2, so 5 key-ups give increase by factor of 2 */
+#define UP_FACTOR 1.148698
+/* 0.870551 ^ 5 == 0.5, so 5 key-downs give decrease by factor of 2 */
+#define DOWN_FACTOR 0.870551
+
+int
+process_keyboard_events(struct oc_args *args) {
+    switch(tcpkali_kbhit()) {
+    case KE_UP_ARROW:
+        engine_update_send_rate(args->eng, UP_FACTOR);
+        break;
+    case KE_DOWN_ARROW:
+        engine_update_send_rate(args->eng, DOWN_FACTOR);
+        break;
+    case KE_Q:
+        return 0;
+    case KE_ENTER:
+        printf("\n");
+        break;
+    case KE_NOTHING:
+        break;
+    }
+    return 1;
 }
 
 enum oc_return_value
@@ -281,6 +306,8 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
         usleep(timeout_us);
         tk_now_update(TK_DEFAULT);
         now = tk_now(TK_DEFAULT);
+
+        if(!process_keyboard_events(args)) return OC_INTERRUPT;
 
         size_t connecting, conns_in, conns_out, conns_counter;
         engine_get_connection_stats(args->eng, &connecting, &conns_in, &conns_out,
