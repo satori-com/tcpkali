@@ -56,6 +56,7 @@ static char tka_warn[16];
 static char tka_highlight[16];
 static char tka_normal[16];
 static struct termios initial_term_attr;
+static int input_initialized = 0;
 
 const char *
 tk_attr(enum tk_attribute tka) {
@@ -201,6 +202,23 @@ tcpkali_init_terminal(const char **note) {
 
     snprintf(tka_normal, sizeof(tka_normal), "%s", cap("me"));
 
+    terminal_init_response = 0;
+    terminal_initialized = 1;
+    return 0;
+}
+
+void
+tcpkali_reset_input() {
+    if(input_initialized) {
+        input_initialized = 0;
+        int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+        fcntl(STDIN_FILENO, F_SETFL, oldf & ~O_NONBLOCK);
+        tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
+    }
+}
+
+void
+tcpkali_init_input() {
     struct termios oldt, newt;
     int oldf;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -210,22 +228,14 @@ tcpkali_init_terminal(const char **note) {
     oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
     initial_term_attr = oldt;
-    atexit(tcpkali_teardown_terminal);
-
-    terminal_init_response = 0;
-    terminal_initialized = 1;
-    return 0;
-}
-
-void
-tcpkali_teardown_terminal() {
-    if(terminal_initialized) tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
+    input_initialized = 1;
+    atexit(tcpkali_reset_input);
 }
 
 enum keyboard_event
 tcpkali_kbhit(void)
 {
-    if(!terminal_initialized) return KE_NOTHING;
+    if(!input_initialized) return KE_NOTHING;
 
     switch(getchar()) {
     case 'k': return KE_UP_ARROW;
