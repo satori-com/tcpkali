@@ -1095,9 +1095,6 @@ main(int argc, char **argv) {
                     conf.test_duration);
             /* Level down graphs/charts. */
             report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
-            if(print_stats) {
-                tcpkali_teardown_terminal();
-            }
             exit(1);
         }
     }
@@ -1122,10 +1119,6 @@ main(int argc, char **argv) {
 
     /* Send zeroes, otherwise graphs would continue showing non-zeroes... */
     report_to_statsd(statsd, 0, requested_latency_types, &latency_percentiles);
-
-    if(print_stats) {
-        tcpkali_teardown_terminal();
-    }
 
     switch(orv) {
     case OC_CONNECTED:

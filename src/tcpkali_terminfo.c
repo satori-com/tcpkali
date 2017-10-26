@@ -215,6 +215,7 @@ tcpkali_init_terminal(const char **note) {
     oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
     initial_term_attr = oldt;
+    atexit(tcpkali_teardown_terminal);
 
     terminal_init_response = 0;
     terminal_initialized = 1;
