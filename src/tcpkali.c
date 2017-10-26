@@ -726,6 +726,15 @@ main(int argc, char **argv) {
         }
     }
 
+    int print_stats = isatty(1);
+    if(print_stats) {
+        const char *note = 0;
+        if(tcpkali_init_terminal(&note) == -1) {
+            warning("Dumb terminal %s, expect unglorified output.\n", note);
+            print_stats = 0;
+        }
+    }
+
     /* Check that -H,--header is not given without --ws,--websocket */
     if(conf.http_headers.offset > 0 && !engine_params.websocket_enable) {
         fprintf(stderr, "--header option ignored without --websocket\n");
@@ -1031,14 +1040,8 @@ main(int argc, char **argv) {
         statsd = 0;
     }
 
-    int print_stats = isatty(1);
+    /* Stop flashing cursor in the middle of status reporting. */
     if(print_stats) {
-        const char *note = 0;
-        if(tcpkali_init_terminal(&note) == -1) {
-            warning("Dumb terminal %s, expect unglorified output.\n", note);
-            print_stats = 0;
-        }
-        /* Stop flashing cursor in the middle of status reporting. */
         tcpkali_disable_cursor();
     }
 
