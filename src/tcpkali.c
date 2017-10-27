@@ -102,6 +102,7 @@ static struct option cli_long_options[] = {
     {"message-stop", 1, 0, 's'},
     {"nagle", 1, 0, 'N'},
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
+    {"server", 1, 0, 'S'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
     {"source-ip", 1, 0, 'I'},
     {"ssl", 0, 0, SSL_OPT},
@@ -221,6 +222,10 @@ main(int argc, char **argv) {
                                           .write_combine = WRCOMB_ON};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
+
+    struct orchestration_args orch_args = {.enabled = 0,
+                                           .server_addrs = NULL,
+                                           .server_addr_str = NULL};
 
 #ifdef HAVE_SRANDOMDEV
     srandomdev();
@@ -719,6 +724,11 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
         } break;
+        case 'S': { /* --server */
+            orch_args.enabled = 1;
+            orch_args.server_addr_str = strdup(optarg);
+            resolve_address(optarg, &orch_args.server_addrs);
+        } break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
@@ -1077,6 +1087,17 @@ main(int argc, char **argv) {
      */
     flagify_term_signals(&oc_args.term_flag);
 
+    struct orchestration_data orch_state;
+    if(orch_args.enabled) {
+        orch_state = connect_to_orchestration_server(orch_args);
+        if(!orch_state.connected) {
+            fprintf(stderr,
+                    "Failed to connect to orchestration server at %s\n",
+                    orch_args.server_addr_str);
+            exit(EX_UNAVAILABLE);
+        }
+    }
+
     /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
@@ -1314,6 +1335,8 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "  --statsd-latency-window <T>  Aggregate latencies in discrete windows\n"
+    "\n"
+    "  --server <host:port>         Orchestration server to connect to\n"
     "\n"
     "Variable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"

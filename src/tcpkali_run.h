@@ -96,4 +96,17 @@ struct oc_args {
 enum oc_return_value open_connections_until_maxed_out(enum work_phase phase,
                                                       struct oc_args *);
 
+struct orchestration_args {
+    int enabled;
+    char *server_addr_str;
+    struct addrinfo *server_addrs;
+};
+
+struct orchestration_data {
+    int connected;
+    int socket;
+};
+
+struct orchestration_data connect_to_orchestration_server(struct orchestration_args arsgs);
+
 #endif /* TCPKALI_RUN_H */

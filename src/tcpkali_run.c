@@ -454,3 +454,26 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     if(args->term_flag) return OC_INTERRUPT;
     return OC_CONNECTED;
 }
+
+struct orchestration_data
+connect_to_orchestration_server(struct orchestration_args args) {
+    struct orchestration_data res = {.connected = 0};
+    int sockfd;
+    for(struct addrinfo *p = args.server_addrs; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            continue;
+        }
+        res.socket = sockfd;
+        res.connected = 1;
+        fprintf(stderr, "Connected to orchestration server at %s\n",
+                args.server_addr_str);
+        return res;
+    }
+    return res;
+}
