@@ -28,5 +28,5 @@ clean:
 regen: regenerate-from-asn1-source
 
 regenerate-from-asn1-source:
-	asn1c -gen-OER -gen-PER -pdu=TcpkaliMessage tcpkali_orchestration.asn1
+	asn1c -gen-OER -gen-PER -pdu=TcpkaliMessage TcpkaliOrchestration.asn1
 
