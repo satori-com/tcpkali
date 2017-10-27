@@ -1,23 +1,47 @@
 ASN_MODULE_SOURCES=	\
 	TcpkaliMessage.c	\
+	Start.c	\
+	Stop.c	\
+	TcpPort.c	\
 	IncreaseRatePercent.c	\
 	DecreaseRatePercent.c	\
-	SetRate.c
+	SetRate.c	\
+	PositiveInteger.c	\
+	PositiveReal.c	\
+	URL.c
 
 ASN_MODULE_HEADERS=	\
 	TcpkaliMessage.h	\
+	Start.h	\
+	Stop.h	\
+	TcpPort.h	\
 	IncreaseRatePercent.h	\
 	DecreaseRatePercent.h	\
-	SetRate.h
+	SetRate.h	\
+	PositiveInteger.h	\
+	PositiveReal.h	\
+	URL.h
 
+ASN_MODULE_HEADERS+=OPEN_TYPE.h
+ASN_MODULE_SOURCES+=OPEN_TYPE.c
 ASN_MODULE_HEADERS+=constr_CHOICE.h
+ASN_MODULE_HEADERS+=BOOLEAN.h
+ASN_MODULE_SOURCES+=BOOLEAN.c
 ASN_MODULE_HEADERS+=INTEGER.h
 ASN_MODULE_HEADERS+=NativeEnumerated.h
 ASN_MODULE_SOURCES+=INTEGER.c
 ASN_MODULE_SOURCES+=NativeEnumerated.c
 ASN_MODULE_HEADERS+=NativeInteger.h
 ASN_MODULE_SOURCES+=NativeInteger.c
+ASN_MODULE_HEADERS+=NativeReal.h
+ASN_MODULE_SOURCES+=NativeReal.c
+ASN_MODULE_HEADERS+=REAL.h
+ASN_MODULE_HEADERS+=PrintableString.h
+ASN_MODULE_SOURCES+=PrintableString.c
+ASN_MODULE_SOURCES+=REAL.c
 ASN_MODULE_SOURCES+=constr_CHOICE.c
+ASN_MODULE_HEADERS+=constr_SEQUENCE.h
+ASN_MODULE_SOURCES+=constr_SEQUENCE.c
 ASN_MODULE_HEADERS+=asn_application.h
 ASN_MODULE_SOURCES+=asn_application.c
 ASN_MODULE_HEADERS+=asn_ioc.h
@@ -63,7 +87,6 @@ ASN_MODULE_HEADERS+=per_opentype.h
 ASN_MODULE_SOURCES+=per_opentype.c
 ASN_MODULE_HEADERS+=oer_decoder.h
 ASN_MODULE_SOURCES+=oer_decoder.c
-ASN_MODULE_HEADERS+=OPEN_TYPE.h
 ASN_MODULE_HEADERS+=oer_encoder.h
 ASN_MODULE_SOURCES+=oer_encoder.c
 ASN_MODULE_HEADERS+=oer_support.h
@@ -74,7 +97,6 @@ ASN_MODULE_SOURCES+=OCTET_STRING_oer.c
 ASN_MODULE_SOURCES+=NativeInteger_oer.c
 ASN_MODULE_SOURCES+=NativeEnumerated_oer.c
 ASN_MODULE_SOURCES+=constr_SEQUENCE_oer.c
-ASN_MODULE_HEADERS+=constr_SEQUENCE.h
 ASN_MODULE_SOURCES+=constr_CHOICE_oer.c
 ASN_MODULE_SOURCES+=constr_SET_OF_oer.c
 ASN_MODULE_HEADERS+=constr_SET_OF.h
@@ -82,7 +104,7 @@ ASN_MODULE_HEADERS+=asn_SET_OF.h
 ASN_MODULE_SOURCES+=asn_SET_OF.c
 ASN_MODULE_SOURCES+=BIT_STRING_oer.c
 
-ASN_MODULE_CFLAGS="-static"
+ASN_MODULE_CFLAGS=
 
 lib_LTLIBRARIES=libasncodec.la
 libasncodec_la_SOURCES=$(ASN_MODULE_SOURCES) $(ASN_MODULE_HEADERS)
