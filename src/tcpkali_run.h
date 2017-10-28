@@ -33,6 +33,9 @@
 #include "tcpkali_engine.h"
 #include "tcpkali_statsd.h"
 #include "tcpkali_signals.h"
+#include "TcpkaliMessage.h"
+
+struct orchestration_data;
 
 enum work_phase { PHASE_ESTABLISHING_CONNECTIONS, PHASE_STEADY_STATE };
 
@@ -93,8 +96,10 @@ struct oc_args {
     int print_stats;
 };
 
-enum oc_return_value open_connections_until_maxed_out(enum work_phase phase,
-                                                      struct oc_args *);
+enum oc_return_value
+open_connections_until_maxed_out(enum work_phase phase,
+                                 struct oc_args *,
+                                 struct orchestration_data *orch_state);
 
 struct orchestration_args {
     int enabled;
@@ -104,9 +109,18 @@ struct orchestration_args {
 
 struct orchestration_data {
     int connected;
-    int socket;
+    int sockfd;
+    char *buf;
+    char *buf_write;
 };
 
-struct orchestration_data connect_to_orchestration_server(struct orchestration_args arsgs);
+struct orchestration_data
+tcpkali_connect_to_orch_server(struct orchestration_args arsgs);
+TcpkaliMessage_t * tcpkali_wait_for_start_command(struct orchestration_data *state);
+TcpkaliMessage_t * read_orch_command(struct orchestration_data *state);
+void free_orch_message(TcpkaliMessage_t *msg);
+
+void
+free_message(TcpkaliMessage_t *msg);
 
 #endif /* TCPKALI_RUN_H */

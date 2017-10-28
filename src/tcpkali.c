@@ -736,6 +736,34 @@ main(int argc, char **argv) {
         }
     }
 
+    struct orchestration_data orch_state = {.connected = 0};
+    if(orch_args.enabled) {
+        orch_state = tcpkali_connect_to_orch_server(orch_args);
+        if(!orch_state.connected) {
+            fprintf(stderr,
+                    "Failed to connect to orchestration server at %s\n",
+                    orch_args.server_addr_str);
+            exit(EX_UNAVAILABLE);
+        }
+        TcpkaliMessage_t* msg = tcpkali_wait_for_start_command(&orch_state);
+        if (!msg) {
+            exit(EX_UNAVAILABLE);
+        }
+        if (msg->present != TcpkaliMessage_PR_start) {
+            fprintf(stderr,
+                    "Received wrong message type instead of start\n");
+            exit(EX_UNAVAILABLE);
+        }
+
+        fprintf(stderr, "Received start command from server\n");
+
+        /* Here we should read all the arguments from the start command
+         * and override command line arguments if needed but it's
+         * not implemented yet. Currently all initial arguments should be
+         * specified in command line.
+         */
+    }
+
     int print_stats = isatty(1);
     if(print_stats) {
         const char *note = 0;
@@ -1087,17 +1115,6 @@ main(int argc, char **argv) {
      */
     flagify_term_signals(&oc_args.term_flag);
 
-    struct orchestration_data orch_state;
-    if(orch_args.enabled) {
-        orch_state = connect_to_orchestration_server(orch_args);
-        if(!orch_state.connected) {
-            fprintf(stderr,
-                    "Failed to connect to orchestration server at %s\n",
-                    orch_args.server_addr_str);
-            exit(EX_UNAVAILABLE);
-        }
-    }
-
     /*
      * Ramp up to the specified number of connections by opening them at a
      * specifed --connect-rate.
@@ -1105,7 +1122,7 @@ main(int argc, char **argv) {
     if(conf.max_connections) {
         oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(PHASE_ESTABLISHING_CONNECTIONS,
-                &oc_args) == OC_CONNECTED) {
+                &oc_args, &orch_state) == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -1134,7 +1151,7 @@ main(int argc, char **argv) {
     /* Reset the test duration after ramp-up. */
     oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
     enum oc_return_value orv = open_connections_until_maxed_out(
-                                    PHASE_STEADY_STATE, &oc_args);
+                                    PHASE_STEADY_STATE, &oc_args, &orch_state);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, oc_args.checkpoint.epoch_start,
