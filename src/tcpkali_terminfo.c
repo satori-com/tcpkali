@@ -211,8 +211,6 @@ void
 tcpkali_reset_input() {
     if(input_initialized) {
         input_initialized = 0;
-        int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-        fcntl(STDIN_FILENO, F_SETFL, oldf & ~O_NONBLOCK);
         tcsetattr(STDIN_FILENO, TCSANOW, &initial_term_attr);
     }
 }
@@ -220,16 +218,18 @@ tcpkali_reset_input() {
 void
 tcpkali_init_input() {
     struct termios oldt, newt;
-    int oldf;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
     initial_term_attr = oldt;
     input_initialized = 1;
     atexit(tcpkali_reset_input);
+}
+
+int
+tcpkali_input_initialized() {
+    return input_initialized;
 }
 
 enum keyboard_event

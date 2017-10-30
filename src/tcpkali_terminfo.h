@@ -35,6 +35,7 @@
 int tcpkali_init_terminal(const char **note);
 
 void tcpkali_init_input();
+int tcpkali_input_initialized();
 
 void tcpkali_disable_cursor(void);
 

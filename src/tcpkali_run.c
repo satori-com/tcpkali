@@ -32,6 +32,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <poll.h>
+#include <errno.h>
 
 #include "tcpkali_run.h"
 #include "tcpkali_mavg.h"
@@ -280,10 +282,10 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
      * It is a little bit better to batch the starts by issuing several
      * start commands per small time tick. Ends up doing less write()
      * operations per batch.
-     * Therefore, we round the timeout_us upwards to the nearest millisecond.
+     * Therefore, we round the timeout_ms upwards to the nearest millisecond.
      */
-    long timeout_us = 1000 * ceil(1000.0 / args->connect_rate);
-    if(timeout_us > 250000) timeout_us = 250000;
+    long timeout_ms = ceil(1000.0 / args->connect_rate);
+    if(timeout_ms > 250) timeout_ms = 250;
 
     struct pacefier keepup_pace;
     pacefier_init(&keepup_pace, args->connect_rate, now);
@@ -299,15 +301,36 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
             engine_collect_latency_snapshot(args->eng);
     }
 
+#define STDIN_IDX 0
+    struct pollfd poll_fds[1] =
+        {{.fd = tcpkali_input_initialized() ? 0 : -1,
+          .events = POLLIN}};
+
     while(now < args->epoch_end && !args->term_flag
           /* ...until we have all connections established or
            * we're in a steady state. */
           && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
-        usleep(timeout_us);
+
+        switch(poll(poll_fds, 1, timeout_ms)) {
+        case 0: /* timeout */
+            break;
+        case -1: /* error */
+            /* EINTR happens when we press Ctrl-C */
+            if (errno != EINTR)
+                fprintf(stderr, "Poll error %s\n", strerror(errno));
+            break;
+        default: /* got input in one of the fds */
+            /* got something in stdin */
+            if(poll_fds[STDIN_IDX].revents & POLLIN) {
+                if(!process_keyboard_events(args)) {
+                    return OC_INTERRUPT;
+                }
+            }
+        }
+
         tk_now_update(TK_DEFAULT);
         now = tk_now(TK_DEFAULT);
 
-        if(!process_keyboard_events(args)) return OC_INTERRUPT;
 
         size_t connecting, conns_in, conns_out, conns_counter;
         engine_get_connection_stats(args->eng, &connecting, &conns_in, &conns_out,
