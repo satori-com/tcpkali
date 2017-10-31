@@ -150,6 +150,7 @@ dnl Shell linters
 AC_PATH_PROG([SHELLCHECK], shellcheck, [:])
 
 AC_CONFIG_FILES([Makefile
+                 asn1/Makefile
                  test/Makefile
                  src/Makefile
                  doc/Makefile

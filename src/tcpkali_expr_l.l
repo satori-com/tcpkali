@@ -182,7 +182,6 @@ WSP [\t\r\v\f\n ]
                 yylval.tv_string.len = yyleng;
                 memcpy(yylval.tv_string.buf, yytext, yyleng);
                 yylval.tv_string.buf[yyleng] = '\0';
-                printf("accept string [%s]\n", yylval.tv_string.buf);
                 return string_token;
             }
 
@@ -191,7 +190,6 @@ WSP [\t\r\v\f\n ]
                 yylval.tv_string.len = yyleng;
                 memcpy(yylval.tv_string.buf, yytext, yyleng);
                 yylval.tv_string.buf[yyleng] = '\0';
-                printf("accept string [%s]\n", yylval.tv_string.buf);
                 return string_token;
             }
 

@@ -1,7 +1,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = doc deps src test
+SUBDIRS = asn1 doc deps src test
 
 if GNU_STYLE_OPTIONAL_INCLUDE
 ##

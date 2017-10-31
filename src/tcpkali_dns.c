@@ -56,40 +56,48 @@ resolve_remote_addresses(char **hostports, int nhostports) {
     struct addresses addresses = {0, 0};
 
     for(int n = 0; n < nhostports; n++) {
-        char *hostport = strdup(hostports[n]);
-        char *host = hostport;
-        char *service_string = strchr(hostport, ':');
-        if(service_string) {
-            *service_string++ = '\0';
-        } else {
-            fprintf(stderr, "Expected :port specification. See --help.\n");
-            exit(EX_USAGE);
-        }
-
-        char *path = strchr(service_string, '/');
-        if(path) *path++ = '\0';
-
-        struct addrinfo hints = {
-            .ai_family = PF_UNSPEC,
-            .ai_socktype = SOCK_STREAM,
-            .ai_protocol = IPPROTO_TCP,
-            .ai_flags = AI_ADDRCONFIG, /* Do not return unroutable IPs */
-        };
         struct addrinfo *res = 0;
-        int error = getaddrinfo(host, service_string, &hints, &res);
-        if(error) {
-            errx(EX_NOHOST, "Resolving %s:%s: %s", host, service_string,
-                 gai_strerror(error));
-        }
+
+        resolve_address(hostports[n], &res);
 
         /* Move all of the addresses into the separate storage */
         for(struct addrinfo *tmp = res; tmp; tmp = tmp->ai_next) {
             address_add(&addresses, tmp->ai_addr);
         }
 
-        free(hostport);
         freeaddrinfo(res);
     }
 
     return addresses;
 }
+
+void
+resolve_address(char *address, struct addrinfo **res) {
+    char *hostport = strdup(address);
+    char *host = hostport;
+    char *service_string = strchr(hostport, ':');
+    if(service_string) {
+        *service_string++ = '\0';
+    } else {
+        fprintf(stderr, "Expected :port specification. See --help.\n");
+        exit(EX_USAGE);
+    }
+
+    char *path = strchr(service_string, '/');
+    if(path) *path++ = '\0';
+
+    struct addrinfo hints = {
+        .ai_family = PF_UNSPEC,
+        .ai_socktype = SOCK_STREAM,
+        .ai_protocol = IPPROTO_TCP,
+        .ai_flags = AI_ADDRCONFIG, /* Do not return unroutable IPs */
+    };
+    int error = getaddrinfo(host, service_string, &hints, res);
+    if(error) {
+        errx(EX_NOHOST, "Resolving %s:%s: %s", host, service_string,
+             gai_strerror(error));
+    }
+
+    free(hostport);
+}
+

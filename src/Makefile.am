@@ -5,6 +5,7 @@ AM_YFLAGS = -d
 AM_LFLAGS = -s
 
 tcpkali_CPPFLAGS = $(TK_CPPFLAGS) \
+                   -I$(top_srcdir)/asn1 \
                    -I$(top_srcdir)/deps/libev \
                    -I$(top_srcdir)/deps/libcows \
                    -I$(top_srcdir)/deps/libstatsd/src \
@@ -38,14 +39,15 @@ tcpkali_SOURCES = \
                 tcpkali_connection.c tcpkali_connection.h \
                 tcpkali.c tcpkali.h
 tcpkali_LDFLAGS = $(TK_LDFLAGS) $(TK_LIBS) -L$(libdir) $(LIBUV)
-tcpkali_LDADD = $(top_builddir)/deps/libev/libev.la \
+tcpkali_LDADD = $(top_builddir)/asn1/libasncodec.la \
+                $(top_builddir)/deps/libev/libev.la \
                 $(top_builddir)/deps/libcows/libcows.la \
                 $(top_builddir)/deps/pcg-c-basic/libpcg32.la \
                 $(top_builddir)/deps/libstatsd/src/libstatsd.la \
                 $(top_builddir)/deps/HdrHistogram/libhdr_histogram.la
 
 check_platform_SOURCES = check_platform.c
-check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS)
+check_platform_CFLAGS = -std=gnu99 $(TK_CFLAGS) -I$(top_srcdir)/asn1
 
 check_tcpkali_ring_SOURCES = tcpkali_ring.c tcpkali_ring.h
 check_tcpkali_ring_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_RING_UNIT_TEST
@@ -54,7 +56,7 @@ check_tcpkali_regex_SOURCES = tcpkali_regex.c tcpkali_regex.h $(top_srcdir)/deps
 check_tcpkali_regex_CFLAGS = -std=gnu99 $(TK_CFLAGS) -I$(top_srcdir)/deps/pcg-c-basic -DTCPKALI_REGEX_UNIT_TEST
 
 check_tcpkali_iface_SOURCES = tcpkali_iface.c tcpkali_iface.h tcpkali_logging.c tcpkali_logging.h tcpkali_terminfo.c tcpkali_terminfo.h
-check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST
+check_tcpkali_iface_CFLAGS = -std=gnu99 $(TK_CFLAGS) -DTCPKALI_IFACE_UNIT_TEST -I$(top_srcdir)/asn1
 
 TESTS = $(check_PROGRAMS) ${dist_check_SCRIPTS}
 check_PROGRAMS = check_platform check_tcpkali_ring check_tcpkali_regex check_tcpkali_iface 

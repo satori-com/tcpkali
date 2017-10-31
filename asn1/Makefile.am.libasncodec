@@ -1,0 +1,111 @@
+ASN_MODULE_SOURCES=	\
+	TcpkaliMessage.c	\
+	Start.c	\
+	Stop.c	\
+	TcpPort.c	\
+	IncreaseRatePercent.c	\
+	DecreaseRatePercent.c	\
+	SetRate.c	\
+	PositiveInteger.c	\
+	PositiveReal.c	\
+	URL.c
+
+ASN_MODULE_HEADERS=	\
+	TcpkaliMessage.h	\
+	Start.h	\
+	Stop.h	\
+	TcpPort.h	\
+	IncreaseRatePercent.h	\
+	DecreaseRatePercent.h	\
+	SetRate.h	\
+	PositiveInteger.h	\
+	PositiveReal.h	\
+	URL.h
+
+ASN_MODULE_HEADERS+=OPEN_TYPE.h
+ASN_MODULE_SOURCES+=OPEN_TYPE.c
+ASN_MODULE_HEADERS+=constr_CHOICE.h
+ASN_MODULE_HEADERS+=BOOLEAN.h
+ASN_MODULE_SOURCES+=BOOLEAN.c
+ASN_MODULE_HEADERS+=INTEGER.h
+ASN_MODULE_HEADERS+=NativeEnumerated.h
+ASN_MODULE_SOURCES+=INTEGER.c
+ASN_MODULE_SOURCES+=NativeEnumerated.c
+ASN_MODULE_HEADERS+=NativeInteger.h
+ASN_MODULE_SOURCES+=NativeInteger.c
+ASN_MODULE_HEADERS+=NativeReal.h
+ASN_MODULE_SOURCES+=NativeReal.c
+ASN_MODULE_HEADERS+=REAL.h
+ASN_MODULE_HEADERS+=PrintableString.h
+ASN_MODULE_SOURCES+=PrintableString.c
+ASN_MODULE_SOURCES+=REAL.c
+ASN_MODULE_SOURCES+=constr_CHOICE.c
+ASN_MODULE_HEADERS+=constr_SEQUENCE.h
+ASN_MODULE_SOURCES+=constr_SEQUENCE.c
+ASN_MODULE_HEADERS+=asn_application.h
+ASN_MODULE_SOURCES+=asn_application.c
+ASN_MODULE_HEADERS+=asn_ioc.h
+ASN_MODULE_HEADERS+=asn_system.h
+ASN_MODULE_HEADERS+=asn_codecs.h
+ASN_MODULE_HEADERS+=asn_internal.h
+ASN_MODULE_SOURCES+=asn_internal.c
+ASN_MODULE_HEADERS+=asn_random_fill.h
+ASN_MODULE_SOURCES+=asn_random_fill.c
+ASN_MODULE_HEADERS+=asn_bit_data.h
+ASN_MODULE_SOURCES+=asn_bit_data.c
+ASN_MODULE_HEADERS+=OCTET_STRING.h
+ASN_MODULE_SOURCES+=OCTET_STRING.c
+ASN_MODULE_HEADERS+=BIT_STRING.h
+ASN_MODULE_SOURCES+=BIT_STRING.c
+ASN_MODULE_SOURCES+=asn_codecs_prim.c
+ASN_MODULE_HEADERS+=asn_codecs_prim.h
+ASN_MODULE_HEADERS+=ber_tlv_length.h
+ASN_MODULE_SOURCES+=ber_tlv_length.c
+ASN_MODULE_HEADERS+=ber_tlv_tag.h
+ASN_MODULE_SOURCES+=ber_tlv_tag.c
+ASN_MODULE_HEADERS+=ber_decoder.h
+ASN_MODULE_SOURCES+=ber_decoder.c
+ASN_MODULE_HEADERS+=der_encoder.h
+ASN_MODULE_SOURCES+=der_encoder.c
+ASN_MODULE_HEADERS+=constr_TYPE.h
+ASN_MODULE_SOURCES+=constr_TYPE.c
+ASN_MODULE_HEADERS+=constraints.h
+ASN_MODULE_SOURCES+=constraints.c
+ASN_MODULE_HEADERS+=xer_support.h
+ASN_MODULE_SOURCES+=xer_support.c
+ASN_MODULE_HEADERS+=xer_decoder.h
+ASN_MODULE_SOURCES+=xer_decoder.c
+ASN_MODULE_HEADERS+=xer_encoder.h
+ASN_MODULE_SOURCES+=xer_encoder.c
+ASN_MODULE_HEADERS+=per_support.h
+ASN_MODULE_SOURCES+=per_support.c
+ASN_MODULE_HEADERS+=per_decoder.h
+ASN_MODULE_SOURCES+=per_decoder.c
+ASN_MODULE_HEADERS+=per_encoder.h
+ASN_MODULE_SOURCES+=per_encoder.c
+ASN_MODULE_HEADERS+=per_opentype.h
+ASN_MODULE_SOURCES+=per_opentype.c
+ASN_MODULE_HEADERS+=oer_decoder.h
+ASN_MODULE_SOURCES+=oer_decoder.c
+ASN_MODULE_HEADERS+=oer_encoder.h
+ASN_MODULE_SOURCES+=oer_encoder.c
+ASN_MODULE_HEADERS+=oer_support.h
+ASN_MODULE_SOURCES+=oer_support.c
+ASN_MODULE_SOURCES+=OPEN_TYPE_oer.c
+ASN_MODULE_SOURCES+=INTEGER_oer.c
+ASN_MODULE_SOURCES+=OCTET_STRING_oer.c
+ASN_MODULE_SOURCES+=NativeInteger_oer.c
+ASN_MODULE_SOURCES+=NativeEnumerated_oer.c
+ASN_MODULE_SOURCES+=constr_SEQUENCE_oer.c
+ASN_MODULE_SOURCES+=constr_CHOICE_oer.c
+ASN_MODULE_SOURCES+=constr_SET_OF_oer.c
+ASN_MODULE_HEADERS+=constr_SET_OF.h
+ASN_MODULE_HEADERS+=asn_SET_OF.h
+ASN_MODULE_SOURCES+=asn_SET_OF.c
+ASN_MODULE_SOURCES+=BIT_STRING_oer.c
+
+ASN_MODULE_CFLAGS=
+
+lib_LTLIBRARIES=libasncodec.la
+libasncodec_la_SOURCES=$(ASN_MODULE_SOURCES) $(ASN_MODULE_HEADERS)
+libasncodec_la_CFLAGS=$(ASN_MODULE_CFLAGS)

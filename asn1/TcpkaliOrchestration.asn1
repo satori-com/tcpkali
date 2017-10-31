@@ -1,0 +1,67 @@
+TcpkaliOrchestration DEFINITIONS AUTOMATIC TAGS EXTENSIBILITY IMPLIED ::= BEGIN
+
+    TcpkaliMessage ::= CHOICE {
+        start                 Start,
+        stop                  Stop,
+        increaseRatePercent   IncreaseRatePercent,
+        decreaseRatePercent   DecreaseRatePercent,
+        setRate               SetRate
+    }
+
+    Start ::= SEQUENCE {
+        target                         URL OPTIONAL,
+        nagle                          BOOLEAN OPTIONAL,
+        rcvbuf                         PositiveInteger OPTIONAL,
+        sndbuf                         PositiveInteger OPTIONAL,
+        writeCombine                   BOOLEAN OPTIONAL,
+        workers                        PositiveInteger OPTIONAL,
+        ws                             BOOLEAN OPTIONAL,
+        ssl                            BOOLEAN OPTIONAL,
+        sslCert                        PrintableString OPTIONAL,
+        sslKey                         PrintableString OPTIONAL,
+        header                         PrintableString OPTIONAL,
+        connections                    PositiveInteger OPTIONAL,
+        connectRate                    PositiveReal OPTIONAL,
+        connectTimeout                 PositiveReal OPTIONAL,
+        channelLifetime                PositiveReal OPTIONAL,
+        channelBandwidthUpstream       PositiveReal OPTIONAL,
+        channelBandwidthDownstream     PositiveReal OPTIONAL,
+        listenPort                     TcpPort OPTIONAL,
+        listenMode                     ENUMERATED {silent (0) , active (1)} OPTIONAL,
+        duration                       PositiveReal OPTIONAL,
+        delaySend                      PositiveReal OPTIONAL,
+        firstMessage                   OCTET STRING OPTIONAL,
+        message                        OCTET STRING OPTIONAL,
+        messageFile                    PrintableString OPTIONAL,
+        messageRate                    PositiveReal OPTIONAL,
+        messageStop                    OCTET STRING OPTIONAL,
+        latencyConnect                 BOOLEAN OPTIONAL,
+        latencyFirstByte               BOOLEAN OPTIONAL,
+        latencyMarker                  PrintableString OPTIONAL,
+        latencyMarkerSkip              PositiveInteger OPTIONAL,
+        latencyPercentiles             PrintableString OPTIONAL,
+        messageMarker                  BOOLEAN OPTIONAL,
+        statsd                         BOOLEAN OPTIONAL,
+        statsdHost                     PrintableString OPTIONAL,
+        statsdPort                     TcpPort OPTIONAL,
+        statsdNamespace                PrintableString OPTIONAL,
+        statsdLatencyWindow            PositiveInteger OPTIONAL
+    }
+
+    Stop ::= SEQUENCE {
+    }
+
+    TcpPort ::= INTEGER (1..65535)
+
+    IncreaseRatePercent ::= INTEGER (1..100)
+    DecreaseRatePercent ::= INTEGER (1..100)
+    SetRate             ::= PositiveReal
+
+    PositiveInteger ::= INTEGER (1..MAX)
+
+    PositiveReal ::= REAL (WITH COMPONENTS {
+                    base (2), exponent (-10..104), mantissa (0..16777215) })
+
+    URL ::= PrintableString
+
+END

@@ -28,6 +28,7 @@
 #define TCPKALI_DNS_H
 
 #include <stdio.h>
+#include <netdb.h>  /* addrinfo */
 #include "tcpkali_iface.h"
 
 /*
@@ -35,5 +36,7 @@
  * addresses.
  */
 struct addresses resolve_remote_addresses(char **hostports, int n);
+
+void resolve_address(char *address, struct addrinfo **res);
 
 #endif /* TCPKALI_DNS_H */

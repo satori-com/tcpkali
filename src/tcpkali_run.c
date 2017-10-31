@@ -42,6 +42,10 @@
 #include "tcpkali_pacefier.h"
 #include "tcpkali_terminfo.h"
 
+#include "TcpkaliMessage.h"
+
+#define ORCH_BUF_SIZE 1024
+
 static const char *
 time_progress(double start, double now, double stop) {
     const char *clocks[] = {"🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
@@ -273,8 +277,38 @@ process_keyboard_events(struct oc_args *args) {
     return 1;
 }
 
+int
+process_orch_events(struct oc_args *args,
+                    struct orchestration_data *orch_state) {
+    TcpkaliMessage_t *msg = read_orch_command(orch_state);
+
+    /*We probably not received the whole message yet*/
+    if (!msg) return 1;
+
+    switch(msg->present) {
+    case TcpkaliMessage_PR_increaseRatePercent:
+        engine_update_send_rate(args->eng, msg->choice.increaseRatePercent);
+        break;
+    case TcpkaliMessage_PR_decreaseRatePercent:
+        engine_update_send_rate(args->eng, msg->choice.decreaseRatePercent);
+        break;
+    case TcpkaliMessage_PR_setRate:
+        engine_set_message_send_rate(args->eng, msg->choice.setRate);
+        break;
+    case TcpkaliMessage_PR_stop:
+        free_orch_message(msg);
+        return 0;
+    default:
+        fprintf(stderr, "Received unknown command from server %zd\n",
+                msg->present);
+    }
+    free_orch_message(msg);
+    return 1;
+}
+
 enum oc_return_value
-open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
+open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args,
+                                 struct orchestration_data *orch_state) {
     tk_now_update(TK_DEFAULT);
     double now = tk_now(TK_DEFAULT);
 
@@ -302,8 +336,11 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     }
 
 #define STDIN_IDX 0
-    struct pollfd poll_fds[1] =
-        {{.fd = tcpkali_input_initialized() ? 0 : -1,
+#define ORCH_IDX 1
+    struct pollfd poll_fds[2] =
+        {{.fd = tcpkali_input_initialized() ? STDIN_FILENO : -1,
+          .events = POLLIN},
+         {.fd = orch_state->connected ? orch_state->sockfd : -1,
           .events = POLLIN}};
 
     while(now < args->epoch_end && !args->term_flag
@@ -311,8 +348,8 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
            * we're in a steady state. */
           && (phase == PHASE_STEADY_STATE || conn_deficit > 0)) {
 
-        switch(poll(poll_fds, 1, timeout_ms)) {
-        case 0: /* timeout */
+        switch(poll(poll_fds, 2, timeout_ms)) {
+        case 0: /* timeout, that's ok */
             break;
         case -1: /* error */
             /* EINTR happens when we press Ctrl-C */
@@ -323,6 +360,12 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
             /* got something in stdin */
             if(poll_fds[STDIN_IDX].revents & POLLIN) {
                 if(!process_keyboard_events(args)) {
+                    return OC_INTERRUPT;
+                }
+            }
+            /* got something from orchestration server*/
+            if(poll_fds[ORCH_IDX].revents & POLLIN) {
+                if(!process_orch_events(args, orch_state)) {
                     return OC_INTERRUPT;
                 }
             }
@@ -454,3 +497,105 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args) {
     if(args->term_flag) return OC_INTERRUPT;
     return OC_CONNECTED;
 }
+
+struct orchestration_data
+tcpkali_connect_to_orch_server(struct orchestration_args args) {
+    struct orchestration_data res = {.connected = 0};
+    int sockfd;
+    for(struct addrinfo *p = args.server_addrs; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            continue;
+        }
+        res.sockfd = sockfd;
+        res.connected = 1;
+        res.buf = malloc(sizeof(char*)*ORCH_BUF_SIZE);
+        res.buf_write = res.buf;
+        fprintf(stderr, "Connected to orchestration server at %s\n",
+                args.server_addr_str);
+        return res;
+    }
+    return res;
+}
+
+enum asn_dec_rval_code_e
+read_and_decode(struct orchestration_data *state, TcpkaliMessage_t **msg) {
+    size_t available = ORCH_BUF_SIZE - (state->buf_write - state->buf);
+    ssize_t rd = read(state->sockfd, state->buf_write, available);
+    switch(rd) {
+    case -1:
+    case 0:
+        fprintf(stderr, "Connection to orchestration server is lost\n");
+        return RC_FAIL;
+    default:
+        state->buf_write += rd;
+        asn_dec_rval_t dec_res;
+        size_t data_size = state->buf_write - state->buf;
+        dec_res = ber_decode(NULL, &asn_DEF_TcpkaliMessage,
+                             (void **)msg, state->buf, data_size);
+
+        ssize_t left = data_size - dec_res.consumed;
+        assert(left>=0);
+        if (left) {
+            memcpy(state->buf, state->buf + dec_res.consumed, left);
+        }
+        state->buf_write = state->buf + left;
+        return dec_res.code;
+    }
+}
+
+TcpkaliMessage_t *
+read_orch_command(struct orchestration_data *state) {
+    TcpkaliMessage_t *new_m = 0;
+    switch(read_and_decode(state, &new_m)) {
+    case RC_OK: {
+        return new_m; // calling code is supposed to call free_orch_message()
+    };
+    case RC_WMORE:
+    /* Fall through */
+    case RC_FAIL:
+    /* Fall through */
+    default: {
+        free_orch_message(new_m);
+        return NULL;
+    };
+    }
+}
+
+TcpkaliMessage_t *
+tcpkali_wait_for_start_command(struct orchestration_data *state) {
+    /* read until we receive the whole message */
+    while(1) {
+        TcpkaliMessage_t *new_m = 0;
+        switch(read_and_decode(state, &new_m)) {
+            case RC_OK: {
+                /* External code is supposed to call free_orch_message() */
+                return new_m;
+            };
+            case RC_WMORE: {
+                free_orch_message(new_m);
+                break;
+            };
+            case RC_FAIL:
+            /* Fall through */
+            default: {
+                fprintf(stderr, "Failed to decode incomming message\n");
+                free_orch_message(new_m);
+                return NULL;
+            };
+        }
+    }
+}
+
+void
+free_orch_message(TcpkaliMessage_t *msg) {
+    if(msg) {
+        ASN_STRUCT_FREE(asn_DEF_TcpkaliMessage, msg);
+    }
+}
+

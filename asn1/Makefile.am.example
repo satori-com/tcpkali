@@ -1,0 +1,32 @@
+include Makefile.am.libasncodec
+
+LIBS += -lm
+CFLAGS += $(ASN_MODULE_CFLAGS) -DPDU=TcpkaliMessage -I.
+ASN_LIBRARY ?= libasncodec.a
+ASN_PROGRAM ?= converter-example
+ASN_PROGRAM_SOURCES ?= \
+	converter-example.c
+
+all: $(ASN_PROGRAM)
+
+$(ASN_PROGRAM): $(ASN_LIBRARY) $(ASN_PROGRAM_SOURCES:.c=.o)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $(ASN_PROGRAM) $(ASN_PROGRAM_SOURCES:.c=.o) $(LDFLAGS) $(ASN_LIBRARY) $(LIBS)
+
+$(ASN_LIBRARY): $(ASN_MODULE_SOURCES:.c=.o)
+	$(AR) rcs $@ $(ASN_MODULE_SOURCES:.c=.o)
+
+.SUFFIXES:
+.SUFFIXES: .c .o
+
+.c.o:
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+clean:
+	rm -f $(ASN_PROGRAM) $(ASN_LIBRARY)
+	rm -f $(ASN_MODULE_SOURCES:.c=.o) $(ASN_PROGRAM_SOURCES:.c=.o)
+
+regen: regenerate-from-asn1-source
+
+regenerate-from-asn1-source:
+	asn1c -gen-OER -gen-PER -pdu=TcpkaliMessage TcpkaliOrchestration.asn1
+

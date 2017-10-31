@@ -46,6 +46,8 @@
 #include "tcpkali_common.h"
 #include "tcpkali_terminfo.h"
 
+#include "TcpkaliMessage.h"
+
 static int terminal_initialized = 0;
 static int int_utf8 = 0;
 static int terminal_width = 80;

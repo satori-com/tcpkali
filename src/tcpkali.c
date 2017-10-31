@@ -102,6 +102,7 @@ static struct option cli_long_options[] = {
     {"message-stop", 1, 0, 's'},
     {"nagle", 1, 0, 'N'},
     {"rcvbuf", 1, 0, CLI_SOCKET_OPT + 'R'},
+    {"server", 1, 0, 'S'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
     {"source-ip", 1, 0, 'I'},
     {"ssl", 0, 0, SSL_OPT},
@@ -221,6 +222,10 @@ main(int argc, char **argv) {
                                           .write_combine = WRCOMB_ON};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
+
+    struct orchestration_args orch_args = {.enabled = 0,
+                                           .server_addrs = NULL,
+                                           .server_addr_str = NULL};
 
 #ifdef HAVE_SRANDOMDEV
     srandomdev();
@@ -719,11 +724,44 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
         } break;
+        case 'S': { /* --server */
+            orch_args.enabled = 1;
+            orch_args.server_addr_str = strdup(optarg);
+            resolve_address(optarg, &orch_args.server_addrs);
+        } break;
         default:
             fprintf(stderr, "%s: unknown option\n", option);
             usage_long(argv[0], &default_config);
             exit(EX_USAGE);
         }
+    }
+
+    struct orchestration_data orch_state = {.connected = 0};
+    if(orch_args.enabled) {
+        orch_state = tcpkali_connect_to_orch_server(orch_args);
+        if(!orch_state.connected) {
+            fprintf(stderr,
+                    "Failed to connect to orchestration server at %s\n",
+                    orch_args.server_addr_str);
+            exit(EX_UNAVAILABLE);
+        }
+        TcpkaliMessage_t* msg = tcpkali_wait_for_start_command(&orch_state);
+        if (!msg) {
+            exit(EX_UNAVAILABLE);
+        }
+        if (msg->present != TcpkaliMessage_PR_start) {
+            fprintf(stderr,
+                    "Received wrong message type instead of start\n");
+            exit(EX_UNAVAILABLE);
+        }
+
+        fprintf(stderr, "Received start command from server\n");
+
+        /* Here we should read all the arguments from the start command
+         * and override command line arguments if needed but it's
+         * not implemented yet. Currently all initial arguments should be
+         * specified in command line.
+         */
     }
 
     int print_stats = isatty(1);
@@ -1084,7 +1122,7 @@ main(int argc, char **argv) {
     if(conf.max_connections) {
         oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
         if(open_connections_until_maxed_out(PHASE_ESTABLISHING_CONNECTIONS,
-                &oc_args) == OC_CONNECTED) {
+                &oc_args, &orch_state) == OC_CONNECTED) {
             fprintf(stderr, "%s", tcpkali_clear_eol());
             fprintf(stderr, "Ramped up to %d connections.\n",
                     conf.max_connections);
@@ -1113,7 +1151,7 @@ main(int argc, char **argv) {
     /* Reset the test duration after ramp-up. */
     oc_args.epoch_end = tk_now(TK_DEFAULT) + conf.test_duration;
     enum oc_return_value orv = open_connections_until_maxed_out(
-                                    PHASE_STEADY_STATE, &oc_args);
+                                    PHASE_STEADY_STATE, &oc_args, &orch_state);
 
     fprintf(stderr, "%s", tcpkali_clear_eol());
     engine_terminate(eng, oc_args.checkpoint.epoch_start,
@@ -1314,6 +1352,8 @@ usage_long(char *argv0, struct tcpkali_config *conf) {
     "  --statsd-port <port>         StatsD port to use (default is %d)\n"
     "  --statsd-namespace <string>  Metric namespace (default is \"%s\")\n"
     "  --statsd-latency-window <T>  Aggregate latencies in discrete windows\n"
+    "\n"
+    "  --server <host:port>         Orchestration server to connect to\n"
     "\n"
     "Variable units and recognized multipliers:\n"
     "  <N>, <Rate>:  k (1000, as in \"5k\" is 5000), m (1000000)\n"
