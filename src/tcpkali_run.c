@@ -257,9 +257,9 @@ static enum {
 /* 0.870551 ^ 5 == 0.5, so 5 key-downs give decrease by factor of 2 */
 #define DOWN_FACTOR 0.870551
 
-int
+static int
 process_keyboard_events(struct oc_args *args) {
-    switch(tcpkali_kbhit()) {
+    switch(tcpkali_kbdhit()) {
     case KE_UP_ARROW:
         engine_update_send_rate(args->eng, UP_FACTOR);
         break;
@@ -338,7 +338,7 @@ open_connections_until_maxed_out(enum work_phase phase, struct oc_args *args,
 #define STDIN_IDX 0
 #define ORCH_IDX 1
     struct pollfd poll_fds[2] =
-        {{.fd = tcpkali_input_initialized() ? STDIN_FILENO : -1,
+        {{.fd = tcpkali_kbdinput_initialized() ? STDIN_FILENO : -1,
           .events = POLLIN},
          {.fd = orch_state->connected ? orch_state->sockfd : -1,
           .events = POLLIN}};

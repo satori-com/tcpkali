@@ -1082,7 +1082,7 @@ main(int argc, char **argv) {
         /* Stop flashing cursor in the middle of status reporting. */
         tcpkali_disable_cursor();
         /* Enable nonblocking input */
-        tcpkali_init_input();
+        tcpkali_init_kbdinput();
     }
 
     /* Block term signals so they're not scheduled in the worker threads. */

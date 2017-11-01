@@ -34,8 +34,8 @@
  */
 int tcpkali_init_terminal(const char **note);
 
-void tcpkali_init_input();
-int tcpkali_input_initialized();
+void tcpkali_init_kbdinput();
+int tcpkali_kbdinput_initialized();
 
 void tcpkali_disable_cursor(void);
 
@@ -72,6 +72,6 @@ enum keyboard_event {
     KE_Q
 };
 
-enum keyboard_event tcpkali_kbhit(void);
+enum keyboard_event tcpkali_kbdhit(void);
 
 #endif /* TCPKALI_TERMINFO_H */
