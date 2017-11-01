@@ -60,7 +60,6 @@ static char tka_rcvbrace[16];
 static char tka_warn[16];
 static char tka_highlight[16];
 static char tka_normal[16];
-static struct termios initial_term_attr;
 static int kbdinput_initialized = 0;
 
 const char *
@@ -97,6 +96,8 @@ tcpkali_is_utf8() {
 }
 
 #ifdef HAVE_LIBNCURSES
+
+static struct termios initial_term_attr;
 
 static char *
 cap(char *cap) {
