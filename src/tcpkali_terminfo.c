@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015  Machine Zone, Inc.
+ * Copyright (c) 2015-2017  Machine Zone, Inc.
  *
  * Original author: Lev Walkin <lwalkin@machinezone.com>
  *
@@ -42,6 +42,9 @@
 #ifdef HAVE_TERM_H
 #include <term.h>
 #endif
+#ifdef HAVE_TERMIOS_H
+#include <termios.h>
+#endif
 
 #include "tcpkali_common.h"
 #include "tcpkali_terminfo.h"
@@ -58,7 +61,7 @@ static char tka_warn[16];
 static char tka_highlight[16];
 static char tka_normal[16];
 static struct termios initial_term_attr;
-static int input_initialized = 0;
+static UNUSED int input_initialized = 0;
 
 const char *
 tk_attr(enum tk_attribute tka) {

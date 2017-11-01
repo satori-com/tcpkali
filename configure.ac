@@ -69,7 +69,7 @@ AC_ARG_WITH([libuv],
          [--with-libuv was given, but test for libuv failed])],
       [])])
 
-AC_CHECK_HEADERS(curses.h term.h)
+AC_CHECK_HEADERS(curses.h term.h termios.h)
 AC_CHECK_LIB([ncurses], [tgetent])
 
 dnl Enable Address Sanitizer, if supported by gcc (4.8+) or clang.
