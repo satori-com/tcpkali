@@ -497,4 +497,6 @@ size_t average_size(tk_expr_t *expr) {
     case EXPR_WS_FRAME:
         return expr->estimate_size;
     }
+
+    assert(!"Unreachable");
 }
