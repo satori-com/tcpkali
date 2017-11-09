@@ -42,7 +42,7 @@ static asn_oer_constraints_t asn_OER_type_TcpkaliMessage_constr_1 CC_NOTUSED = {
 	{ 0, 0 },
 	-1};
 static asn_per_constraints_t asn_PER_type_TcpkaliMessage_constr_1 CC_NOTUSED = {
-	{ APC_CONSTRAINED | APC_EXTENSIBLE,  3,  3,  0,  4 }	/* (0..4,...) */,
+	{ APC_CONSTRAINED | APC_EXTENSIBLE,  3,  3,  0,  5 }	/* (0..5,...) */,
 	{ APC_UNCONSTRAINED,	-1, -1,  0,  0 },
 	0, 0	/* No PER value map */
 };
@@ -115,13 +115,23 @@ static asn_TYPE_member_t asn_MBR_TcpkaliMessage_1[] = {
 		0, 0, /* No default value */
 		"setRate"
 		},
+	{ ATF_NOFLAGS, 0, offsetof(struct TcpkaliMessage, choice.currentRate),
+		(ASN_TAG_CLASS_CONTEXT | (5 << 2)),
+		-1,	/* IMPLICIT tag at current level */
+		&asn_DEF_CurrentRate,
+		0,
+		{ 0, 0, 0 },
+		0, 0, /* No default value */
+		"currentRate"
+		},
 };
 static const asn_TYPE_tag2member_t asn_MAP_TcpkaliMessage_tag2el_1[] = {
     { (ASN_TAG_CLASS_CONTEXT | (0 << 2)), 0, 0, 0 }, /* start */
     { (ASN_TAG_CLASS_CONTEXT | (1 << 2)), 1, 0, 0 }, /* stop */
     { (ASN_TAG_CLASS_CONTEXT | (2 << 2)), 2, 0, 0 }, /* increaseRatePercent */
     { (ASN_TAG_CLASS_CONTEXT | (3 << 2)), 3, 0, 0 }, /* decreaseRatePercent */
-    { (ASN_TAG_CLASS_CONTEXT | (4 << 2)), 4, 0, 0 } /* setRate */
+    { (ASN_TAG_CLASS_CONTEXT | (4 << 2)), 4, 0, 0 }, /* setRate */
+    { (ASN_TAG_CLASS_CONTEXT | (5 << 2)), 5, 0, 0 } /* currentRate */
 };
 static asn_CHOICE_specifics_t asn_SPC_TcpkaliMessage_specs_1 = {
 	sizeof(struct TcpkaliMessage),
@@ -129,9 +139,9 @@ static asn_CHOICE_specifics_t asn_SPC_TcpkaliMessage_specs_1 = {
 	offsetof(struct TcpkaliMessage, present),
 	sizeof(((struct TcpkaliMessage *)0)->present),
 	asn_MAP_TcpkaliMessage_tag2el_1,
-	5,	/* Count of tags in the map */
+	6,	/* Count of tags in the map */
 	0, 0,
-	5	/* Extensions start */
+	6	/* Extensions start */
 };
 asn_TYPE_descriptor_t asn_DEF_TcpkaliMessage = {
 	"TcpkaliMessage",
@@ -143,7 +153,7 @@ asn_TYPE_descriptor_t asn_DEF_TcpkaliMessage = {
 	0,	/* No tags (count) */
 	{ &asn_OER_type_TcpkaliMessage_constr_1, &asn_PER_type_TcpkaliMessage_constr_1, CHOICE_constraint },
 	asn_MBR_TcpkaliMessage_1,
-	5,	/* Elements count */
+	6,	/* Elements count */
 	&asn_SPC_TcpkaliMessage_specs_1	/* Additional specs */
 };
 

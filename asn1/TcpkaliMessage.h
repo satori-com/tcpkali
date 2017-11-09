@@ -17,6 +17,7 @@
 #include "IncreaseRatePercent.h"
 #include "DecreaseRatePercent.h"
 #include "SetRate.h"
+#include "CurrentRate.h"
 #include <constr_CHOICE.h>
 
 #ifdef __cplusplus
@@ -30,7 +31,8 @@ typedef enum TcpkaliMessage_PR {
 	TcpkaliMessage_PR_stop,
 	TcpkaliMessage_PR_increaseRatePercent,
 	TcpkaliMessage_PR_decreaseRatePercent,
-	TcpkaliMessage_PR_setRate
+	TcpkaliMessage_PR_setRate,
+	TcpkaliMessage_PR_currentRate
 	/* Extensions may appear below */
 	
 } TcpkaliMessage_PR;
@@ -44,6 +46,7 @@ typedef struct TcpkaliMessage {
 		IncreaseRatePercent_t	 increaseRatePercent;
 		DecreaseRatePercent_t	 decreaseRatePercent;
 		SetRate_t	 setRate;
+		CurrentRate_t	 currentRate;
 		/*
 		 * This type is extensible,
 		 * possible extensions are below.
