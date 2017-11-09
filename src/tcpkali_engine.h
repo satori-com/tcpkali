@@ -99,8 +99,8 @@ struct engine_params {
 
 struct engine *engine_start(struct engine_params);
 const struct engine_params *engine_params(struct engine *);
-void engine_set_message_send_rate(struct engine *, double msg_rate);
-void engine_update_send_rate(struct engine *, double multiplier);
+rate_spec_t engine_set_message_send_rate(struct engine *, double msg_rate);
+rate_spec_t engine_update_send_rate(struct engine *, double multiplier);
 
 /*
  * Report the number of opened connections by categories.
