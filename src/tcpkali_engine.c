@@ -224,6 +224,9 @@ static void debug_dump_data_highlight(const char *prefix, int fd,
                                       const void *data, size_t size,
                                       ssize_t limit, size_t hl_offset,
                                       size_t hl_length);
+static void
+latency_record_incoming_ts(TK_P_ struct connection *conn, char *buf,
+                           size_t size);
 
 #ifdef USE_LIBUV
 static void
@@ -2058,6 +2061,7 @@ passive_websocket_cb(TK_P_ tk_io *w, int revents) {
                 debug_dump_data("Rcv", tk_fd(w), largs->scratch_recv_buf, rd,
                                 0);
             }
+            latency_record_incoming_ts(TK_A_ conn, largs->scratch_recv_buf, rd);
 
             /*
              * Attempt to detect websocket key in HTTP and respond.
