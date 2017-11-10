@@ -37,7 +37,8 @@ PORT=1230
 check() {
     local testno="$1"
     local togrep="$2"
-    shift 2
+    local command="$3"
+    shift 3
 
     if [ -n "${use_test_no}" ] && [ "${testno}" != "${use_test_no}" ]; then
         return
@@ -47,9 +48,9 @@ check() {
     local rest_opts
     rest_opts="-T1s -l127.1:${PORT} 127.1:${PORT}"
     echo "Test ${testno}.autoip: $* ${rest_opts}" | tee ${TMPFILE} >&2
-    echo "Looking for \"$togrep\" in '$* ${rest_opts}'" >> ${TMPFILE}
+    echo "Looking for \"$togrep\" in '${command} ${rest_opts} $*'" >> ${TMPFILE}
     local out
-    out=$("$@" ${rest_opts} 2>&1 | tee -a ${TMPFILE} | grep -E -c "$togrep")
+    out=$(${command} ${rest_opts} "$@" 2>&1 | tee -a ${TMPFILE} | grep -E -c "$togrep")
     [ $out -ne 0 ] || exit 1
 }
 
@@ -93,8 +94,8 @@ for size_k in 63 65 1000; do
 done
 rm_testfile
 
-check 24 "Packet rate estimate: (9|10|11)" ${TCPKALI} -m 'Foo\{message.marker}' -r10
-check 25 "Packet rate estimate: (9|10|11)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10
+check 24 "Packet rate estimate: (10)" ${TCPKALI} -m 'Foo\{message.marker}' -r10 --duration=5s
+check 25 "Packet rate estimate: (10)" ${TCPKALI} --ws -m '\{message.marker}\{re [a-z]{1,300}}' -r10 --duration=5s
 
 check 26 "." ${TCPKALI} -1 '\{message.marker}' -m '\{message.marker}'
 

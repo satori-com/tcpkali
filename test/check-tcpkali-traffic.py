@@ -198,8 +198,9 @@ def main():
     if os.environ.get('CONTINUOUS_INTEGRATION', 'false') == 'false':
         print("Correctness of data packetization")
         port = port + 1
+        # rate 162222 = 1460 (tapkali constant) * 1000 (hz) / 9 (message len)
         t = Tcpkali(["-l" + str(port), "127.1:" + str(port), "-T1",
-                     "-mFOOBARBAZ"], capture_io=True)
+                     "-mFOOBARBAZ", "-r162222"], capture_io=True)
         (_, errLines) = t.results()
         assert check_segmentation("Snd", errLines, "FOOBARBAZ")
 
