@@ -255,6 +255,17 @@ static enum {
     return MRR_ONGOING;
 }
 
+static void
+reinit_latency_snapshot(struct oc_args *args) {
+    if(args->previous_window_latency) {
+        engine_free_latency_snapshot(args->previous_window_latency);
+        args->previous_window_latency = NULL;
+        engine_prepare_latency_snapshot(args->eng);
+        args->previous_window_latency =
+            engine_collect_latency_snapshot(args->eng);
+    }
+}
+
 /* 1.148698 ^ 5 == 2, so 5 key-ups give increase by factor of 2 */
 #define UP_FACTOR 1.148698
 /* 0.870551 ^ 5 == 0.5, so 5 key-downs give decrease by factor of 2 */
@@ -265,9 +276,11 @@ process_keyboard_events(struct oc_args *args) {
     switch(tcpkali_kbdhit()) {
     case KE_UP_ARROW:
         engine_update_send_rate(args->eng, UP_FACTOR);
+        reinit_latency_snapshot(args);
         break;
     case KE_DOWN_ARROW:
         engine_update_send_rate(args->eng, DOWN_FACTOR);
+        reinit_latency_snapshot(args);
         break;
     case KE_Q:
         return 0;
@@ -293,16 +306,19 @@ process_orch_events(struct oc_args *args,
         double factor = (100 + (double)msg->choice.increaseRatePercent) / 100;
         rate_spec_t new_rate = engine_update_send_rate(args->eng, factor);
         tcpkali_send_current_rate(new_rate, orch_state);
+        reinit_latency_snapshot(args);
         break;
     }
     case TcpkaliMessage_PR_decreaseRatePercent: {
         double factor = (100 - (double)msg->choice.increaseRatePercent) / 100;
         rate_spec_t new_rate = engine_update_send_rate(args->eng, factor);
         tcpkali_send_current_rate(new_rate, orch_state);
+        reinit_latency_snapshot(args);
         break;
     }
     case TcpkaliMessage_PR_setRate:
         engine_set_message_send_rate(args->eng, msg->choice.setRate);
+        reinit_latency_snapshot(args);
         break;
     case TcpkaliMessage_PR_stop:
         free_orch_message(msg);
