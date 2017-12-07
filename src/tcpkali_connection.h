@@ -20,6 +20,7 @@
 struct connection {
     tk_io watcher;
     tk_timer timer;
+    double timer_deadline;
     off_t write_offset;
     struct transport_data_spec data;
     non_atomic_traffic_stats traffic_ongoing;  /* Connection-local numbers */
