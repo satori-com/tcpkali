@@ -50,7 +50,7 @@ Install the following packages first:
     make
     sudo make install
 
-[![Build Status](https://travis-ci.org/machinezone/tcpkali.svg?branch=master)](https://travis-ci.org/machinezone/tcpkali)
+[![Build Status](https://travis-ci.org/satori-com/tcpkali.svg?branch=master)](https://travis-ci.org/satori-com/tcpkali)
 
 # Usage (Short version)
 
