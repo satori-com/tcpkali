@@ -46,6 +46,9 @@
 
 #define ORCH_BUF_SIZE 1024
 
+static void
+tcpkali_send_current_rate(rate_spec_t rate, struct orchestration_data *state);
+
 static const char *
 time_progress(double start, double now, double stop) {
     const char *clocks[] = {"🕛  ", "🕐  ", "🕑  ", "🕒  ", "🕓  ", "🕔  ",
@@ -252,6 +255,17 @@ static enum {
     return MRR_ONGOING;
 }
 
+static void
+reinit_latency_snapshot(struct oc_args *args) {
+    if(args->previous_window_latency) {
+        engine_free_latency_snapshot(args->previous_window_latency);
+        args->previous_window_latency = NULL;
+        engine_prepare_latency_snapshot(args->eng);
+        args->previous_window_latency =
+            engine_collect_latency_snapshot(args->eng);
+    }
+}
+
 /* 1.148698 ^ 5 == 2, so 5 key-ups give increase by factor of 2 */
 #define UP_FACTOR 1.148698
 /* 0.870551 ^ 5 == 0.5, so 5 key-downs give decrease by factor of 2 */
@@ -262,9 +276,11 @@ process_keyboard_events(struct oc_args *args) {
     switch(tcpkali_kbdhit()) {
     case KE_UP_ARROW:
         engine_update_send_rate(args->eng, UP_FACTOR);
+        reinit_latency_snapshot(args);
         break;
     case KE_DOWN_ARROW:
         engine_update_send_rate(args->eng, DOWN_FACTOR);
+        reinit_latency_snapshot(args);
         break;
     case KE_Q:
         return 0;
@@ -286,14 +302,23 @@ process_orch_events(struct oc_args *args,
     if (!msg) return 1;
 
     switch(msg->present) {
-    case TcpkaliMessage_PR_increaseRatePercent:
-        engine_update_send_rate(args->eng, msg->choice.increaseRatePercent);
+    case TcpkaliMessage_PR_increaseRatePercent: {
+        double factor = (100 + (double)msg->choice.increaseRatePercent) / 100;
+        rate_spec_t new_rate = engine_update_send_rate(args->eng, factor);
+        tcpkali_send_current_rate(new_rate, orch_state);
+        reinit_latency_snapshot(args);
         break;
-    case TcpkaliMessage_PR_decreaseRatePercent:
-        engine_update_send_rate(args->eng, msg->choice.decreaseRatePercent);
+    }
+    case TcpkaliMessage_PR_decreaseRatePercent: {
+        double factor = (100 - (double)msg->choice.increaseRatePercent) / 100;
+        rate_spec_t new_rate = engine_update_send_rate(args->eng, factor);
+        tcpkali_send_current_rate(new_rate, orch_state);
+        reinit_latency_snapshot(args);
         break;
+    }
     case TcpkaliMessage_PR_setRate:
         engine_set_message_send_rate(args->eng, msg->choice.setRate);
+        reinit_latency_snapshot(args);
         break;
     case TcpkaliMessage_PR_stop:
         free_orch_message(msg);
@@ -590,6 +615,24 @@ tcpkali_wait_for_start_command(struct orchestration_data *state) {
             };
         }
     }
+}
+
+static int
+send_bytes_to_orch_server(const void *buffer, size_t size, void *app_key) {
+    struct orchestration_data *state = (struct orchestration_data *)app_key;
+    return write(state->sockfd, buffer, size);
+}
+
+static void
+tcpkali_send_current_rate(rate_spec_t rate, struct orchestration_data *state) {
+    TcpkaliMessage_t message;
+    message.present = TcpkaliMessage_PR_currentRate;
+    message.choice.currentRate.valueBase = rate.value_base;
+    message.choice.currentRate.value = rate.value;
+    der_encode(&asn_DEF_TcpkaliMessage,
+               &message,
+               send_bytes_to_orch_server,
+               (void *)state);
 }
 
 void

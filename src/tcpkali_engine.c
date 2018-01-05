@@ -472,16 +472,19 @@ engine_update_workers_send_rate(struct engine *eng, rate_spec_t rate_spec) {
     }
 }
 
-void
+rate_spec_t
 engine_set_message_send_rate(struct engine *eng, double msg_rate) {
-    engine_update_workers_send_rate(eng, RATE_MPS(msg_rate));
+    rate_spec_t new_rate = RATE_MPS(msg_rate);
+    engine_update_workers_send_rate(eng, new_rate);
+    return new_rate;
 }
 
-void
+rate_spec_t
 engine_update_send_rate(struct engine *eng, double multiplier) {
     rate_spec_t new_rate = eng->params.channel_send_rate;
     new_rate.value = new_rate.value * multiplier;
     engine_update_workers_send_rate(eng, new_rate);
+    return new_rate;
 }
 
 /*

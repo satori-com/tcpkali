@@ -6,7 +6,9 @@ ASN_MODULE_SOURCES=	\
 	IncreaseRatePercent.c	\
 	DecreaseRatePercent.c	\
 	SetRate.c	\
+	CurrentRate.c	\
 	PositiveInteger.c	\
+	NonNegativeReal.c	\
 	PositiveReal.c	\
 	URL.c
 
@@ -18,7 +20,9 @@ ASN_MODULE_HEADERS=	\
 	IncreaseRatePercent.h	\
 	DecreaseRatePercent.h	\
 	SetRate.h	\
+	CurrentRate.h	\
 	PositiveInteger.h	\
+	NonNegativeReal.h	\
 	PositiveReal.h	\
 	URL.h
 

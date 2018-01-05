@@ -5,7 +5,8 @@ TcpkaliOrchestration DEFINITIONS AUTOMATIC TAGS EXTENSIBILITY IMPLIED ::= BEGIN
         stop                  Stop,
         increaseRatePercent   IncreaseRatePercent,
         decreaseRatePercent   DecreaseRatePercent,
-        setRate               SetRate
+        setRate               SetRate,
+        currentRate           CurrentRate
     }
 
     Start ::= SEQUENCE {
@@ -53,11 +54,18 @@ TcpkaliOrchestration DEFINITIONS AUTOMATIC TAGS EXTENSIBILITY IMPLIED ::= BEGIN
 
     TcpPort ::= INTEGER (1..65535)
 
-    IncreaseRatePercent ::= INTEGER (1..100)
-    DecreaseRatePercent ::= INTEGER (1..100)
+    IncreaseRatePercent ::= INTEGER (0..100)
+    DecreaseRatePercent ::= INTEGER (0..100)
     SetRate             ::= PositiveReal
+    CurrentRate         ::= SEQUENCE {
+        valueBase ENUMERATED {unlimited(0), bytesPerSecond(1), messagesPerSecond(2)},
+        value NonNegativeReal
+    }
 
     PositiveInteger ::= INTEGER (1..MAX)
+
+    NonNegativeReal ::= REAL (0|WITH COMPONENTS {
+                    base (2), exponent (-10..104), mantissa (0..16777215) })
 
     PositiveReal ::= REAL (WITH COMPONENTS {
                     base (2), exponent (-10..104), mantissa (0..16777215) })
