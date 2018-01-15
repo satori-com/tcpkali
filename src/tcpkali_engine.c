@@ -2435,6 +2435,7 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
         *position = conn->data.ptr + off;
         *available_body = accessible_size - off;
         *current_offset = off;
+        available = accessible_size - off;
     }
 
     if(largs->params.message_marker) {
@@ -2445,10 +2446,10 @@ largest_contiguous_chunk(struct loop_arguments *largs, struct connection *conn,
             unsigned long long ts =
                 (unsigned long long)tp.tv_sec * 1000000 + tp.tv_usec;
             override_timestamp(conn->data.marker_token_ptr,
-                               (*available_body), ts);
+                               available - (conn->data.marker_token_ptr - *position), ts);
         } else {
             /* Do a string search to find our markers and update timestamps */
-            update_timestamps((char *)*position, *available_body);
+            update_timestamps((char *)*position, available);
         }
     }
 }
