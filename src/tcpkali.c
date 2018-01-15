@@ -105,6 +105,7 @@ static struct option cli_long_options[] = {
     {"server", 1, 0, 'S'},
     {"sndbuf", 1, 0, CLI_SOCKET_OPT + 'S'},
     {"source-ip", 1, 0, 'I'},
+    {"no-source-bind", 0, 0, 'B'},
     {"ssl", 0, 0, SSL_OPT},
     {"ssl-cert", 1, 0, SSL_OPT + 'c'},
     {"ssl-key", 1, 0, SSL_OPT + 'k'},
@@ -219,7 +220,8 @@ main(int argc, char **argv) {
                                           .ssl_enable = 0,
                                           .ssl_cert = "cert.pem",
                                           .ssl_key = "key.pem",
-                                          .write_combine = WRCOMB_ON};
+                                          .write_combine = WRCOMB_ON,
+                                          .source_bind_enable = 1};
     struct rate_modulator rate_modulator = {.state = RM_UNMODULATED};
     int unescape_message_data = 0;
 
@@ -724,6 +726,9 @@ main(int argc, char **argv) {
                 exit(EX_USAGE);
             }
         } break;
+        case 'B': /* --no-source-bind */
+            engine_params.source_bind_enable = 0;
+            break;
         case 'S': { /* --server */
             orch_args.enabled = 1;
             orch_args.server_addr_str = strdup(optarg);
@@ -898,16 +903,18 @@ main(int argc, char **argv) {
             conf.first_path = ""; /* "GET / HTTP/1.1" */
         }
 
-        /* Figure out source IPs */
-        if(engine_params.source_addresses.n_addrs == 0) {
-            if(detect_source_ips(&engine_params.remote_addresses,
-                                 &engine_params.source_addresses)
-               < 0) {
-                exit(EX_SOFTWARE);
+        if(engine_params.source_bind_enable) {
+            /* Figure out source IPs */
+            if(engine_params.source_addresses.n_addrs == 0) {
+                if(detect_source_ips(&engine_params.remote_addresses,
+                                     &engine_params.source_addresses)
+                        < 0) {
+                    exit(EX_SOFTWARE);
+                }
+            } else {
+                fprint_addresses(stderr, "Source IP: ", "\nSource IP: ", "\n",
+                                 engine_params.source_addresses);
             }
-        } else {
-            fprint_addresses(stderr, "Source IP: ", "\nSource IP: ", "\n",
-                             engine_params.source_addresses);
         }
     } else {
         conf.max_connections = 0;
