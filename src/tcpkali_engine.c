@@ -2854,6 +2854,9 @@ connection_free_internals(struct connection *conn) {
     message_collection_free(&conn->message_collection);
 
 #ifdef HAVE_OPENSSL
+    if(conn->ssl_fd) {
+        SSL_free(conn->ssl_fd);
+    }
     if(conn->ssl_ctx) {
         SSL_CTX_free(conn->ssl_ctx);
     }
