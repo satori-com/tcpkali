@@ -75,7 +75,7 @@ void
 resolve_address(char *address, struct addrinfo **res) {
     char *hostport = strdup(address);
     char *host = hostport;
-    char *service_string = strchr(hostport, ':');
+    char *service_string = strrchr(hostport, ':');
     if(service_string) {
         *service_string++ = '\0';
     } else {
