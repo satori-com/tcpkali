@@ -29,9 +29,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <config.h>
 #include <sys/types.h>
 #include <sys/resource.h>
+#ifdef HAVE_SYSCTLBYNAME
 #include <sys/sysctl.h>
+#endif
 #include <sys/socket.h>
 #include <errno.h>
 #include <assert.h>
