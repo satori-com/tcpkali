@@ -24,22 +24,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "tcpkali_syslimits.h"
-
-#include <assert.h>
-#include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <stdarg.h>
+#include <sys/types.h>
 #include <sys/resource.h>
-#include <sys/socket.h>
 #ifdef HAVE_SYSCTLBYNAME
 #include <sys/sysctl.h>
 #endif
-#include <sys/types.h>
-#include <unistd.h>
+#include <sys/socket.h>
+#include <errno.h>
+#include <assert.h>
 
+#include "tcpkali_syslimits.h"
 #include "tcpkali_logging.h"
 
 /*
